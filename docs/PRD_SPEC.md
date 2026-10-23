@@ -12,7 +12,7 @@
 
 ---
 
-> **實作狀態（2026-10-23，v0.1.0）**：本文件是需求基線。Docker 版 MVP 已實作並通過自動化測試；
+> **實作狀態（2026-10-24，v0.2.0）**：本文件是需求基線。Docker 版 MVP 已實作並通過自動化測試；
 > AD/LDAP/SAML/OIDC/SCIM、FIDO2、附件、SLA 營業時間與 Cloudflare 方案尚未實作。
 > 與本文件不同的決策（預設管理員密碼、403 回應碼、3 天邊界）見 [`specs/DECISIONS.md`](../specs/DECISIONS.md)。
 

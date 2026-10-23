@@ -14,7 +14,7 @@
 
 ---
 
-> **實作狀態（2026-10-23，v0.1.0）**：本計畫中的 P0 安全情境已有對應的自動化測試（`tests/*.test.ts`，執行 `npm test`；
+> **實作狀態（2026-10-24，v0.2.0）**：本計畫中的 P0 安全情境已有對應的自動化測試（`tests/*.test.ts`，執行 `npm test`；
 > 設定 `TEST_DATABASE_URL` 可改用真實 PostgreSQL），端到端煙霧測試為 `scripts/smoke.sh`。
 > 改密前的業務 API 一律回 `403`（`code=password_change_required`），不是原計畫的 422，見 [`specs/DECISIONS.md`](../specs/DECISIONS.md)。
 > 尚未實作的功能（SSO、FIDO2、附件、`/users` 端點等）相關案例暫不適用。
