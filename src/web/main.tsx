@@ -12,6 +12,9 @@ import { TicketListPage } from './pages/TicketList';
 import { TicketNewPage } from './pages/TicketNew';
 import { AdminRoutes } from './pages/admin/AdminRoutes';
 import { applyTheme, watchSystemTheme } from './theme';
+// Self-hosted Google Noto fonts (bundled by Vite, same origin, so the CSP stays unchanged)
+import '@fontsource-variable/noto-sans-display';
+import '@fontsource-variable/noto-sans-tc';
 import './styles.css';
 
 watchSystemTheme();
