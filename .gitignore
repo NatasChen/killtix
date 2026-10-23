@@ -116,3 +116,9 @@ venv/
 tmp/
 temp/
 *.local
+
+# validate.sh scratch
+.drift-check/
+
+# UI E2E screenshots
+tests/e2e/shots/

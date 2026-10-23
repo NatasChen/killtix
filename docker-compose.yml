@@ -1,75 +1,16 @@
 # ============================================================================
-#  TicketDesk — Docker Compose (Track A: Containerized Deployment)
-#  File: docker-compose.yml
-#  Services: web (app), postgres:16, redis:7
-#  Notes:
-#    * ./src/schema.sql is mounted into /docker-entrypoint-initdb.d so that
-#      PostgreSQL runs it automatically on FIRST initialization of an empty
-#      data volume. Seed data is idempotent (safe on re-run).
-#    * Secrets come from .env (never committed). See .env.example.
-#    * Health checks gate startup ordering via depends_on.condition.
+#  TicketDesk — Docker Compose (app + PostgreSQL 16 + Redis 7)
+#  Usage:  cp .env.example .env  &&  edit .env  &&  docker compose up -d --build
+#  The database schema is created by the app's migrations on start-up.
+#  PostgreSQL and Redis are reachable only on the internal network; only the app
+#  port is published. See docs/DEPLOYMENT_GUIDE.md.
 # ============================================================================
+name: ticketdesk
 
 services:
-  # --------------------------------------------------------------------------
-  # PostgreSQL 16 — primary data store
-  # --------------------------------------------------------------------------
-  postgres:
-    image: postgres:16-alpine
-    container_name: ticketdesk-postgres
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-ticketdesk}
-      POSTGRES_USER: ${POSTGRES_USER:-ticketdesk}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
-      TZ: ${TZ:-Asia/Taipei}
-      PGDATA: /var/lib/postgresql/data/pgdata
-    ports:
-      - "${POSTGRES_PORT:-5432}:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-      # Auto-run schema + seed on first boot of an empty volume:
-      - ./src/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ticketdesk} -d ${POSTGRES_DB:-ticketdesk}"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 20s
-    networks:
-      - ticketdesk-net
-
-  # --------------------------------------------------------------------------
-  # Redis 7 — cache + async queue backend
-  # --------------------------------------------------------------------------
-  redis:
-    image: redis:7-alpine
-    container_name: ticketdesk-redis
-    restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD is required}"]
-    ports:
-      - "${REDIS_PORT:-6379}:6379"
-    volumes:
-      - redisdata:/data
-    healthcheck:
-      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping | grep PONG"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 10s
-    environment:
-      REDIS_PASSWORD: ${REDIS_PASSWORD}
-    networks:
-      - ticketdesk-net
-
-  # --------------------------------------------------------------------------
-  # Web / API application
-  # --------------------------------------------------------------------------
-  web:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: ticketdesk-web
+  app:
+    build: .
+    image: ticketdesk:latest
     restart: unless-stopped
     depends_on:
       postgres:
@@ -77,57 +18,68 @@ services:
       redis:
         condition: service_healthy
     environment:
-      NODE_ENV: ${NODE_ENV:-production}
-      APP_ENV: ${APP_ENV:-production}
       APP_URL: ${APP_URL:-http://localhost:8080}
-      APP_PORT: ${APP_PORT:-8080}
-      TZ: ${TZ:-Asia/Taipei}
-      LOG_LEVEL: ${LOG_LEVEL:-info}
-      # Database
+      APP_SECRET: ${APP_SECRET:?APP_SECRET is required (at least 32 characters)}
       DATABASE_URL: postgres://${POSTGRES_USER:-ticketdesk}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ticketdesk}
-      # Redis
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
-      # Auth / security
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
-      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-3600}
-      JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-604800}
-      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-true}
+      TZ: ${TZ:-Asia/Taipei}
+      DEFAULT_LOCALE: ${DEFAULT_LOCALE:-zh-TW}
+      COOKIE_SECURE: ${COOKIE_SECURE:-}
+      TRUST_PROXY: ${TRUST_PROXY:-false}
       BCRYPT_COST: ${BCRYPT_COST:-12}
-      # 2FA
-      SECURITY_2FA_ENABLED: ${SECURITY_2FA_ENABLED:-true}
-      SECURITY_2FA_ENFORCE_ROLES: ${SECURITY_2FA_ENFORCE_ROLES:-super_admin,it_manager}
-      SECURITY_2FA_WEBAUTHN_RP_ID: ${SECURITY_2FA_WEBAUTHN_RP_ID:-localhost}
-      # Password policy
-      PASSWORD_MIN_LENGTH: ${PASSWORD_MIN_LENGTH:-12}
+      SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-12}
       LOGIN_MAX_FAILED_ATTEMPTS: ${LOGIN_MAX_FAILED_ATTEMPTS:-5}
-      # Notifications
+      LOCKOUT_MINUTES: ${LOCKOUT_MINUTES:-15}
+      RATE_LIMIT_PER_MIN: ${RATE_LIMIT_PER_MIN:-60}
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-admin@ticket.local}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+      AGING_DIGEST_HOUR: ${AGING_DIGEST_HOUR:-9}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-TicketDesk <no-reply@ticket.local>}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TEAMS_WEBHOOK_URL: ${TEAMS_WEBHOOK_URL:-}
-      NOTIFY_MAX_ATTEMPTS: ${NOTIFY_MAX_ATTEMPTS:-3}
-      NOTIFY_DEDUP_TTL_SECONDS: ${NOTIFY_DEDUP_TTL_SECONDS:-86400}
-      # Rate limiting
-      RATE_LIMIT_DEFAULT_PER_MIN: ${RATE_LIMIT_DEFAULT_PER_MIN:-60}
     ports:
-      - "${APP_PORT:-8080}:8080"
+      - "${APP_BIND:-127.0.0.1}:${APP_PORT:-8080}:8080"
+    networks: [internal]
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ticketdesk}
+      POSTGRES_USER: ${POSTGRES_USER:-ticketdesk}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/healthz || exit 1"]
-      interval: 15s
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
       timeout: 5s
-      retries: 5
-      start_period: 30s
-    networks:
-      - ticketdesk-net
+      retries: 20
+    networks: [internal]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD is required}"]
+    environment:
+      REDISCLI_AUTH: ${REDIS_PASSWORD}
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [internal]
 
 volumes:
   pgdata:
-    driver: local
   redisdata:
-    driver: local
 
 networks:
-  ticketdesk-net:
-    driver: bridge
+  internal:
