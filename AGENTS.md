@@ -46,6 +46,7 @@
 | TOTP | otpauth | 9.5.2 | |
 | Email | nodemailer | 10.2.1 | |
 | 前端 | react / react-router-dom / vite | 19.3.1 / 7.18.4 / 8.3.5 | 無 UI 套件；樣式在 `src/web/styles.css`（CSS 變數做主題） |
+| 字型 | @fontsource-variable/noto-sans-display / noto-sans-tc | 5.3.0 / 5.3.0 | 自架 Google Noto 可變字型，見第 5 節「新增前端頁面」 |
 | 測試 | vitest | 5.0.5 | |
 
 升級主要版本前先跑完第 6 節的全部驗證。
@@ -155,7 +156,9 @@ crewai_ticket_build.py CrewAI 迭代工具（PM → SAr → PG → UI 設計師 
   它與本文件衝突時以本文件為準。DESIGN.md 是以行銷網站分析出的風格參考，套用到 TicketDesk 時：
   - 只取風格，不取品牌：不可在介面、字典或程式碼中出現原品牌的名稱、標誌、字型名稱或文案。
   - 必須同時有深色主題：DESIGN.md 只定義淺色，深色值由設計者在 `styles.css` 的 CSS 變數中推導，對比達 WCAG AA。
-  - 字型用系統字型堆疊（Inter 只放在堆疊中，有安裝才會用到）；CSP 禁止外部字型，也不要新增字型檔。
+  - 字型依 DESIGN.md 的 Typography：英文 Noto Sans Display、中文 Noto Sans TC（Google Noto，OFL）。用 Fontsource 套件自架
+    （`main.tsx` 匯入，Vite 打包成同源檔案），**不要改成 Google Fonts CDN**：CSP 只允許同源，而且內網部署連不到外部。
+    CSS 的 family 名稱是 `'Noto Sans Display Variable', 'Noto Sans TC Variable'`（英文在前，中文字自動落到 TC）。
   - 工單系統需要語意色（錯誤、成功、警告、SLA 逾時、優先度）：定義為獨立的 CSS 變數，不受「裝飾色不能用在結構」的限制。
   - 用到的是應用程式元件（`ex-app-shell-row`、`ex-data-table-cell`、`ex-auth-form-card`、`ex-modal-card`、`ex-toast`、
     `ex-empty-state-card`、`text-input`、`button-*`、`badge-pill`）；hero、pricing 等行銷區塊不適用。
@@ -227,7 +230,9 @@ docker compose --env-file /tmp/td.env -p tdtest down -v
 7. **加密欄位長度**：AES-GCM 加密後的 TOTP 金鑰約 90 字元，`varchar(64)` 放不下（曾因此出錯，已改為 255）。新增加密欄位要預留長度。
 8. **瀏覽器 console 的 4xx**：未登入時 `/auth/me` 回 401 是正常的，瀏覽器會記為 console error；`tests/e2e/ui.mjs` 只忽略 4xx 資源錯誤，JS 例外、CSP 違規與 5xx 仍會失敗。
 9. **`.card + .card` 的 margin** 會套用到 grid 內的卡片造成錯位，已用 `.grid > .card + .card { margin-top: 0 }` 修正；改版面時要看截圖確認（`scripts/ui-e2e.sh`）。
-10. **背景工作在程序內執行**：開兩個 app 副本會重複發送通知與重複掃描 SLA。要水平擴充得先把 `index.ts` 的計時器拆成獨立 worker 並加分散式鎖。
+10. **Vite 會把小於 4KB 的資源內嵌成 `data:` URI**：字型被內嵌後 CSP（`default-src 'self'`）會擋下，`scripts/ui-e2e.sh` 會報 `Refused to load the font 'data:…'`。
+    `vite.config.ts` 的 `assetsInlineLimit` 已排除 `.woff/.woff2`；新增其他資源類型時注意同樣的問題，不要用放寬 CSP 來解決。
+11. **背景工作在程序內執行**：開兩個 app 副本會重複發送通知與重複掃描 SLA。要水平擴充得先把 `index.ts` 的計時器拆成獨立 worker 並加分散式鎖。
 
 ---
 
