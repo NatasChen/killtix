@@ -156,7 +156,7 @@ crewai_ticket_build.py CrewAI 迭代工具（PM → SAr → PG → UI 設計師 
   它與本文件衝突時以本文件為準。DESIGN.md 是以行銷網站分析出的風格參考，套用到 TicketDesk 時：
   - 只取風格，不取品牌：不可在介面、字典或程式碼中出現原品牌的名稱、標誌、字型名稱或文案。
   - 必須同時有深色主題：DESIGN.md 只定義淺色，深色值由設計者在 `styles.css` 的 CSS 變數中推導，對比達 WCAG AA。
-  - 字型取代 DESIGN.md 的 NotionInter：英文 Noto Sans Display、中文 Noto Sans TC（Google Noto，OFL）。用 Fontsource 套件自架
+  - 字型依 DESIGN.md 的 Typography：英文 Noto Sans Display、中文 Noto Sans TC（Google Noto，OFL）。用 Fontsource 套件自架
     （`main.tsx` 匯入，Vite 打包成同源檔案），**不要改成 Google Fonts CDN**：CSP 只允許同源，而且內網部署連不到外部。
     CSS 的 family 名稱是 `'Noto Sans Display Variable', 'Noto Sans TC Variable'`（英文在前，中文字自動落到 TC）。
   - 工單系統需要語意色（錯誤、成功、警告、SLA 逾時、優先度）：定義為獨立的 CSS 變數，不受「裝飾色不能用在結構」的限制。

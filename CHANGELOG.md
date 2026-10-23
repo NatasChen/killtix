@@ -6,7 +6,7 @@
 
 ### Added
 - `DESIGN.md`：UI 視覺規範（風格參考，只定義淺色）；AGENTS.md 加入套用到 TicketDesk 的規則（不取品牌元素、必須有深色主題、系統字型、語意色、適用的元件）。
-- 介面字型改為 Google Noto：英文 Noto Sans Display、中文 Noto Sans TC。以 Fontsource 套件自架（Vite 打包成同源檔案），CSP 不變，內網部署也能使用；`vite.config.ts` 設定不把字型內嵌成 `data:` URI（否則會被 CSP 擋下）。
+- 介面字型改為 Google Noto：英文 Noto Sans Display、中文 Noto Sans TC。DESIGN.md 的 Typography 同步更新；以 Fontsource 套件自架（Vite 打包成同源檔案），CSP 不變，內網部署也能使用；`vite.config.ts` 設定不把字型內嵌成 `data:` URI（否則會被 CSP 擋下）。
 
 ### Changed
 - `crewai_ticket_build.py` 改為維護者本機工具，不納入版本控制（已從 git 歷史移除並列入 `.gitignore`）；README 與 AGENTS.md 相應說明。
