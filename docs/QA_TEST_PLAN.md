@@ -8,11 +8,17 @@
 | 建立日期 | 2026-02-18 |
 | 文件擁有者 | 品質測試與資安工程師 (QA) |
 | 審閱者 | 系統架構師 (SAr)、資深全端工程師 (PG)、產品需求專案經理 (PM) |
-| 關聯文件 | `docs/PRD_SPEC.md`（PRD-TD-001）、`docs/DEPLOYMENT_GUIDE.md`（DEP-TD-001）、`README.md`、`CHANGELOG.md`、`src/schema.sql`、`src/api_spec.json` |
+| 關聯文件 | `docs/PRD_SPEC.md`（PRD-TD-001）、`docs/DEPLOYMENT_GUIDE.md`（DEP-TD-001）、`README.md`、`CHANGELOG.md`、`src/server/db/schema.ts`、`drizzle/`（migrations）、`docs/openapi.json` |
 | 適用版本 | TicketDesk v1.0.0（SemVer） |
 | 測試範圍 | 身分認證繞過防護、RBAC 權限邊界、IDOR 越權、2FA、外部 API 速率限制、資料過濾（>3 天未結案）、系統回歸 |
 
 ---
+
+> **實作狀態（2026-10-23，v0.1.0）**：本計畫中的 P0 安全情境已有對應的自動化測試（`tests/*.test.ts`，執行 `npm test`；
+> 設定 `TEST_DATABASE_URL` 可改用真實 PostgreSQL），端到端煙霧測試為 `scripts/smoke.sh`。
+> 改密前的業務 API 一律回 `403`（`code=password_change_required`），不是原計畫的 422，見 [`specs/DECISIONS.md`](../specs/DECISIONS.md)。
+> 尚未實作的功能（SSO、FIDO2、附件、`/users` 端點等）相關案例暫不適用。
+
 
 ## 0. 閱讀指引
 
@@ -210,11 +216,11 @@
 
 | ID | 標題 | 前置條件 | 步驟 | 預期結果 | 自動化 | 優先級 |
 | --- | --- | --- | --- | --- | --- | --- |
-| SEC-BA-015 | 業務 API 全面回 422 | 持有受限權杖 | 逐一呼叫：`GET /tickets`、`POST /tickets`、`GET /tickets/{id}`、`PATCH /tickets/{id}`、`GET /users`、`GET /reports/tickets`、`GET /help-topics`、`POST /notifications/{id}/resend` | **全部** 回 `422 password_change_required`（RFC 7807）；回應 body **不含** 任何業務資料 | ✅ | P0 |
-| SEC-BA-016 | 無業務資料洩漏 | 同上 | 檢查每個 `422` 回應 body 與 headers | 僅含 `type`/`title`/`status`/`detail`/`instance`/`trace_id`；無 `data`、無工單欄位、無使用者清單 | ✅ | P0 |
+| SEC-BA-015 | 業務 API 全面回 403 | 持有受限權杖 | 逐一呼叫：`GET /tickets`、`POST /tickets`、`GET /tickets/{id}`、`PATCH /tickets/{id}`、`GET /users`、`GET /reports/tickets`、`GET /help-topics`、`POST /notifications/{id}/resend` | **全部** 回 `403 password_change_required`（RFC 7807）；回應 body **不含** 任何業務資料 | ✅ | P0 |
+| SEC-BA-016 | 無業務資料洩漏 | 同上 | 檢查每個 `403` 回應 body 與 headers | 僅含 `type`/`title`/`status`/`detail`/`instance`/`trace_id`；無 `data`、無工單欄位、無使用者清單 | ✅ | P0 |
 | SEC-BA-017 | 前端路由守衛 | 受限權杖 | Playwright 直接輸入 `/dashboard`、`/tickets`、`/reports`、`/settings` | 全部導回 `/change-password`；不發出業務 API 請求（以 network log 驗證） | ✅ | P0 |
-| SEC-BA-018 | 檔案下載端點封鎖 | 受限權杖 | `GET /api/v1/attachments/{id}/download` | `422 password_change_required`（不得回 `302` 到預簽 URL） | ✅ | P0 |
-| SEC-BA-019 | 中介層順序驗證（旗標在授權前） | 受限權杖 + 無效 Scope | 1. 以受限權杖呼叫需 `ticket:read` 的端點 2. 觀察錯誤碼 | 回 `422 password_change_required`（**非** `403 forbidden`）→ 證明旗標檢查在授權之前 | ✅ | P0 |
+| SEC-BA-018 | 檔案下載端點封鎖 | 受限權杖 | `GET /api/v1/attachments/{id}/download` | `403 password_change_required`（不得回 `302` 到預簽 URL） | ✅ | P0 |
+| SEC-BA-019 | 中介層順序驗證（旗標在授權前） | 受限權杖 + 無效 Scope | 1. 以受限權杖呼叫需 `ticket:read` 的端點 2. 觀察錯誤碼 | 回 `403` 且 `code=password_change_required`（**非** `code=forbidden`）→ 證明旗標檢查在授權之前 | ✅ | P0 |
 
 ### 3.4 改密流程與密碼政策（AC-SEC-01.4）
 
@@ -238,7 +244,7 @@
 
 | ID | 標題 | 前置條件 | 步驟 | 預期結果 | 自動化 | 優先級 |
 | --- | --- | --- | --- | --- | --- | --- |
-| SEC-BA-033 | 舊 Session 立即撤銷 | 改密前先以另一瀏覽器登入取得受限權杖 | 1. 完成改密 2. 以舊受限權杖呼叫 `GET /tickets` | `401`（權杖已撤銷）；不得回 `422` 或成功 | ✅ | P0 |
+| SEC-BA-033 | 舊 Session 立即撤銷 | 改密前先以另一瀏覽器登入取得受限權杖 | 1. 完成改密 2. 以舊受限權杖呼叫 `GET /tickets` | `401`（權杖已撤銷）；不得回 `403` 或成功 | ✅ | P0 |
 | SEC-BA-034 | 舊 Refresh Token 失效 | 改密前持有 refresh token（若簽發） | 改密後 `POST /auth/refresh` | `401`；不得簽發新 Access Token | ✅ | P0 |
 | SEC-BA-035 | 新權杖可正常使用 | 完成改密 | `GET /api/v1/tickets`（新 access token） | `200`；回傳可見工單 | ✅ | P0 |
 | SEC-BA-036 | 權杖版本 (`tv`) 遞增 | 改密前後 | 解碼新舊 JWT 的 `tv` 聲明 | 新 `tv` > 舊 `tv`；Redis/KV `user:{id}:tv` 已更新 | ✅ | P0 |
@@ -249,17 +255,17 @@
 | ID | 標題 | 繞過向量 | 步驟 | 預期結果 | 自動化 | 優先級 |
 | --- | --- | --- | --- | --- | --- | --- |
 | SEC-BA-038 | URL 直接存取 Dashboard | 前端路由 | 受限權杖下直接輸入 `/dashboard`、`/#/tickets` | 導回 `/change-password`；無業務 API 請求 | ✅ | P0 |
-| SEC-BA-039 | API Token 呼叫業務端點 | 以 `T-SOC` Bearer 呼叫 | `GET /api/v1/tickets`（`T-SOC`） | `422 password_change_required`（旗標檢查在授權中介層之後、業務邏輯之前） | ✅ | P0 |
+| SEC-BA-039 | API Token 呼叫業務端點 | 以 `T-SOC` Bearer 呼叫 | `GET /api/v1/tickets`（`T-SOC`） | `403 password_change_required`（旗標檢查在授權中介層之後、業務邏輯之前） | ✅ | P0 |
 | SEC-BA-040 | 重複登入取得新權杖 | 多次 `POST /auth/login` | 連續登入 3 次 | 每次皆回受限權杖；**不得** 因重複登入而升級為完整權杖 | ✅ | P0 |
 | SEC-BA-041 | 走「忘記密碼」流程 | 密碼重設 | 1. `POST /auth/forgot-password`（寄至 admin 信箱）2. 以重設 Token 設新密碼 3. 登入 | 重設後仍須完成「首次改密」流程（旗標未被清除）；或系統明確拒絕 Bootstrap Admin 使用自助重設 | ✅ | P0 |
-| SEC-BA-042 | 前端儲存竄改 | localStorage / Cookie | 1. 手動改 `localStorage.role='super_admin'`、`must_change_password=false` 2. 重新載入 3. 呼叫 API | 後端仍回 `422`；UI 仍導回改密頁（前端狀態不具授權效力） | ✅ | P0 |
+| SEC-BA-042 | 前端儲存竄改 | localStorage / Cookie | 1. 手動改 `localStorage.role='super_admin'`、`must_change_password=false` 2. 重新載入 3. 呼叫 API | 後端仍回 `403`；UI 仍導回改密頁（前端狀態不具授權效力） | ✅ | P0 |
 | SEC-BA-043 | JWT 竄改（alg=none） | 權杖偽造 | 1. 將 header `alg` 改 `none`、payload `must_change_password=false` 2. 呼叫 API | `401`；審計記錄 `auth.token.invalid`（`reason=alg_not_allowed`） | ✅ | P0 |
 | SEC-BA-044 | JWT 竄改（簽章錯誤 / kid 注入） | 權杖偽造 | 1. 改 payload 並以錯誤密鑰重簽 2. 改 `kid` 為路徑穿越字串（`../../etc/passwd`） | 全部 `401`；不得發生檔案讀取或 500 洩漏堆疊 | ✅ | P0 |
 | SEC-BA-045 | 受限權杖提權（Scope 擴張） | 權杖偽造 | 1. 解碼受限權杖 2. 將 `scope` 改為 `ticket:read` 並重簽（錯誤密鑰） | `401`；不得回業務資料 | ✅ | P0 |
 | SEC-BA-046 | 直接呼叫改密端點繞過舊密碼驗證 | 邏輯缺陷 | `POST /auth/change-password` 省略 `current_password` 或填入錯誤值 | `400`；不得更新密碼 | ✅ | P0 |
-| SEC-BA-047 | 以 PATCH /users/{id} 直接清除旗標 | 邏輯缺陷 | 受限權杖 `PATCH /api/v1/users/{id}` body `{"must_change_password": false}` | `422`（旗標攔截）或 `403`；DB 旗標仍為 `TRUE` | ✅ | P0 |
-| SEC-BA-048 | HTTP 方法 / 路徑變形繞過 | 路徑混淆 | 嘗試 `GET /api/v1/tickets/`、`//api/v1/tickets`、`/api/v1/tickets?x=1`、`X-HTTP-Method-Override: GET`、大小寫變形 `/API/V1/TICKETS` | 全部 `422` 或 `404`；**不得** 回 `200` 業務資料 | ✅ | P0 |
-| SEC-BA-049 | 快取層繞過 | 快取污染 | 1. 以受限權杖請求 `GET /tickets`（預期 422）2. 以完整權杖請求同一 URL 3. 再以受限權杖請求 | 受限權杖仍 `422`；回應 `Cache-Control: no-store`；不得命中他人快取 | ⚠️ | P1 |
+| SEC-BA-047 | 以 PATCH /users/{id} 直接清除旗標 | 邏輯缺陷 | 受限權杖 `PATCH /api/v1/users/{id}` body `{"must_change_password": false}` | `403`（旗標攔截）或 `403`；DB 旗標仍為 `TRUE` | ✅ | P0 |
+| SEC-BA-048 | HTTP 方法 / 路徑變形繞過 | 路徑混淆 | 嘗試 `GET /api/v1/tickets/`、`//api/v1/tickets`、`/api/v1/tickets?x=1`、`X-HTTP-Method-Override: GET`、大小寫變形 `/API/V1/TICKETS` | 全部 `403` 或 `404`；**不得** 回 `200` 業務資料 | ✅ | P0 |
+| SEC-BA-049 | 快取層繞過 | 快取污染 | 1. 以受限權杖請求 `GET /tickets`（預期 403）2. 以完整權杖請求同一 URL 3. 再以受限權杖請求 | 受限權杖仍 `403`；回應 `Cache-Control: no-store`；不得命中他人快取 | ⚠️ | P1 |
 
 ### 3.7 冪等性與容器重啟（AC-SEC-01.7）
 
@@ -369,7 +375,7 @@
 | SEC-2FA-026 | super_admin 可重設他人 2FA | `U-SA2` 已綁定 | `POST /users/{U-SA2}/2fa/reset`（以 `U-BA`） | `200`；`two_factor_enabled=FALSE`；綁定資料清除；審計 `action='2fa.reset'` | ✅ | P0 |
 | SEC-2FA-027 | 非 super_admin 不可重設 | `U-IM` | 同上 | `403`；未變更 | ✅ | P0 |
 | SEC-2FA-028 | 重設後撤銷 Session | 同上 | 以 `U-SA2` 舊 Session 呼叫 API | `401`；需重新登入並重新綁定 | ✅ | P0 |
-| SEC-2FA-029 | 2FA 綁定期間業務封鎖 | `U-IM` 未綁定且開關啟用 | 以受限權杖（`2fa:enroll`）呼叫 `GET /tickets` | `422` 或 `403`；不得回業務資料 | ✅ | P0 |
+| SEC-2FA-029 | 2FA 綁定期間業務封鎖 | `U-IM` 未綁定且開關啟用 | 以受限權杖（`2fa:enroll`）呼叫 `GET /tickets` | `403` 或 `403`；不得回業務資料 | ✅ | P0 |
 | SEC-2FA-030 | 2FA 狀態不可由使用者自行關閉（強制角色） | `U-SA2` 已綁定 | `PATCH /users/me` body `{"two_factor_enabled": false}` | `403`（強制角色不可自行停用）；或需 super_admin 重設 | ✅ | P0 |
 
 ---
@@ -688,7 +694,7 @@ def test_restricted_token_blocked(restricted_token, method, path):
     r = httpx.request(method, f"{BASE}{path}",
                       headers={"Authorization": f"Bearer {restricted_token}"},
                       json={} if method in ("POST", "PATCH") else None)
-    assert r.status_code == 422, f"{method} {path} -> {r.status_code}"
+    assert r.status_code == 403, f"{method} {path} -> {r.status_code}"
     assert r.json()["title"] == "password_change_required"
     assert "data" not in r.text
 ```
@@ -755,7 +761,7 @@ WHERE status NOT IN ('resolved','closed')
   AND created_at = now() - INTERVAL '3 days';   -- 期望 0（若存在則需排除）
 ```
 
-> **實作對照**：PRD §FR-3.4 使用 `created_at <= now() - INTERVAL '3 days'`；語意上等價於「`now() - created_at >= 72h`」。**測試必須驗證「恰好 72 小時 0 分 0 秒」不被計入**，因此實作應為 `created_at < now() - INTERVAL '3 days'`（嚴格小於）或 `now() - created_at > INTERVAL '3 days'`（嚴格大於）。若實作採 `<=`，SEC/API-FLT-002 將失敗並列為 **S3**（口徑偏差）→ 建議修正為嚴格比較。
+> **實作對照**：PRD §FR-3.4 已修正為 `created_at < now() - INTERVAL '72 hours'`（嚴格小於），實作在 `src/server/services/tickets.ts` 的 `agingCondition()`，邊界由 `tests/tickets.test.ts` 驗證（剛好 72h 不計入、72h+1s 計入）。
 
 ### 7.3 測試資料重置腳本
 
@@ -859,7 +865,7 @@ TOKEN=$(curl -s -X POST http://localhost:8080/api/v1/auth/login \
   -H 'Content-Type: application/json' \
   -d '{"email":"admin@ticket.local","password":"Admin@InitTemp2026!"}' | jq -r .restricted_token)
 curl -i http://localhost:8080/api/v1/tickets -H "Authorization: Bearer $TOKEN"
-# 期望 422 password_change_required
+# 期望 403 password_change_required
 
 # ---------- 改密 ----------
 curl -i -X POST http://localhost:8080/api/v1/auth/change-password \

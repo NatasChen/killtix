@@ -1,0 +1,274 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "TicketDesk External API",
+    "version": "0.1.0",
+    "description": "API for external systems (SOC, SIEM, monitoring) to open and query tickets. Authenticate with an API token created under Admin → API tokens: `Authorization: Bearer td_xxxx_...`. Tokens carry scopes `tickets:write` and/or `tickets:read` and are rate-limited per token (default 60 requests/minute; `X-RateLimit-Limit`, `X-RateLimit-Remaining` and, on 429, `Retry-After` headers). Errors use RFC 7807 `application/problem+json` with a stable `code`."
+  },
+  "servers": [{ "url": "/api/v1" }],
+  "security": [{ "bearerToken": [] }],
+  "paths": {
+    "/tickets": {
+      "post": {
+        "summary": "Open a ticket",
+        "description": "Requires scope `tickets:write`. Send `Idempotency-Key` (or `externalId`) so retries never create duplicates: a repeated key returns the original ticket with status 200 and header `Idempotent-Replayed: true`. Keys are scoped per token.",
+        "parameters": [
+          { "name": "Idempotency-Key", "in": "header", "required": false, "schema": { "type": "string", "maxLength": 255 }, "example": "SOC-2026-0001" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/TicketCreate" },
+              "example": {
+                "subject": "[SOC] Ransomware behaviour on EDR-0421",
+                "description": "EDR detected mass file encryption at 09:12 and isolated the host.",
+                "helpTopic": "security-incident",
+                "priority": 5,
+                "requester": { "email": "soc@example.com", "name": "SOC Bot" },
+                "tags": ["ransomware", "edr"],
+                "customFields": { "affected_host": "EDR-0421" }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TicketSummary" } } } },
+          "200": { "description": "Idempotent replay of an earlier request", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TicketSummary" } } } },
+          "400": { "$ref": "#/components/responses/Problem" },
+          "401": { "$ref": "#/components/responses/Problem" },
+          "403": { "$ref": "#/components/responses/Problem" },
+          "429": { "$ref": "#/components/responses/Problem" }
+        }
+      },
+      "get": {
+        "summary": "List tickets opened by this token",
+        "description": "Requires scope `tickets:read`. API tokens see tickets they opened (row-level authorization).",
+        "parameters": [
+          { "name": "status", "in": "query", "schema": { "type": "string" }, "description": "Comma separated: new,open,pending_user,resolved,closed" },
+          { "name": "priority", "in": "query", "schema": { "type": "string" }, "description": "Comma separated 1-5" },
+          { "name": "tags", "in": "query", "schema": { "type": "string" }, "description": "Comma separated tag names" },
+          { "name": "tagsMode", "in": "query", "schema": { "type": "string", "enum": ["any", "all"], "default": "any" } },
+          { "name": "olderThanDays", "in": "query", "schema": { "type": "integer", "minimum": 1 }, "description": "Unresolved (not resolved/closed) and created strictly more than N×24 hours ago" },
+          { "name": "slaStatus", "in": "query", "schema": { "type": "string", "enum": ["on_track", "at_risk", "breached", "met"] } },
+          { "name": "q", "in": "query", "schema": { "type": "string" }, "description": "Substring of subject or ticket number" },
+          { "name": "cf.<key>", "in": "query", "schema": { "type": "string" }, "description": "Custom field equals (only fields marked filterable)" },
+          { "name": "cfc.<key>", "in": "query", "schema": { "type": "string" }, "description": "Custom field contains" },
+          { "name": "sort", "in": "query", "schema": { "type": "string", "enum": ["created_at", "-created_at", "updated_at", "-updated_at", "priority", "-priority"], "default": "-created_at" } },
+          { "name": "page", "in": "query", "schema": { "type": "integer", "minimum": 1, "default": 1 } },
+          { "name": "perPage", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 25 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Page of tickets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": { "type": "array", "items": { "$ref": "#/components/schemas/TicketListItem" } },
+                    "total": { "type": "integer" },
+                    "page": { "type": "integer" },
+                    "perPage": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Problem" },
+          "401": { "$ref": "#/components/responses/Problem" },
+          "403": { "$ref": "#/components/responses/Problem" },
+          "429": { "$ref": "#/components/responses/Problem" }
+        }
+      }
+    },
+    "/tickets/{id}": {
+      "get": {
+        "summary": "Get a ticket",
+        "description": "Requires scope `tickets:read`. `id` is the numeric id or the ticket number (e.g. TCK-2026-000123). Tickets the caller may not see return 404. Internal notes and internal custom fields are never returned to API clients.",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": {
+          "200": { "description": "Ticket", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TicketDetail" } } } },
+          "401": { "$ref": "#/components/responses/Problem" },
+          "403": { "$ref": "#/components/responses/Problem" },
+          "404": { "$ref": "#/components/responses/Problem" }
+        }
+      }
+    },
+    "/help-topics": {
+      "get": {
+        "summary": "List help topics and their custom fields",
+        "description": "Requires scope `tickets:write`. Use `slug` as `helpTopic` when opening tickets.",
+        "responses": {
+          "200": {
+            "description": "Help topics",
+            "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/HelpTopic" } } } }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerToken": { "type": "http", "scheme": "bearer", "description": "API token, format td_<prefix>_<secret>" }
+    },
+    "responses": {
+      "Problem": {
+        "description": "Error",
+        "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } } }
+      }
+    },
+    "schemas": {
+      "Priority": {
+        "description": "1 (lowest) – 5 (critical), or an alias",
+        "oneOf": [
+          { "type": "integer", "minimum": 1, "maximum": 5 },
+          { "type": "string", "enum": ["lowest", "low", "normal", "high", "critical"] }
+        ]
+      },
+      "TicketCreate": {
+        "type": "object",
+        "required": ["subject"],
+        "properties": {
+          "subject": { "type": "string", "maxLength": 512 },
+          "description": { "type": "string", "maxLength": 100000 },
+          "priority": { "$ref": "#/components/schemas/Priority" },
+          "helpTopic": { "type": "string", "description": "Help topic slug" },
+          "helpTopicId": { "type": "integer" },
+          "requester": {
+            "type": "object",
+            "required": ["email"],
+            "properties": { "email": { "type": "string", "format": "email" }, "name": { "type": "string" } },
+            "description": "Person the ticket is about; created as an end user if unknown. Defaults to the token's own client user."
+          },
+          "tags": { "type": "array", "items": { "type": "string", "maxLength": 64 }, "maxItems": 20 },
+          "customFields": { "type": "object", "additionalProperties": true, "description": "Keyed by custom field key of the help topic's form" },
+          "externalId": { "type": "string", "maxLength": 255, "description": "Alternative to the Idempotency-Key header" }
+        }
+      },
+      "Sla": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "enum": ["on_track", "at_risk", "breached", "met"] },
+          "firstResponseDueAt": { "type": ["string", "null"], "format": "date-time" },
+          "resolutionDueAt": { "type": ["string", "null"], "format": "date-time" },
+          "firstRespondedAt": { "type": ["string", "null"], "format": "date-time" },
+          "paused": { "type": "boolean", "description": "true while waiting on the user (pending_user)" }
+        }
+      },
+      "TicketSummary": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "number": { "type": "string", "example": "TCK-2026-000123" },
+          "subject": { "type": "string" },
+          "status": { "type": "string", "enum": ["new", "open", "pending_user", "resolved", "closed"] },
+          "priority": { "type": "integer", "minimum": 1, "maximum": 5 },
+          "source": { "type": "string", "enum": ["web", "api"] },
+          "externalId": { "type": ["string", "null"] },
+          "sla": { "$ref": "#/components/schemas/Sla" },
+          "ageHours": { "type": "integer" },
+          "reopenCount": { "type": "integer" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" },
+          "resolvedAt": { "type": ["string", "null"], "format": "date-time" },
+          "closedAt": { "type": ["string", "null"], "format": "date-time" }
+        }
+      },
+      "Person": {
+        "type": ["object", "null"],
+        "properties": { "id": { "type": "integer" }, "displayName": { "type": "string" }, "email": { "type": "string" } }
+      },
+      "TicketListItem": {
+        "allOf": [
+          { "$ref": "#/components/schemas/TicketSummary" },
+          {
+            "type": "object",
+            "properties": {
+              "requester": { "$ref": "#/components/schemas/Person" },
+              "assignee": { "$ref": "#/components/schemas/Person" },
+              "helpTopic": { "type": ["string", "null"] },
+              "team": { "type": ["string", "null"] },
+              "tags": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        ]
+      },
+      "TicketDetail": {
+        "allOf": [
+          { "$ref": "#/components/schemas/TicketSummary" },
+          {
+            "type": "object",
+            "properties": {
+              "description": { "type": "string" },
+              "requester": { "$ref": "#/components/schemas/Person" },
+              "assignee": { "$ref": "#/components/schemas/Person" },
+              "helpTopic": { "type": ["object", "null"], "properties": { "id": { "type": "integer" }, "slug": { "type": "string" }, "name": { "type": "string" } } },
+              "tags": { "type": "array", "items": { "type": "string" } },
+              "customFields": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": { "key": { "type": "string" }, "label": { "type": "string" }, "type": { "type": "string" }, "value": {} }
+                }
+              },
+              "threads": {
+                "type": "array",
+                "description": "Public conversation only",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": { "type": "integer" },
+                    "type": { "type": "string", "enum": ["customer_message", "agent_reply"] },
+                    "body": { "type": "string" },
+                    "createdAt": { "type": "string", "format": "date-time" },
+                    "author": { "$ref": "#/components/schemas/Person" }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "HelpTopic": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "slug": { "type": "string" },
+          "name": { "type": "string" },
+          "description": { "type": ["string", "null"] },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": { "type": "string" },
+                "label": { "type": "string" },
+                "type": { "type": "string", "enum": ["text", "textarea", "number", "date", "select", "multiselect", "checkbox", "email", "url"] },
+                "isRequired": { "type": "boolean" },
+                "options": { "type": "array", "items": { "type": "string" } }
+              }
+            }
+          }
+        }
+      },
+      "Problem": {
+        "type": "object",
+        "properties": {
+          "type": { "type": "string" },
+          "title": { "type": "string", "description": "Localized message" },
+          "status": { "type": "integer" },
+          "code": {
+            "type": "string",
+            "description": "Stable identifier, e.g. validation_failed, unauthorized, insufficient_scope, not_found, rate_limited",
+            "example": "validation_failed"
+          },
+          "errors": {
+            "type": "array",
+            "items": { "type": "object", "properties": { "path": { "type": "string" }, "message": { "type": "string" } } }
+          }
+        }
+      }
+    }
+  }
+}

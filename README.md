@@ -1,424 +1,183 @@
-<div align="center">
+# TicketDesk
 
-# 🎫 TicketDesk
+企業 IT 服務台與資安營運中心（SOC）用的工單管理系統。內部人員、外部廠商與一般使用者在同一個入口處理工單；
+SOC、SIEM 等外部系統可以透過 API 自動開單。
 
-**企業級 ITSM 工單管理平台 · API-First · 雙軌佈署 · 零信任安全**
+## 版本資訊
 
-[![Version](https://img.shields.io/badge/version-v1.0.0-blue.svg)](CHANGELOG.md)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](#-授權條款)
-[![Deploy](https://img.shields.io/badge/deploy-Docker%20%7C%20Cloudflare-orange.svg)](#-快速啟動)
-[![API](https://img.shields.io/badge/API-OpenAPI%203.1-6ba539.svg)](src/api_spec.json)
-[![Security](https://img.shields.io/badge/security-2FA%20%7C%20RBAC%20%7C%20SCIM-red.svg)](docs/PRD_SPEC.md)
-
-[產品特性](#-主要特點) · [技術棧](#-技術棧) · [架構](#-架構概念) · [快速啟動](#-快速啟動) · [預設帳號](#-預設管理員帳號與首次登入必讀) · [文件索引](#-文件索引)
-
-</div>
-
----
-
-## 📖 專案簡介
-
-**TicketDesk** 是一套面向企業 IT 服務台與資安營運中心 (SOC) 的現代化工單管理平台。
-它將分散的服務請求、資安告警與內部支援統一收斂到單一入口，並以 **API-First** 設計讓外部系統
-（如 SOC 監控、SIEM、EDR）能自動開單；同時提供 **SLA 時效治理**、**RBAC 物件層級權限**、
-**多管道即時通知** 與 **可稽核的安全機制**。
-
-平台提供 **雙軌佈署**：地端可採 Docker 容器化（App + PostgreSQL + Redis），
-雲端可採 Cloudflare 邊緣網路（Workers + Pages + D1 + Queues），
-讓同一份程式碼同時滿足「資料落地」與「全球低延遲、免維運」兩種客戶情境。
-
-> 核心模組設計參考 **osTicket** 成熟機制（Help Topics、SLA Plans、Ticket Threading、Canned Responses、自訂表單欄位），
-> 並在此基礎上補足現代化 API、邊緣佈署與企業級身分治理能力。
-
----
-
-## ✨ 主要特點
-
-<table>
-<tr>
-<td width="50%" valign="top">
-
-### 🔐 身分驗證與安全
-- **AD / LDAP** 企業目錄整合（LDAPS、Group→Role 映射）
-- **SAML 2.0**（SP / IdP-initiated）與 **OIDC**（Code + PKCE）單一登入
-- **SCIM 2.0** 使用者/群組自動佈建，離職即時停用
-- **2FA 全域開關**：管理員一鍵啟停，支援 **TOTP** 與 **FIDO2 / WebAuthn**
-- 一次性復原碼、密碼政策、登入失敗鎖定、審計日誌
-
-### 🎟️ 工單核心機制
-- **Help Topics** 服務類別（兩層分類、綁定表單/SLA/自動 Tag）
-- **Ticket Form 自訂欄位**：12 種型別、三階可見性、可篩選/可匯出
-- **SLA Plans** 時效管理（營業時間、時區、逾時升級、暫停計時）
-- **Ticket Threading**：對外回覆 vs. 內部備忘嚴格隔離
-- **Canned Responses** 回覆範本（變數插值）
-- **Tag 標籤系統**：多對多關聯、`any/all` 篩選
-- **緊急程度 5 級**（Level 1 ~ Level 5）
-
-</td>
-<td width="50%" valign="top">
-
-### 📊 報表與儀表板
-- **Overview Dashboard** 9 項即時 Widget
-- **報表匯出**：CSV / XLSX / PDF
-- **自訂欄位過濾**：7 種運算子
-- **「超過 3 天未結案」精確篩選**（必備能力，含排程報表）
-
-### 🛡️ 權限與通知
-- **RBAC**：`super_admin` / `it_manager` / `agent` / `vendor` / `end_user` / `api_client`
-- 外部廠商與一般使用者 **僅見被指派或關聯之工單**（防 IDOR）
-- **多管道通知**：Email (SMTP)、**Telegram Bot**、**Microsoft Teams Webhook**
-- 非同步佇列、冪等去重、失敗重試
-
-### 🌏 使用者體驗
-- **Glossary 字典架構**多語系（`zh-TW` / `en-US`，擴充語系零改碼）
-- **Light / Dark / System** 主題切換，無 FOUC、符合 WCAG 2.1 AA
-
-### 🔌 外部整合
-- **RESTful API（OpenAPI 3.1）** 供 SOC 自動開單
-- `Idempotency-Key` 冪等、Scope 權杖、速率限制、RFC 7807 錯誤格式
-
-</td>
-</tr>
-</table>
-
----
-
-## 🧰 技術棧
-
-| 層級 | 方案 A：Docker 容器化 | 方案 B：Cloudflare 邊緣網路 |
-| --- | --- | --- |
-| **前端** | SPA（Light/Dark 主題、i18n Glossary） | Cloudflare **Pages** |
-| **應用/API** | 容器化 App 服務（RESTful API） | Cloudflare **Workers** |
-| **資料庫** | **PostgreSQL 16**（Volume 持久化） | Cloudflare **D1**（SQLite 相容） |
-| **佇列 / 快取** | **Redis 7**（非同步通知、SLA 排程） | Cloudflare **Queues** + **KV** |
-| **排程** | 容器內 Cron / Worker Process | **Cron Triggers** |
-| **身分治理** | AD / LDAP / SAML 2.0 / OIDC / SCIM 2.0 | 同左（LDAP 經 Tunnel / 中繼） |
-| **通知** | SMTP · Telegram Bot API · MS Teams Webhook | 同左 |
-| **可觀測性** | 結構化 JSON Log、`/healthz`、`/metrics` | Workers Analytics、Logpush |
-
-**共通設計原則**
-- 後端 **零硬編碼字串**，一律經 Glossary 字典查詢（`t('ticket.status.open')`）。
-- Schema 變更一律以 **migration** 管理，禁止手動改線上資料庫。
-- 機密僅以環境變數 / Secret Manager 注入，**永不進版控**。
-
----
-
-## 🏗️ 架構概念
-
-```
-                    ┌──────────────────────────────────────────────┐
-                    │         Clients / Integrations               │
-                    │  Web UI │ SOC 系統 │ Email │ Telegram / Teams │
-                    └───────┬─────────────┬────────────────────────┘
-                            │             │
-              ┌─────────────▼───┐   ┌─────▼────────────────┐
-              │  REST API / BFF │   │  Webhook Dispatcher  │
-              │  (Auth Guard)   │   │  (Retry + Idempotent)│
-              └────────┬────────┘   └──────┬───────────────┘
-                       │                   │
-   ┌───────────────────▼───────────────────▼───────────────────┐
-   │                    Application Services                    │
-   │  Auth (AD/LDAP/SAML/OIDC/SCIM/2FA) │ Ticket │ SLA │ Report │
-   │  RBAC Policy Engine │ i18n Glossary │ Notification Service  │
-   └───────────┬───────────────────────────────┬───────────────┘
-               │                               │
-      ┌────────▼────────┐            ┌─────────▼─────────┐
-      │ PostgreSQL / D1 │            │ Redis / Queues    │
-      │ (src/schema.sql)│            │ (async jobs)      │
-      └─────────────────┘            └───────────────────┘
-```
-
-**請求流（SOC 自動開單）**
-```
-SOC 系統 ──POST /api/v1/tickets──▶ Auth Guard (API Token + Scope)
-        ──▶ 驗證中介層 (Schema / Custom Fields)
-        ──▶ 工單服務 (Help Topic → Form → SLA 計算)
-        ──▶ DB 寫入 + Thread(system_event)
-        ──▶ 佇列 (notification.job) ──▶ Email / Telegram / Teams
-        ◀── 201 Created (ticket number + SLA due)
-```
-
----
-
-## 📁 目錄結構
-
-```
-ticketdesk/
-├── README.md                     # 專案門面（本文件）
-├── CHANGELOG.md                  # 版本歷程（Keep a Changelog）
-├── LICENSE                       # 授權條款
-├── .gitignore                    # 排除機密與快取
-├── .env.example                  # 環境變數範本（不含真實機密）
-├── docker-compose.yml            # 方案 A：App + PostgreSQL 16 + Redis 7
-├── wrangler.toml                 # 方案 B：Workers / D1 / Queues / KV 宣告
-│
-├── docs/                         # 📚 專案文件
-│   ├── PRD_SPEC.md               #   產品需求規格書（PRD-TD-001）
-│   ├── DEPLOYMENT_GUIDE.md       #   雙軌佈署 step-by-step 手冊
-│   └── QA_TEST_PLAN.md           #   品質與資安測試計畫矩陣
-│
-└── src/                          # 💻 原始碼與配置
-    ├── schema.sql                #   完整 DDL + Bootstrap Admin 種子資料
-    ├── api_spec.json             #   OpenAPI 3.1 規格（SOC 開單 API）
-    └── ...                       #   應用程式原始碼（依實作分層）
-```
-
----
-
-## 🚀 快速啟動
-
-### 前置需求
-| 方案 | 需求 |
+| 項目 | 內容 |
 | --- | --- |
-| **A. Docker** | Docker Engine 24+、Docker Compose v2、可用連接埠 `8080` / `5432` / `6379` |
-| **B. Cloudflare** | Node.js 20+、`wrangler` CLI 3+、Cloudflare 帳號（Workers / Pages / D1 / Queues 已啟用） |
+| 目前版本 | **v0.1.0（MVP）**，2026-10-23 |
+| 狀態 | Docker 版可部署；43 個自動化測試、部署後 API 檢查與瀏覽器端到端測試皆通過 |
+| 本版重點 | 第一個可實際執行的版本：工單、SLA、RBAC、2FA、通知、外部 API、報表、中英文介面 |
+| 尚未實作 | AD/LDAP、SAML、OIDC、SCIM、FIDO2、附件、SLA 營業時間、Cloudflare 部署 |
+| 完整變更 | [CHANGELOG.md](CHANGELOG.md) |
+| 與原始規格的差異 | [specs/DECISIONS.md](specs/DECISIONS.md)（含待客戶確認事項） |
+| 接手開發 | 人或 AI Agent 請先讀 [AGENTS.md](AGENTS.md) |
 
----
+## 功能
 
-### 方案 A：Docker 容器化佈署（地端 / 內網推薦）
+**帳號與安全**
+- 本機帳號登入，密碼以 bcrypt 雜湊；連續失敗 5 次鎖定 15 分鐘；登入錯誤不透露帳號是否存在
+- 預設管理員 `admin@ticket.local` 首次登入**強制改密**，改密前所有業務 API 都被拒絕
+- 密碼政策：≥ 12 字元、四種字元、不可重複最近 5 次；改密後其他 session 全部失效
+- TOTP 兩步驟驗證（含 10 組一次性復原碼），管理員可一鍵**全域強制**
+- 稽核日誌：登入、改密、2FA、權限、工單異動、報表匯出
+
+**工單**
+- 5 級優先度、狀態機（`new → open → pending_user → resolved → closed`，非法轉換回 409）
+- 服務類別（Help Topic）綁定表單、SLA、預設團隊與自動標籤
+- 自訂欄位：9 種型別、必填、正規表示式驗證、公開／僅內部可見、可篩選
+- 對話串：對外回覆與**內部備忘嚴格隔離**（外部廠商與申請人永遠看不到）
+- 回覆範本（可插入工單編號、主旨、申請人）
+- 多標籤，可依「符合任一／全部符合」篩選
+- SLA：首次回應與解決期限、等待使用者期間暫停計時、即將逾時／已逾時自動標記
+
+**權限（RBAC）**
+- 角色：系統管理員、IT 服務主管、內部工程師、外部廠商、一般使用者、外部系統
+- 權限在 **SQL 查詢層**套用：廠商只看得到被指派或被加入關注的工單，越權存取一律 404
+
+**報表與儀表板**
+- 儀表板：未結案、今日新增／解決、**超過 3 天未結案**、SLA 逾時／即將逾時、30 天 SLA 達標率、分佈圖
+- 工單清單可依狀態、優先度、負責人、標籤、SLA、自訂欄位、「超過 3 天未結案」篩選
+- CSV 匯出（含自訂欄位、Excel 可直接開啟中文、防公式注入）
+
+**通知**：Email、Telegram Bot、Microsoft Teams；outbox 佇列、失敗重試、可在介面查看與重送
+
+**外部 API**：API Token（權限範圍 `tickets:write` / `tickets:read`）、`Idempotency-Key` 防重複開單、每 Token 速率限制，規格見 [docs/openapi.json](docs/openapi.json)
+
+**介面**：繁體中文／English（所有文字來自 glossary 字典，可在系統設定中線上覆寫），淺色／深色／跟隨系統主題，支援手機寬度
+
+## 技術
+
+| 層 | 使用 |
+| --- | --- |
+| 後端 | Node.js 24、TypeScript、[Hono](https://hono.dev)、Zod |
+| 資料庫 | PostgreSQL 16，[Drizzle ORM](https://orm.drizzle.team) 與 migration |
+| 快取 | Redis 7（速率限制） |
+| 前端 | React 19、React Router、Vite |
+| 測試 | Vitest + PGlite（程序內 PostgreSQL），可切換為真實 PostgreSQL |
+| 部署 | Docker Compose（app + postgres + redis） |
+
+```
+瀏覽器 / SOC ──HTTPS──▶ 反向代理 ──▶ app 容器（API + 前端 + 背景工作）
+                                        ├──▶ PostgreSQL（資料、通知佇列）
+                                        └──▶ Redis（速率限制）
+```
+
+## 快速開始（Docker）
 
 ```bash
-# 1) 取得專案
-git clone https://github.com/<your-org>/ticketdesk.git
-cd ticketdesk
-
-# 2) 建立環境變數檔（請務必修改所有機密值）
 cp .env.example .env
-#   必填：POSTGRES_PASSWORD / JWT_SECRET / SMTP_* / TELEGRAM_BOT_TOKEN / TEAMS_WEBHOOK_URL
-
-# 3) 啟動服務（App + PostgreSQL 16 + Redis 7）
-docker compose up -d
-
-# 4) 確認健康狀態
-docker compose ps
-curl -fsS http://localhost:8080/healthz
-
-# 5) 開啟瀏覽器
-#    http://localhost:8080
-#    首次登入請使用下方【預設管理員帳號】，並立即完成強制改密
+# 填入 APP_SECRET、POSTGRES_PASSWORD、REDIS_PASSWORD（可用 openssl rand -base64 48 產生）
+docker compose up -d --build --wait
+docker compose logs app | grep -A4 "bootstrap administrator"   # 取得預設管理員的一次性密碼
 ```
 
-**初始化機制說明**
-- `src/schema.sql` 會自動掛載至 PostgreSQL 容器的 `/docker-entrypoint-initdb.d`，
-  於 **首次啟動且資料目錄為空** 時執行，建立資料表並寫入 Bootstrap Admin 種子資料。
-- 種子腳本為 **冪等 (Idempotent)**：容器重啟或 migration 重跑 **不會** 覆蓋已變更的密碼，
-  也 **不會** 產生重複帳號。
+開啟 <http://localhost:8080>，以 `admin@ticket.local` 與 log 中的密碼登入，依畫面指示改密。
 
-**常用維運指令**
-```bash
-docker compose logs -f app          # 追蹤應用日誌
-docker compose restart app          # 重啟應用
-docker compose down                 # 停止（保留資料 Volume）
-docker compose down -v              # ⚠️ 停止並刪除資料（含資料庫，請先備份）
+- 想使用客戶規格指定的固定初始密碼，在 `.env` 設定 `BOOTSTRAP_ADMIN_PASSWORD=Admin@InitTemp2026!`（首次登入仍會強制改密）。
+- 正式環境設定（TLS、反向代理、備份、通知管道）見 [docs/DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md)。
 
-# 資料庫備份 / 還原
-docker compose exec -T postgres pg_dump -U ticketdesk ticketdesk > backup_$(date +%F).sql
-docker compose exec -T postgres psql -U ticketdesk -d ticketdesk < backup_2026-02-18.sql
-```
-
----
-
-### 方案 B：Cloudflare 邊緣網路佈署（全球低延遲 / 免維運）
+## API 範例（SOC 自動開單）
 
 ```bash
-# 1) 安裝依賴與登入
-npm install
-npx wrangler login
-
-# 2) 建立 D1 資料庫（記下回傳的 database_id，填入 wrangler.toml）
-npx wrangler d1 create ticketdesk-db
-
-# 3) 建立 Queues（非同步通知）
-npx wrangler queues create ticketdesk-notifications
-
-# 4) 初始化資料庫結構與種子資料
-npx wrangler d1 execute ticketdesk-db --remote --file=./src/schema.sql
-
-# 5) 設定環境變數與機密（勿寫入 wrangler.toml）
-npx wrangler secret put JWT_SECRET
-npx wrangler secret put SMTP_PASSWORD
-npx wrangler secret put TELEGRAM_BOT_TOKEN
-npx wrangler secret put TEAMS_WEBHOOK_URL
-
-# 6) 佈署 API (Workers) 與前端 (Pages)
-npx wrangler deploy
-npx wrangler pages deploy ./dist --project-name=ticketdesk
-
-# 7) 驗證
-curl -fsS https://ticketdesk.<your-subdomain>.workers.dev/healthz
-```
-
-> ⚠️ **邊緣環境限制**：AD / LDAP 無法從 Workers 直連企業內網，需透過 **Cloudflare Tunnel**
-> 或內部中繼 (Relay) 服務；Workers 單次執行時間與 D1 查詢限制請參閱
-> [`docs/DEPLOYMENT_GUIDE.md`](docs/DEPLOYMENT_GUIDE.md)。
-
----
-
-## 🔑 預設管理員帳號與首次登入（必讀）
-
-> ### ⚠️ 高風險警示
-> 下列帳號為 **初次佈署用的臨時系統管理員 (Bootstrap Admin)**，僅供登入驗證與細部設定。
-> **請於首次登入後立即變更密碼，並建議完成設定後停用或改為正式管理帳號。**
-> 切勿在正式環境長期沿用預設密碼。
-
-### 預設帳密
-
-| 項目 | 值 |
-| --- | --- |
-| **登入網址** | `http://localhost:8080`（Docker）／ `https://ticketdesk.<your-subdomain>.workers.dev`（Cloudflare） |
-| **帳號 (Email)** | `admin@ticket.local` |
-| **初始密碼** | `Admin@InitTemp2026!` |
-| **角色** | `super_admin`（系統管理員，全功能） |
-| **`must_change_password`** | `TRUE`（**強制改密旗標**） |
-| **`is_bootstrap_admin`** | `TRUE` |
-
-### 首次登入流程（強制改密，不可跳過）
-
-1. 以 `admin@ticket.local` / `Admin@InitTemp2026!` 登入。
-2. 系統偵測到 `must_change_password = TRUE`，**不會** 進入 Dashboard，
-   而是導向 `/change-password` 改密頁；此時僅簽發 **受限權杖**（Scope 僅 `password:change`、`auth:logout`）。
-3. 設定新密碼，需符合密碼政策：
-   - 長度 **≥ 12** 字元
-   - 至少包含 **大寫、小寫、數字、特殊符號** 各一
-   - **不得** 與初始密碼相同
-   - **不得** 與前 5 次使用過的密碼重複
-4. 改密成功後：
-   - `must_change_password` 設為 `FALSE`、`is_bootstrap_admin` 設為 `FALSE`
-   - **所有舊 Session / Token 立即撤銷**，並簽發全新完整權杖
-   - 寫入審計日誌（`action = password.changed`）
-5. 進入 Dashboard，依需求完成：2FA 全域開關、SLA Plans、Help Topics、通知管道、RBAC 角色設定。
-
-### 改密前的功能封鎖範圍
-在 `must_change_password = TRUE` 期間，除「改密」與「登出」外，**所有業務功能與 API 一律被攔截**：
-
-| 嘗試行為 | 結果 |
-| --- | --- |
-| 直接輸入 Dashboard URL | 導回 `/change-password` |
-| 呼叫 `GET /api/v1/tickets` | `422 password_change_required` |
-| 呼叫 `POST /api/v1/tickets` | `422 password_change_required` |
-| 重複登入取得新權杖 | 仍為受限權杖 |
-| 手動修改前端 Cookie / localStorage | 後端仍拒絕 |
-
-### 佈署後安全檢查清單 (Go-Live Checklist)
-- [ ] 已變更 `admin@ticket.local` 密碼（`must_change_password` 已為 `FALSE`）
-- [ ] 已停用 Bootstrap Admin 或改為正式管理帳號
-- [ ] 已啟用 **2FA 全域開關**（`super_admin` / `it_manager` 強制綁定）
-- [ ] 已更換 `.env` 中所有預設機密（`JWT_SECRET`、`POSTGRES_PASSWORD`、SMTP 密碼）
-- [ ] 已設定 SMTP / Telegram Bot / Teams Webhook 並完成測試發送
-- [ ] 已建立正式 RBAC 角色與團隊，並移除多餘的 `super_admin`
-- [ ] 已確認全站 TLS 1.2+ 與 HSTS 啟用
-- [ ] 已設定資料庫備份排程與還原演練
-- [ ] 已確認審計日誌可查詢且保存期 ≥ 365 天
-- [ ] 已驗證「超過 3 天未結案」篩選筆數與 SQL 基準查詢一致
-
----
-
-## 🔌 API 快速範例（SOC 自動開單）
-
-```bash
-curl -X POST https://ticket.example.com/api/v1/tickets \
-  -H "Authorization: Bearer $TICKET_API_TOKEN" \
+curl -X POST http://localhost:8080/api/v1/tickets \
+  -H "Authorization: Bearer $TICKETDESK_TOKEN" \
   -H "Content-Type: application/json" \
-  -H "Idempotency-Key: soc-alert-20260218-0001" \
+  -H "Idempotency-Key: SOC-2026-0001" \
   -d '{
-    "subject": "[SOC] 偵測到端點 EDR-0421 疑似勒索軟體行為",
+    "subject": "[SOC] EDR-0421 疑似勒索軟體行為",
     "description": "EDR 於 09:12 偵測到大量檔案加密行為，已隔離主機。",
-    "help_topic": "security-incident",
+    "helpTopic": "security-incident",
     "priority": 5,
     "requester": { "email": "soc@example.com", "name": "SOC Bot" },
-    "tags": ["ransomware", "edr", "p1"],
-    "custom_fields": { "affected_host": "EDR-0421", "detection_source": "CrowdStrike" },
-    "external_id": "SOC-2026-0001"
+    "tags": ["ransomware", "edr"]
   }'
 ```
 
-**回應 `201 Created`**
-```json
-{
-  "id": "tkt_01HZX8K3",
-  "number": "TCK-2026-000123",
-  "status": "new",
-  "priority": 5,
-  "sla": {
-    "first_response_due_at": "2026-02-18T02:12:00Z",
-    "resolution_due_at": "2026-02-18T03:12:00Z",
-    "sla_status": "on_track"
-  },
-  "tags": ["ransomware", "edr", "p1"],
-  "created_at": "2026-02-18T01:12:00Z"
-}
+回應 `201 Created`，內容包含工單編號（如 `TCK-2026-000123`）與 SLA 期限。以相同的 `Idempotency-Key` 重送會回 `200` 與同一張工單。
+
+## 開發
+
+需要 Node.js 24。
+
+```bash
+npm install
+npm test                    # 單元與整合測試（PGlite，不需要資料庫）
+npm run typecheck
+npm run validate            # 完整品質檢查：型別、migration 一致性、測試、建置、文件連結、compose 設定
+
+# 用真實 PostgreSQL 跑測試
+docker run -d --rm --name td-testpg -e POSTGRES_PASSWORD=test -p 127.0.0.1:55432:5432 postgres:16-alpine
+TEST_DATABASE_URL=postgres://postgres:test@127.0.0.1:55432/postgres npm test
+
+# 本機開發（需要 PostgreSQL）
+export DATABASE_URL=postgres://... APP_SECRET=$(openssl rand -base64 48)
+npm run dev:server          # API on :8080
+npm run dev:web             # 前端 on :5173（代理 /api 到 :8080）
 ```
 
-完整端點、Schema 與錯誤碼請見 [`src/api_spec.json`](src/api_spec.json)（OpenAPI 3.1）。
+修改程式前請先讀 [AGENTS.md](AGENTS.md)：裡面有程式碼地圖、不可破壞的規則（授權、內部備忘、glossary、migration 等）、
+常見任務的做法、完整驗證流程與已知陷阱。
 
----
+### 目錄
 
-## 📚 文件索引
+```
+├── src/server/            後端（Hono）
+│   ├── routes/            API 路由：auth、tickets、reports、catalog、admin
+│   ├── services/          工單、通知、SLA 工作、速率限制、稽核
+│   ├── auth/              密碼、session、TOTP
+│   ├── db/                Drizzle schema、連線、種子資料
+│   ├── i18n/locales/      glossary 字典
+│   ├── rbac.ts            角色權限與查詢層授權條件
+│   └── cli.ts             維運指令（重設密碼）
+├── src/web/               前端（React）
+├── drizzle/               資料庫 migration（自動產生）
+├── tests/                 Vitest 測試
+├── scripts/               validate.sh（品質檢查）、smoke.sh（部署後 API 檢查）、ui-e2e.sh（瀏覽器測試）
+├── docs/                  PRD、部署指南、QA 測試計畫、OpenAPI
+├── specs/                 客戶需求、實作決策、需求變更單
+├── deploy/cloudflare/     Cloudflare 方案（實驗性，未實作）
+├── AGENTS.md              接手指南：程式碼地圖、規則、常見任務、已知陷阱
+├── CLAUDE.md              讓 Claude Code 自動載入 AGENTS.md
+└── crewai_ticket_build.py AI 輔助迭代工具
+```
 
-| 文件 | 說明 |
+## AI 輔助迭代（CrewAI）
+
+`crewai_ticket_build.py` 讓 PM／架構師／工程師／QA 四個 AI agent 依需求變更修改專案：
+
+1. 在 [specs/change_request.md](specs/change_request.md) 寫下變更內容
+2. 確認 git 工作目錄乾淨，執行 `~/crewai-env/bin/python crewai_ticket_build.py`（需要 `.env` 中的 `OPENROUTER_API_KEY`）
+3. Agent 會先讀取 [AGENTS.md](AGENTS.md) 作為工作規則；只能讀寫允許的路徑（讀不到 `.env`），完成後自動產生 migration 並執行 `scripts/validate.sh`
+4. 驗證失敗會把錯誤交回工程師 agent 修正（最多 2 次）；通過才 commit，否則變更留在工作目錄供檢視
+
+## 文件
+
+| 文件 | 內容 |
 | --- | --- |
-| 📄 [`docs/PRD_SPEC.md`](docs/PRD_SPEC.md) | **產品需求規格書 (PRD-TD-001)**：13 章完整需求、功能/非功能需求、資料模型、API 摘要、驗收條件、需求追溯矩陣 (RTM) |
-| 🚢 [`docs/DEPLOYMENT_GUIDE.md`](docs/DEPLOYMENT_GUIDE.md) | **雙軌佈署手冊**：Docker 與 Cloudflare Workers 的 step-by-step 操作、環境變數、migration、預設帳號登入與安全設定 |
-| 🧪 [`docs/QA_TEST_PLAN.md`](docs/QA_TEST_PLAN.md) | **品質與資安測試計畫**：RBAC 權限邊界、2FA、預設密碼變更邏輯、IDOR 越權、API 速率限制、回歸測試矩陣 |
-| 📝 [`CHANGELOG.md`](CHANGELOG.md) | **版本歷程**：遵循 Keep a Changelog 與 Semantic Versioning |
-| 🗄️ [`src/schema.sql`](src/schema.sql) | **資料庫 DDL**：完整資料表結構 + Bootstrap Admin 種子資料（bcrypt 雜湊、`must_change_password=TRUE`） |
-| 🔌 [`src/api_spec.json`](src/api_spec.json) | **OpenAPI 3.1 規格**：SOC 自動開單與報表查詢 API |
-| 🐳 [`docker-compose.yml`](docker-compose.yml) | **方案 A 佈署配置**：App + PostgreSQL 16 + Redis 7 |
-| ☁️ [`wrangler.toml`](wrangler.toml) | **方案 B 佈署配置**：Workers / D1 / Queues / KV |
+| [docs/DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md) | 部署、環境變數、反向代理、通知、備份、維運 |
+| [docs/openapi.json](docs/openapi.json) | 外部 API 規格（OpenAPI 3.1） |
+| [docs/PRD_SPEC.md](docs/PRD_SPEC.md) | 產品需求規格（需求基線） |
+| [docs/QA_TEST_PLAN.md](docs/QA_TEST_PLAN.md) | 品質與資安測試計畫 |
+| [specs/DECISIONS.md](specs/DECISIONS.md) | 與原始規格不同的實作決策（含待客戶確認事項） |
+| [CHANGELOG.md](CHANGELOG.md) | 版本紀錄 |
+| [AGENTS.md](AGENTS.md) | 接手指南（給 AI Agent 與開發者） |
 
----
+## 安全注意事項
 
-## 🔒 安全注意事項
+- 預設管理員只用於首次設定；改密後請另建具名的管理員帳號。
+- `.env` 含所有密鑰，已列入 `.gitignore`，不要提交。`APP_SECRET` 部署後不可更換（用於加密 2FA 金鑰）。
+- 正式環境務必使用 HTTPS（`APP_URL=https://...`），系統會自動啟用 Secure Cookie 與 HSTS。
+- 瀏覽器端的寫入請求需帶 `X-Requested-With` 標頭（防 CSRF），並設有嚴格的 Content-Security-Policy。
+- API Token 只在建立時顯示一次，資料庫只存雜湊；不再使用時請撤銷。
+- 背景工作在 app 程序內執行，v0.1 請只執行一個 app 副本。
 
-1. **預設帳密必須更換**：`admin@ticket.local` 僅供初次佈署驗證；`must_change_password` 旗標會強制改密，
-   但 **仍請於上線前確認該帳號已改密或停用**，並檢查 Dashboard 是否仍顯示高風險橫幅。
-2. **機密不進版控**：`.env`、`.wrangler/`、`*.log`、`node_modules/` 已列入 `.gitignore`；
-   CI 應加入明文密碼掃描（如 gitleaks / trufflehog）。
-3. **最小權限原則**：`super_admin` 僅保留給必要人員；外部廠商 (`vendor`) 一律僅授予被指派工單的可見權限。
-4. **防 IDOR**：物件層級授權必須在 **查詢層** 施加條件；越權存取一律回傳 `404`（避免存在性洩漏）。
-5. **內部備忘隔離**：`internal_note` 永不對 `end_user` / `vendor` 顯示，API 回應須以 `visibility` 過濾。
-6. **2FA 建議全域啟用**：至少對 `super_admin` 與 `it_manager` 強制 TOTP / FIDO2。
-7. **API 安全**：使用 Scope 受限的 API Token、設定到期日、啟用速率限制（預設 60 req/min）、
-   以 `Idempotency-Key` 防重複開單。
-8. **傳輸與儲存**：全站 TLS 1.2+ 與 HSTS；密碼 bcrypt (cost ≥ 10)；API Token 僅存雜湊；附件需病毒掃描與型別白名單。
-9. **審計不可竄改**：審計日誌不可由一般管理介面刪除，保存期預設 365 天。
-10. **備份與還原**：上線前完成一次資料庫備份與還原演練（RPO ≤ 15 分鐘、RTO ≤ 1 小時）。
-11. **通知內容外洩風險**：通知範本不得包含內部備忘或敏感欄位；外部收件者僅能看到對外資訊。
-12. **弱點回報**：若發現安全問題，請勿開公開 Issue，請依 `SECURITY.md` 管道私下回報。
+## 規劃
 
----
-
-## 🗺️ 產品藍圖 (Roadmap)
-
-| 版本 | 內容 | 狀態 |
-| --- | --- | --- |
-| **v1.0.0** | 需求基線、雙軌佈署、核心工單與 SLA、RBAC、多管道通知、多語系、Light/Dark | ✅ 發佈 |
-| v1.1.0 | Slack 通知、工單合併與子工單、排程報表擴充 | 🔜 規劃中 |
-| v1.2.0 | CSAT 滿意度調查、品質評分報表、知識庫關聯建議 | 🔜 規劃中 |
-| v2.0.0 | 多租戶隔離、SLA 規則引擎、AI 輔助分派 | 💡 研究中 |
-
----
-
-## 🤝 貢獻指南
-
-1. Fork 本專案並建立功能分支：`git checkout -b feature/your-feature`
-2. 遵循既有程式風格與 i18n 規範（**禁止硬編碼使用者可見字串**）。
-3. Schema 變更請一併提供 migration 腳本，並確保 Docker 與 D1 雙軌皆可執行。
-4. 提交前請執行測試與 lint，並確認未包含任何機密資訊。
-5. 建立 Pull Request，於描述中連結對應需求編號（如 `FR-2.9`）與驗收條件（如 `AC-API-01`）。
-
----
-
-## 📄 授權條款
-
-本專案採用 **MIT License** 釋出，詳見 [`LICENSE`](LICENSE)。
-
----
-
-<div align="center">
-
-**TicketDesk v1.0.0** · 讓每一個服務請求都被看見、被追蹤、被準時解決。
-
-[⬆ 回到頂部](#-ticketdesk) · [產品需求規格書](docs/PRD_SPEC.md) · [版本歷程](CHANGELOG.md)
-
-</div>
+| 版本 | 內容 |
+| --- | --- |
+| v0.1.0 | ✅ Docker 版 MVP（本版） |
+| v1.1 | AD/LDAP、SAML、OIDC、SCIM、FIDO2；附件；SLA 營業時間 |
+| 待定 | Cloudflare Workers 方案（見 [deploy/cloudflare/README.md](deploy/cloudflare/README.md)）、背景工作獨立服務化、Slack 通知 |

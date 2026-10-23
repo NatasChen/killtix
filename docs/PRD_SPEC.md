@@ -8,9 +8,14 @@
 | 建立日期 | 2026-02-18 |
 | 文件擁有者 | 產品需求專案經理 (PM) |
 | 審閱者 | 系統架構師 (SAr)、資深全端工程師 (PG)、品質測試與資安工程師 (QA) |
-| 關聯文件 | `README.md`、`CHANGELOG.md`、`docs/DEPLOYMENT_GUIDE.md`、`docs/QA_TEST_PLAN.md`、`src/schema.sql`、`src/api_spec.json` |
+| 關聯文件 | `README.md`、`CHANGELOG.md`、`docs/DEPLOYMENT_GUIDE.md`、`docs/QA_TEST_PLAN.md`、`src/server/db/schema.ts`、`drizzle/`（migrations）、`docs/openapi.json` |
 
 ---
+
+> **實作狀態（2026-10-23，v0.1.0）**：本文件是需求基線。Docker 版 MVP 已實作並通過自動化測試；
+> AD/LDAP/SAML/OIDC/SCIM、FIDO2、附件、SLA 營業時間與 Cloudflare 方案尚未實作。
+> 與本文件不同的決策（預設管理員密碼、403 回應碼、3 天邊界）見 [`specs/DECISIONS.md`](../specs/DECISIONS.md)。
+
 
 ## 1. 文件目的與範圍
 
@@ -344,7 +349,7 @@ new ──▶ open ──▶ pending_user ──▶ open
 SELECT t.*, EXTRACT(EPOCH FROM (now() - t.created_at)) / 86400 AS aging_days
 FROM tickets t
 WHERE t.status NOT IN ('resolved','closed')
-  AND t.created_at <= now() - INTERVAL '3 days'
+  AND t.created_at < now() - INTERVAL '72 hours'   -- 嚴格小於：剛好 72 小時不計入
   AND t.tenant_id = :tenant_id
 ORDER BY t.created_at ASC;
 ```
@@ -532,7 +537,7 @@ curl -X POST https://ticket.example.com/api/v1/tickets \
 | 403 | `forbidden` | 權限不足（Scope 不足） |
 | 404 | `not_found` | 資源不存在或無權存取（防 IDOR） |
 | 409 | `conflict` | 狀態機非法轉移 / 重複資源 |
-| 422 | `password_change_required` | **`must_change_password=true`，僅允許改密端點** |
+| 403 | `password_change_required` | **`must_change_password=true`，僅允許改密端點** |
 | 429 | `rate_limited` | 超過速率限制（附 `Retry-After`） |
 | 500 | `internal_error` | 系統錯誤（附 `trace_id`） |
 
@@ -555,13 +560,13 @@ curl -X POST https://ticket.example.com/api/v1/tickets \
 **AC-SEC-01.2 首次登入成功後強制導向改密頁**
 - **Given** 使用者以 `admin@ticket.local` / `Admin@InitTemp2026!` 登入
 - **When** 認證成功
-- **Then** 系統 **不得** 直接進入 Dashboard，必須導向 `/change-password`（或回傳 `422 password_change_required` 並附 `change_password_url`）
+- **Then** 系統 **不得** 直接進入 Dashboard，必須導向 `/change-password`（API 回傳 `403`，`code=password_change_required`）
 - **And** 僅簽發「受限權杖 (restricted token)」，其 Scope 僅含 `password:change` 與 `auth:logout`
 
 **AC-SEC-01.3 改密前功能全面封鎖**
 - **Given** 使用者持有受限權杖
 - **When** 呼叫任一業務 API（如 `GET /api/v1/tickets`、`POST /api/v1/tickets`、`GET /api/v1/users`）
-- **Then** 一律回傳 `422 password_change_required`（或 `403`），且 **不得** 回傳任何業務資料
+- **Then** 一律回傳 `403`（`code=password_change_required`），且 **不得** 回傳任何業務資料
 - **And** 前端所有路由（除改密/登出）皆被路由守衛攔截
 
 **AC-SEC-01.4 改密流程與密碼政策**
@@ -583,7 +588,7 @@ curl -X POST https://ticket.example.com/api/v1/tickets \
 - **When** 使用者嘗試以下繞過方式
 - **Then** 全部必須失敗：
   1. 直接以 URL 存取 Dashboard 路由 → 導回改密頁。
-  2. 使用 API Token 呼叫業務端點 → `422`（旗標檢查須在授權中介層之後、業務邏輯之前）。
+  2. 使用 API Token 呼叫業務端點 → `403`（旗標檢查須在授權中介層之後、業務邏輯之前）。
   3. 重複登入取得新權杖 → 仍為受限權杖。
   4. 呼叫「重設密碼」流程寄送回自己信箱 → 仍須完成改密，且不得清除旗標以外的狀態。
   5. 直接修改前端 localStorage / Cookie → 後端仍拒絕。
@@ -690,7 +695,7 @@ curl -X POST https://ticket.example.com/api/v1/tickets \
 | --- | --- | --- |
 | M1 需求基線 | `docs/PRD_SPEC.md`、`CHANGELOG.md` | ✅ 完成 |
 | M2 架構與佈署手冊 | `docs/DEPLOYMENT_GUIDE.md` | 🚧 進行中 |
-| M3 資料模型與 API | `src/schema.sql`、`src/api_spec.json` | 🚧 進行中 |
+| M3 資料模型與 API | `src/server/db/schema.ts`、`drizzle/`（migrations）、`docs/openapi.json` | 🚧 進行中 |
 | M4 核心功能實作 | 認證、工單、SLA、報表、通知 | ⏳ 待啟動 |
 | M5 測試與資安審查 | `docs/QA_TEST_PLAN.md`、測試報告 | ⏳ 待啟動 |
 | M6 雙軌佈署演練與發佈 | v1.0.0 Release Tag | ⏳ 待啟動 |

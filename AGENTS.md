@@ -1,0 +1,229 @@
+# AGENTS.md — TicketDesk 接手指南
+
+給接手的 AI Agent 與開發者。讀完本文件就應該能安全地修改專案，不需要從頭摸索。
+使用者面向的介紹在 [README.md](README.md)；本文件只寫「怎麼在這個專案裡工作」。
+
+> **維護規則**：任何改變架構、慣例、指令或「不可破壞的規則」的變更，都要在同一個變更中更新本文件。
+> 本文件過時比沒有更糟。
+
+---
+
+## 1. 現況（每次發版時更新）
+
+| 項目 | 內容 |
+| --- | --- |
+| 目前版本 | **0.1.0**（2026-10-23），見 [CHANGELOG.md](CHANGELOG.md) |
+| 支援部署 | Docker Compose（app + PostgreSQL 16 + Redis 7）。Cloudflare 為實驗性、**未實作** |
+| 測試狀態 | 43 個 Vitest 測試、`scripts/validate.sh`、`scripts/smoke.sh`（24 項）、`scripts/ui-e2e.sh` 全部通過 |
+| 未實作 | AD/LDAP、SAML、OIDC、SCIM、FIDO2、附件、SLA 營業時間、Cloudflare、多副本背景工作 |
+| 待客戶確認 | 見 [specs/DECISIONS.md](specs/DECISIONS.md) 中標示 ⏳ 的項目（預設管理員密碼、SSO 時程、Cloudflare 去留） |
+| 下一步建議 | v1.1：SSO（`users.identity_provider` 已預留）→ 附件 → SLA 營業時間 |
+
+### 開始工作前的閱讀順序
+
+1. 本文件
+2. [specs/DECISIONS.md](specs/DECISIONS.md)：哪些地方刻意不照原始規格做，不要「修正」回去
+3. [CHANGELOG.md](CHANGELOG.md) 的 `[Unreleased]`：別人做到一半的東西
+4. 要改的模組（第 3 節的程式碼地圖）與它的測試
+
+需求來源：[specs/customer_spec.md](specs/customer_spec.md)（客戶原文）→ [docs/PRD_SPEC.md](docs/PRD_SPEC.md)（細化後的需求基線，部分內容尚未實作，以檔案開頭的實作狀態說明為準）。
+
+---
+
+## 2. 技術棧（實際安裝版本）
+
+| 用途 | 套件 | 版本 | 備註 |
+| --- | --- | --- | --- |
+| Runtime | Node.js | 24（本機 nvm 24.22.1，映像 `node:24-alpine`） | ESM（`"type": "module"`） |
+| 語言 | TypeScript | 7.0.2 | 原生編譯器版本；伺服器端 `module: NodeNext`，相對匯入必須寫 `.js` 副檔名 |
+| HTTP | hono / @hono/node-server | 4.13.13 / 2.1.5 | 刻意選擇可跑在 Cloudflare Workers 的框架 |
+| 驗證 | zod | 4.6.7 | **v4 API**：`z.email()`、`z.url()`，不是 `z.string().email()` |
+| ORM | drizzle-orm / drizzle-kit | 0.45.4 / 0.31.11 | |
+| DB 驅動 | postgres（postgres-js） | 3.4.9 | 正式環境 |
+| 測試 DB | @electric-sql/pglite | 0.5.11 | 程序內 PostgreSQL（WASM） |
+| Redis | ioredis | 6.0.0 | 只用在速率限制；`import { Redis } from 'ioredis'` |
+| 密碼 | bcryptjs | 3.0.3 | 純 JS，內建型別 |
+| TOTP | otpauth | 9.5.2 | |
+| Email | nodemailer | 10.2.1 | |
+| 前端 | react / react-router-dom / vite | 19.3.1 / 7.18.4 / 8.3.5 | 無 UI 套件；樣式在 `src/web/styles.css`（CSS 變數做主題） |
+| 測試 | vitest | 5.0.5 | |
+
+升級主要版本前先跑完第 6 節的全部驗證。
+
+---
+
+## 3. 程式碼地圖
+
+```
+src/server/
+  index.ts            進入點：載入設定 → 連線並 migrate → seed → 啟動 HTTP → 背景工作（setInterval）
+  app.ts              createApp(deps)：安全標頭、錯誤處理（RFC 7807）、/healthz、掛載 /api/v1 路由
+  config.ts           所有環境變數的唯一入口（loadConfig）。新增環境變數要同時更新 .env.example、docker-compose.yml、docs/DEPLOYMENT_GUIDE.md
+  context.ts          Deps（db/config/glossary/rateLimiter/secretBox/clock）、AuthContext、AppEnv 型別
+  errors.ts           ApiError(status, code)；code 對應 glossary 的 error.<code>
+  rbac.ts             ROLE_DEFINITIONS（角色→權限）、can()、isStaff()、ticketScope()（查詢層授權）
+  cli.ts              維運指令：reset-password <email>
+  auth/crypto.ts      sha256、隨機 token、bcrypt、密碼政策、隨機密碼、AES-GCM secretBox
+  auth/session.ts     session cookie、API token 驗證（authenticate）、csrfGuard、guard()、nextStage()
+  auth/totp.ts        TOTP 與復原碼
+  db/schema.ts        Drizzle schema：唯一的資料表定義來源
+  db/client.ts        postgres-js 連線 + migrate；DB 型別（兩種驅動共用）
+  db/seed.ts          冪等種子：角色、SLA、服務類別、預設管理員
+  i18n/index.ts       Glossary：內建字典 + DB 覆寫，缺字回退 en-US
+  i18n/locales/*.ts   zh-TW / en-US 字典（伺服器錯誤、通知、整個前端介面）
+  routes/auth.ts      登入、登出、me、改密、2FA
+  routes/tickets.ts   工單 CRUD、對話、關注者（API Token 可用的路由在這裡）
+  routes/reports.ts   儀表板、CSV 匯出
+  routes/catalog.ts   下拉選單資料（服務類別＋欄位、團隊、使用者、範本）
+  routes/admin.ts     使用者、團隊、SLA、表單/欄位、服務類別、標籤、範本、API Token、設定、glossary、通知紀錄、稽核
+  routes/util.ts      parseJson/parseWith（zod）、rateLimit、publicUser
+  services/tickets.ts 工單核心：建立（冪等）、篩選條件、詳情、狀態機、SLA 暫停、自訂欄位驗證、對話、關注者
+  services/notify.ts  outbox：notifyTicketEvent（決定誰收到什麼）、enqueue、dispatchPending（重試/退避）、各管道發送
+  services/jobs.ts    scanSla（逾時/即將逾時）、agingDigest（每日 3 天積壓報告）
+  services/settings.ts system_settings 讀寫（目前只有 2FA 全域開關與 digest 執行日）
+  services/audit.ts   稽核日誌
+  services/rateLimit.ts 記憶體 / Redis 固定視窗計數
+src/web/
+  main.tsx            路由；依 session stage 切換登入/改密/2FA 頁面
+  api.ts              fetch 包裝：自動帶 X-Requested-With、錯誤轉 ApiError、401/stage 錯誤觸發重新整理 auth
+  auth.tsx / i18n.tsx / theme.ts   全域狀態
+  pages/…             各頁面；pages/admin/Crud.tsx 是簡單資源的通用 CRUD 元件
+  public/theme-init.js 首次繪製前套用主題（CSP 不允許 inline script，所以是外部檔）
+drizzle/              自動產生的 migration，不要手改
+tests/                Vitest：helpers.ts（測試環境工廠）、auth / tickets / notify / i18n 測試；e2e/ui.mjs（瀏覽器）
+scripts/              validate.sh、smoke.sh、ui-e2e.sh、check-links.mjs
+specs/                客戶需求、決策紀錄、CrewAI 需求變更單
+crewai_ticket_build.py CrewAI 迭代工具（會讀取本文件作為規則）
+```
+
+### 請求處理順序
+
+`secureHeaders` → 注入 deps → `authenticate`（cookie 或 `Bearer td_…`，決定 `c.var.auth` 與語系）→ `csrfGuard` → 路由上的 `guard({ stages, permission, tokenScope })` → handler → service。
+
+- `guard()` 預設只允許 `stage = 'full'`；未完成改密/2FA 的 session 會得到 403 與對應的 `code`。
+- API Token 只能使用**有設定 `tokenScope` 的路由**，其他路由一律 `403 insufficient_scope`。
+
+---
+
+## 4. 不可破壞的規則
+
+違反任何一條都視為安全或資料正確性問題，必須有測試保護。
+
+1. **授權在 SQL 查詢層套用**：讀取工單一律透過 `loadVisibleTicket()` 或 `buildTicketConditions()`，兩者都使用 `ticketScope()`。不可以先查全部再在程式中過濾。
+2. **看不到的工單回 404**，不是 403（不洩漏存在性）。
+3. **內部備忘與 `visibility='internal'` 的自訂欄位**永遠不回傳給非 staff（`isStaff()` = 有 `ticket:note` 權限），也**永遠不觸發通知**。
+4. **改密前、2FA 前不能使用任何業務 API**：由 `guard()` 的 stage 檢查保證。新增路由一定要加 `guard()`。
+5. **所有使用者可見文字走 glossary**：前端 `t('ui.…')`、後端錯誤 `ApiError` code → `error.<code>`、通知 `notify.*`。新 key 必須**同時**加到 `zh-TW.ts` 與 `en-US.ts`（`tests/i18n.test.ts` 會檢查）。動態 key（`` t(`ui.role.${x}`) ``）要把前綴與可能值登記到該測試的 `DYNAMIC` 表。
+6. **資料表只在 `src/server/db/schema.ts` 定義**，改完執行 `npm run db:generate`，連同 `drizzle/` 一起提交。不要手寫或修改已發布的 migration。
+7. **「超過 N 天未結案」只有一個定義**：`services/tickets.ts` 的 `agingCondition()`（嚴格小於，剛好 72 小時不算）。清單、儀表板、CSV、每日報告都必須用它。
+8. **種子資料冪等**：`seed()` 每次啟動都會跑，不可以覆寫使用者已修改的資料（尤其是管理員密碼）。角色權限是例外，以程式碼為準同步。
+9. **秘密不進 log、不進回應**：密碼、token 只存雜湊；API Token 與一次性密碼只在建立的那個回應中出現一次。唯一例外是首次啟動時印出的預設管理員隨機密碼。
+10. **建立工單的冪等性**：同一個 API Token 的 `Idempotency-Key`/`externalId` 只會產生一張工單（`uq_tickets_external` + 衝突時回傳既有工單）。
+11. **時間一律可注入**：用 `deps.clock()`，不要在服務程式碼中直接 `new Date()` 取「現在」，否則測試無法控制時間。
+
+---
+
+## 5. 常見任務作法
+
+### 新增 API 端點
+1. 在對應的 `routes/*.ts` 加路由，**一定要掛 `guard({...})`**；需要外部系統呼叫才加 `tokenScope`。
+2. 輸入用 `parseJson(c, zodSchema)` 驗證；錯誤用 `ApiError`／`badRequest()`／`notFound()`／`forbidden()`。
+3. 商業邏輯放 `services/`，路由只負責解析與回應；會改資料的動作呼叫 `audit()`。
+4. 新的錯誤 code → 兩個語系各加 `error.<code>`。
+5. 在 `tests/` 加測試（用 `ctx.login()`／`ctx.adminClient()`／`ctx.tokenClient()`）；外部 API 要更新 `docs/openapi.json`。
+
+### 新增或修改資料表欄位
+1. 改 `src/server/db/schema.ts` → `npm run db:generate` → 檢查產生的 SQL。
+2. 已有資料的表新增 `NOT NULL` 欄位要給 default。
+3. `npm run validate` 會檢查 schema 與 migration 是否一致。
+
+### 新增權限或角色
+- 修改 `rbac.ts` 的 `ROLE_DEFINITIONS`（啟動時會同步到 `roles` 表）。
+- 新角色要加 `ui.role.<key>` 字典、`tests/i18n.test.ts` 的 `DYNAMIC['ui.role.']`、`routes/admin.ts` 的 `ROLE_KEYS`、前端 `AdminRoutes.tsx` 的 `ROLES`。
+
+### 新增通知事件或管道
+- 事件：在 `services/notify.ts` 的 `TicketEvent` 加型別，在 `notifyTicketEvent()` 決定收件者，字典加 `notify.<event>.subject/body/teams`。
+- 管道：`Channel` 型別、`channelConfigured()`、`defaultSenders()`、`dispatchPending()` 的分派；設定加到 `config.ts`。
+- 測試用 `dispatchPending(deps, fakeSenders)`，不要打真實外部服務。
+
+### 新增前端頁面
+- 頁面放 `src/web/pages/`，在 `main.tsx`（一般）或 `pages/admin/AdminRoutes.tsx`（管理）註冊，導覽在 `components/Layout.tsx`。
+- 用 `useLoad()` 載入、`useAction()` 送出、`ErrorBanner` 顯示錯誤；樣式用既有 class 與 CSS 變數，深淺色都要能看。
+- 不可以用 inline `<script>`（CSP 禁止）。
+
+### 新增語系
+1. 新增 `src/server/i18n/locales/<locale>.ts`（複製 `en-US.ts`，key 要完全一致）。
+2. 在 `i18n/index.ts` 的 `BUILTIN` 註冊。
+3. 兩個字典加 `ui.locale.<locale>`，並更新 `tests/i18n.test.ts` 的 `DYNAMIC['ui.locale.']`。
+
+### 發布新版本
+1. `CHANGELOG.md`：把 `[Unreleased]` 改為 `[x.y.z] - 日期`，再開一個新的空 `[Unreleased]`。
+2. `package.json` 的 `version`、`docs/openapi.json` 的 `info.version`、README 的「版本資訊」、本文件第 1 節。
+3. 跑完第 6 節全部驗證。
+
+---
+
+## 6. 驗證（完成任何變更前）
+
+| 指令 | 內容 | 需要 |
+| --- | --- | --- |
+| `npm test` | 43 個單元/整合測試（PGlite） | Node |
+| `TEST_DATABASE_URL=postgres://… npm test` | 同上，改用真實 PostgreSQL + 正式驅動 | 一個 Postgres（見下） |
+| `npm run validate` | 型別、schema/migration 一致、測試、建置、OpenAPI JSON、Markdown 連結、compose 設定 | Node（Docker 可選） |
+| `scripts/smoke.sh <url> <預設管理員密碼>` | 部署後 API 端到端 24 項（會改管理員密碼為 `Smoke-Test-Passw0rd!`） | 執行中的系統 |
+| `scripts/ui-e2e.sh <url> <管理員密碼>` | 瀏覽器操作主要流程、截圖到 `tests/e2e/shots/` | Docker |
+
+**測試只用 PGlite 是不夠的**：PGlite 與 postgres-js 的參數序列化不同（見第 7 節第 1 點）。動到 SQL 時務必用真實 PostgreSQL 再跑一次：
+
+```bash
+docker run -d --rm --name td-testpg -e POSTGRES_PASSWORD=test -p 127.0.0.1:55432:5432 postgres:16-alpine
+TEST_DATABASE_URL=postgres://postgres:test@127.0.0.1:55432/postgres npm test
+```
+
+完整部署驗證（用暫存 env 檔，不要動專案的 `.env`）：
+
+```bash
+cat > /tmp/td.env <<EOF
+APP_URL=http://localhost:18080
+APP_PORT=18080
+APP_SECRET=$(openssl rand -base64 48 | tr -d '\n')
+POSTGRES_PASSWORD=$(openssl rand -hex 16)
+REDIS_PASSWORD=$(openssl rand -hex 16)
+EOF
+docker compose --env-file /tmp/td.env -p tdtest up -d --build --wait   # --wait：等到 app 健康檢查通過才返回
+PW=$(docker compose -p tdtest logs app | grep -oP 'password: \K\S+')
+scripts/smoke.sh http://localhost:18080 "$PW"
+scripts/ui-e2e.sh http://localhost:18080 'Smoke-Test-Passw0rd!'
+docker compose --env-file /tmp/td.env -p tdtest down -v
+```
+
+### 測試寫法
+- `createTestContext(env?)` 建立獨立的 DB 與 app；`ctx.clock.advance(ms)` 控制時間；`ctx.createUser(email, role)` 建立已可登入的使用者（密碼 `STRONG_PASSWORD`）。
+- 測試共用一個 context 時（`beforeAll`），資料會累積，斷言不要假設表是空的；需要乾淨狀態就另開 context。
+- 測試環境的登入速率限制已調高為 1000/分；要測速率限制請自己開一個 `createTestContext({ LOGIN_RATE_LIMIT_PER_MIN: '3' })`。
+
+---
+
+## 7. 已知陷阱（都實際踩過）
+
+1. **raw `sql` 模板中不要直接放 `Date`**：postgres-js 會送出 `Date.toString()`（`Fri Oct 23 2026 …`），PostgreSQL 解析失敗；PGlite 卻能接受，所以只用 PGlite 測不出來。寫成 `${date.toISOString()}::timestamptz`。透過欄位比較（`lt(tickets.createdAt, date)`）則沒問題。
+2. **drizzle-kit 的 `--out` 不能用絕對路徑**：會變成 `.//tmp/...` 而失敗，且 exit code 仍是 0。`validate.sh` 因此改用相對路徑，並檢查輸出中的 `No schema changes`。
+3. **shell 腳本中的 `[ … ] && ok` 會吞掉失敗**（`set -e` 不作用在 `&&` 串列）。`smoke.sh` 一律用 `check` 函式。
+4. **非互動 shell 沒有載入 nvm**：先執行 `export NVM_DIR="$HOME/.nvm"; . "$NVM_DIR/nvm.sh"`，否則找不到 `node`。
+5. **Docker 群組**：如果目前的 shell 是在使用者加入 docker 群組前啟動的，`docker` 會 permission denied，用 `sg docker -c "docker …"`。
+6. **專案根目錄的 `.env` 同時給 CrewAI（`OPENROUTER_API_KEY`）與 docker compose 使用**。測試部署請用 `--env-file` 指定其他檔案，不要覆寫它。`.dockerignore` 已排除 `.env`。
+7. **加密欄位長度**：AES-GCM 加密後的 TOTP 金鑰約 90 字元，`varchar(64)` 放不下（曾因此出錯，已改為 255）。新增加密欄位要預留長度。
+8. **瀏覽器 console 的 4xx**：未登入時 `/auth/me` 回 401 是正常的，瀏覽器會記為 console error；`tests/e2e/ui.mjs` 只忽略 4xx 資源錯誤，JS 例外、CSP 違規與 5xx 仍會失敗。
+9. **`.card + .card` 的 margin** 會套用到 grid 內的卡片造成錯位，已用 `.grid > .card + .card { margin-top: 0 }` 修正；改版面時要看截圖確認（`scripts/ui-e2e.sh`）。
+10. **背景工作在程序內執行**：開兩個 app 副本會重複發送通知與重複掃描 SLA。要水平擴充得先把 `index.ts` 的計時器拆成獨立 worker 並加分散式鎖。
+
+---
+
+## 8. 交接規範（每次結束工作前）
+
+- [ ] `npm run validate` 通過；動到 SQL 時，真實 PostgreSQL 的測試也通過
+- [ ] `CHANGELOG.md` 的 `[Unreleased]` 記錄了這次的變更（Added / Changed / Fixed / Removed / Security）
+- [ ] 偏離 `specs/customer_spec.md` 或 PRD 的決定已寫入 `specs/DECISIONS.md`
+- [ ] 架構、指令、規則、陷阱有變化時已更新本文件；使用方式有變化時已更新 README 與 `docs/DEPLOYMENT_GUIDE.md`
+- [ ] 新的環境變數已同步到 `config.ts`、`.env.example`、`docker-compose.yml`、部署指南
+- [ ] 做到一半的工作：在 `[Unreleased]` 標明「進行中」與下一步，不要讓下一位猜
