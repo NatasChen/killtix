@@ -75,6 +75,8 @@ docker compose logs app | grep -A4 "bootstrap administrator"   # 取得預設管
 
 開啟 <http://localhost:8080>，以 `admin@ticket.local` 與 log 中的密碼登入，依畫面指示改密。
 
+- 一次性密碼**只在第一次建立資料庫時**印出。容器重建（`down` / `up`）後 log 裡就沒有了；忘記或錯過時，用維運指令重設：
+  `docker compose exec app node dist/server/cli.js reset-password admin@ticket.local`（會印出新的一次性密碼，登入後須改密）。
 - `scripts/init-env.sh` 只填入空白的密鑰，已有值的不會覆蓋，可以重複執行。`.env` 權限會設為 600。
 - 啟動時若出現 `required variable APP_SECRET is missing a value`，代表 `.env` 的密鑰還是空的，執行上面的 `scripts/init-env.sh` 即可。
 - `APP_SECRET` 與 `POSTGRES_PASSWORD` 在首次啟動後**不要再更改**（前者會讓已啟用的 2FA 失效，後者會讓 app 連不上既有資料庫）。

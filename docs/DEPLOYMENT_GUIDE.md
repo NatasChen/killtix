@@ -77,7 +77,8 @@ docker compose logs app | grep -A4 "bootstrap administrator"
  You must change this password at first login.
 ```
 
-這段訊息只在建立帳號的那次啟動出現。
+這段訊息只在建立帳號的那次啟動出現。之後重啟或重建容器（只要資料庫 volume 還在）都不會再印出；
+錯過的話用第 6 節的 `reset-password` 指令重設即可，不需要刪除資料庫。
 
 ### 2.4 首次登入
 
