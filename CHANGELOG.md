@@ -4,14 +4,6 @@
 
 ## [Unreleased]
 
-### Added
-- `AGENTS.md` 接手指南（程式碼地圖、不可破壞的規則、常見任務作法、驗證流程、已知陷阱、交接規範）與引用它的 `CLAUDE.md`。
-- README「版本資訊」區塊。
-- 瀏覽器端到端測試移入專案：`tests/e2e/ui.mjs`、`scripts/ui-e2e.sh`（Playwright in Docker）。
-
-### Changed
-- CrewAI 產生器改為讀取 `AGENTS.md` 作為所有 agent 的工作規則，並要求 agent 依交接規範更新 CHANGELOG 與決策紀錄。
-
 ## [0.1.0] - 2026-10-23
 
 第一個可以實際部署的版本。先前標示為「v1.0.0 已發布」的內容只有設計文件，沒有程式碼，已改正為本版本。
@@ -28,10 +20,12 @@
 - 外部 API：API Token 權限範圍、`Idempotency-Key`、每 Token 速率限制；OpenAPI 文件 `docs/openapi.json`。
 - 繁中／英文 glossary 字典（可線上覆寫）、淺色／深色主題、手機版面。
 - 維運指令 `node dist/server/cli.js reset-password <email>`。
-- 測試：43 個 Vitest 測試（PGlite 或真實 PostgreSQL）、`scripts/validate.sh` 品質檢查、`scripts/smoke.sh` 部署後檢查。
+- 測試：43 個 Vitest 測試（PGlite 或真實 PostgreSQL）、`scripts/validate.sh` 品質檢查、`scripts/smoke.sh` 部署後檢查、`scripts/ui-e2e.sh` 瀏覽器端到端測試（Playwright in Docker）。
+- `scripts/init-env.sh`：建立 `.env` 並自動產生必填密鑰（只填空白值，不覆蓋既有值）。
+- `AGENTS.md` 接手指南（程式碼地圖、不可破壞的規則、常見任務作法、驗證流程、已知陷阱、交接規範）與引用它的 `CLAUDE.md`；README「版本資訊」區塊。
 
 ### Changed
-- CrewAI 產生器改為以 `specs/change_request.md` 驅動的迭代工具：限制可讀寫路徑、要求乾淨的 git 工作目錄、自動驗證並在失敗時回饋修正，通過才 commit。
+- CrewAI 產生器改為以 `specs/change_request.md` 驅動的迭代工具：限制可讀寫路徑、要求乾淨的 git 工作目錄、以 `AGENTS.md` 作為所有 agent 的工作規則、自動驗證並在失敗時回饋修正，通過才 commit。
 - 「超過 3 天未結案」統一定義為 `created_at < now() - 72 小時`（剛好 72 小時不計入）。
 - 部署指南依實際實作重寫；PRD 與 QA 測試計畫修正與實作矛盾之處。
 

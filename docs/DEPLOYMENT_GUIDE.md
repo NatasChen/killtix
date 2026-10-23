@@ -38,10 +38,10 @@ Cloudflare Workers 方案為實驗性、尚未實作（見 [deploy/cloudflare/RE
 ### 2.2 設定環境變數
 
 ```bash
-cp .env.example .env
-# 產生三組隨機密鑰，填入 .env 的 APP_SECRET / POSTGRES_PASSWORD / REDIS_PASSWORD
-openssl rand -base64 48
+scripts/init-env.sh
 ```
+
+腳本會在 `.env` 不存在時從 `.env.example` 複製，並以 `openssl rand -hex 32` 填入**空白的** `APP_SECRET`、`POSTGRES_PASSWORD`、`REDIS_PASSWORD`；已有值的不會覆蓋，可重複執行；最後把 `.env` 權限設為 600。其他變數請依下表手動調整。
 
 | 變數 | 必填 | 說明 |
 | --- | --- | --- |

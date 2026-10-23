@@ -68,13 +68,16 @@ SOC、SIEM 等外部系統可以透過 API 自動開單。
 ## 快速開始（Docker）
 
 ```bash
-cp .env.example .env
-# 填入 APP_SECRET、POSTGRES_PASSWORD、REDIS_PASSWORD（可用 openssl rand -base64 48 產生）
+scripts/init-env.sh          # 建立 .env 並自動產生 APP_SECRET、POSTGRES_PASSWORD、REDIS_PASSWORD
 docker compose up -d --build --wait
 docker compose logs app | grep -A4 "bootstrap administrator"   # 取得預設管理員的一次性密碼
 ```
 
 開啟 <http://localhost:8080>，以 `admin@ticket.local` 與 log 中的密碼登入，依畫面指示改密。
+
+- `scripts/init-env.sh` 只填入空白的密鑰，已有值的不會覆蓋，可以重複執行。`.env` 權限會設為 600。
+- 啟動時若出現 `required variable APP_SECRET is missing a value`，代表 `.env` 的密鑰還是空的，執行上面的 `scripts/init-env.sh` 即可。
+- `APP_SECRET` 與 `POSTGRES_PASSWORD` 在首次啟動後**不要再更改**（前者會讓已啟用的 2FA 失效，後者會讓 app 連不上既有資料庫）。
 
 - 想使用客戶規格指定的固定初始密碼，在 `.env` 設定 `BOOTSTRAP_ADMIN_PASSWORD=Admin@InitTemp2026!`（首次登入仍會強制改密）。
 - 正式環境設定（TLS、反向代理、備份、通知管道）見 [docs/DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md)。
@@ -135,7 +138,7 @@ npm run dev:web             # 前端 on :5173（代理 /api 到 :8080）
 ├── src/web/               前端（React）
 ├── drizzle/               資料庫 migration（自動產生）
 ├── tests/                 Vitest 測試
-├── scripts/               validate.sh（品質檢查）、smoke.sh（部署後 API 檢查）、ui-e2e.sh（瀏覽器測試）
+├── scripts/               init-env.sh（產生 .env 密鑰）、validate.sh（品質檢查）、smoke.sh（部署後 API 檢查）、ui-e2e.sh（瀏覽器測試）
 ├── docs/                  PRD、部署指南、QA 測試計畫、OpenAPI
 ├── specs/                 客戶需求、實作決策、需求變更單
 ├── deploy/cloudflare/     Cloudflare 方案（實驗性，未實作）

@@ -12,7 +12,7 @@
 
 | 項目 | 內容 |
 | --- | --- |
-| 目前版本 | **0.1.0**（2026-10-23），見 [CHANGELOG.md](CHANGELOG.md) |
+| 目前版本 | **0.1.0**（2026-10-23，git tag `v0.1.0`），見 [CHANGELOG.md](CHANGELOG.md) |
 | 支援部署 | Docker Compose（app + PostgreSQL 16 + Redis 7）。Cloudflare 為實驗性、**未實作** |
 | 測試狀態 | 43 個 Vitest 測試、`scripts/validate.sh`、`scripts/smoke.sh`（24 項）、`scripts/ui-e2e.sh` 全部通過 |
 | 未實作 | AD/LDAP、SAML、OIDC、SCIM、FIDO2、附件、SLA 營業時間、Cloudflare、多副本背景工作 |
@@ -91,7 +91,7 @@ src/web/
   public/theme-init.js 首次繪製前套用主題（CSP 不允許 inline script，所以是外部檔）
 drizzle/              自動產生的 migration，不要手改
 tests/                Vitest：helpers.ts（測試環境工廠）、auth / tickets / notify / i18n 測試；e2e/ui.mjs（瀏覽器）
-scripts/              validate.sh、smoke.sh、ui-e2e.sh、check-links.mjs
+scripts/              init-env.sh（建立 .env、只填空白密鑰）、validate.sh、smoke.sh、ui-e2e.sh、check-links.mjs
 specs/                客戶需求、決策紀錄、CrewAI 需求變更單
 crewai_ticket_build.py CrewAI 迭代工具（會讀取本文件作為規則）
 ```
@@ -160,6 +160,8 @@ crewai_ticket_build.py CrewAI 迭代工具（會讀取本文件作為規則）
 1. `CHANGELOG.md`：把 `[Unreleased]` 改為 `[x.y.z] - 日期`，再開一個新的空 `[Unreleased]`。
 2. `package.json` 的 `version`、`docs/openapi.json` 的 `info.version`、README 的「版本資訊」、本文件第 1 節。
 3. 跑完第 6 節全部驗證。
+4. 版本變更獨立成一個 commit（`chore(release): vX.Y.Z`），再打附註 tag：`git tag -a vX.Y.Z -m "TicketDesk vX.Y.Z"`。
+   tag 一旦建立就不要移動；發現問題就發下一個修補版本。比對版本差異：`git diff vX.Y.Z..HEAD`。
 
 ---
 
