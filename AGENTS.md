@@ -93,8 +93,9 @@ drizzle/              自動產生的 migration，不要手改
 tests/                Vitest：helpers.ts（測試環境工廠）、auth / tickets / notify / i18n 測試；e2e/ui.mjs（瀏覽器）
 scripts/              init-env.sh（建立 .env、只填空白密鑰）、validate.sh、smoke.sh、ui-e2e.sh、check-links.mjs
 specs/                客戶需求、決策紀錄、CrewAI 需求變更單
-crewai_ticket_build.py CrewAI 迭代工具（會讀取本文件作為規則）。維護者本機工具，已列入 .gitignore，不在 repo 內；
-                      clone 下來的環境沒有它是正常的，不要重新建立或提交它
+crewai_ticket_build.py CrewAI 迭代工具（PM → SAr → PG → UI 設計師 → QA，全部以本文件為規則）。維護者本機工具，
+                      與其設計紀錄 crewai_fix.md、執行紀錄 .crewai/ 都列入 .gitignore，不在 repo 內；
+                      clone 下來的環境沒有它們是正常的，不要重新建立或提交
 ```
 
 ### 請求處理順序
@@ -150,7 +151,15 @@ crewai_ticket_build.py CrewAI 迭代工具（會讀取本文件作為規則）�
 ### 新增前端頁面
 - 頁面放 `src/web/pages/`，在 `main.tsx`（一般）或 `pages/admin/AdminRoutes.tsx`（管理）註冊，導覽在 `components/Layout.tsx`。
 - 用 `useLoad()` 載入、`useAction()` 送出、`ErrorBanner` 顯示錯誤；樣式用既有 class 與 CSS 變數，深淺色都要能看。
-- 不可以用 inline `<script>`（CSP 禁止）。
+- 視覺規範：[DESIGN.md](DESIGN.md)（色彩、字級、間距、圓角、陰影、元件樣式）。由維護者提供，agent 只讀不改；
+  它與本文件衝突時以本文件為準。DESIGN.md 是以行銷網站分析出的風格參考，套用到 TicketDesk 時：
+  - 只取風格，不取品牌：不可在介面、字典或程式碼中出現原品牌的名稱、標誌、字型名稱或文案。
+  - 必須同時有深色主題：DESIGN.md 只定義淺色，深色值由設計者在 `styles.css` 的 CSS 變數中推導，對比達 WCAG AA。
+  - 字型用系統字型堆疊（Inter 只放在堆疊中，有安裝才會用到）；CSP 禁止外部字型，也不要新增字型檔。
+  - 工單系統需要語意色（錯誤、成功、警告、SLA 逾時、優先度）：定義為獨立的 CSS 變數，不受「裝飾色不能用在結構」的限制。
+  - 用到的是應用程式元件（`ex-app-shell-row`、`ex-data-table-cell`、`ex-auth-form-card`、`ex-modal-card`、`ex-toast`、
+    `ex-empty-state-card`、`text-input`、`button-*`、`badge-pill`）；hero、pricing 等行銷區塊不適用。
+- 不可以用 inline `<script>`（CSP 禁止）；CSP 只允許同源資源，不可引入外部字型、CDN 或 UI 套件。
 
 ### 新增語系
 1. 新增 `src/server/i18n/locales/<locale>.ts`（複製 `en-US.ts`，key 要完全一致）。

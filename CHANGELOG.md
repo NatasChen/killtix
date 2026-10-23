@@ -4,9 +4,13 @@
 
 ## [Unreleased]
 
+### Added
+- `DESIGN.md`：UI 視覺規範（風格參考，只定義淺色）；AGENTS.md 加入套用到 TicketDesk 的規則（不取品牌元素、必須有深色主題、系統字型、語意色、適用的元件）。
+
 ### Changed
 - `crewai_ticket_build.py` 改為維護者本機工具，不納入版本控制（已從 git 歷史移除並列入 `.gitignore`）；README 與 AGENTS.md 相應說明。
 - README 與部署指南補充：容器重建後 log 不會再出現一次性密碼，改用 `reset-password` 指令重設。
+- CrewAI 產生器（本機工具）新增 UI 設計師角色（依根目錄 `DESIGN.md`），並改為：每個角色只能寫自己負責的路徑、PM 輸出 IMPACT 決定是否執行架構師／設計師、工程師與 QA 以 typecheck／測試 guardrail 自我修正、先做基準驗證、在 `crewai/<執行編號>` 分支上 commit、執行紀錄存到 `.crewai/runs/`。README 與 AGENTS.md 相應更新。
 
 ## [0.1.0] - 2026-10-23
 

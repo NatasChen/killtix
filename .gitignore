@@ -123,5 +123,7 @@ temp/
 # UI E2E screenshots
 tests/e2e/shots/
 
-# Local-only tool (kept out of the repo; see README)
+# Local-only tool (kept out of the repo; see README), its design log and run logs
 crewai_ticket_build.py
+crewai_fix.md
+.crewai/

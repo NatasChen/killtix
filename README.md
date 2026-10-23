@@ -150,14 +150,15 @@ npm run dev:web             # 前端 on :5173（代理 /api 到 :8080）
 
 ## AI 輔助迭代（CrewAI，本機工具）
 
-`crewai_ticket_build.py` 讓 PM／架構師／工程師／QA 四個 AI agent 依需求變更修改專案。
+`crewai_ticket_build.py` 讓 PM／架構師／工程師／UI 設計師／QA 五個 AI agent 依需求變更修改專案（架構師只在部署設定有變時執行；UI 設計師只在畫面有變且根目錄有 `DESIGN.md` 時執行）。
 它是**維護者本機的選用工具，不在 repo 內**（已列入 `.gitignore`）；沒有這個檔案不影響建置、測試與部署。
 需要使用時向專案維護者取得，放在專案根目錄，並準備好 CrewAI 的 Python 環境（`~/crewai-env`）。
 
 1. 在 [specs/change_request.md](specs/change_request.md) 寫下變更內容
-2. 確認 git 工作目錄乾淨，執行 `~/crewai-env/bin/python crewai_ticket_build.py`（需要 `.env` 中的 `OPENROUTER_API_KEY`）
-3. Agent 會先讀取 [AGENTS.md](AGENTS.md) 作為工作規則；只能讀寫允許的路徑（讀不到 `.env`），完成後自動產生 migration 並執行 `scripts/validate.sh`
-4. 驗證失敗會把錯誤交回工程師 agent 修正（最多 2 次）；通過才 commit，否則變更留在工作目錄供檢視
+2. 確認 git 工作目錄乾淨，執行 `~/crewai-env/bin/python crewai_ticket_build.py`（需要 `.env` 中的 `OPENROUTER_API_KEY`；`--check` 只檢查設定、不呼叫 LLM）
+3. 先驗證目前狀態，再切到新分支 `crewai/<執行編號>`；agent 以 [AGENTS.md](AGENTS.md) 為工作規則，每個角色只能寫自己負責的路徑（讀不到 `.env`）
+4. 完成後自動產生 migration 並執行 `scripts/validate.sh`；失敗會交回工程師 agent 修正（最多 2 次）。通過才在分支上 commit，確認後再合併回 `main`
+5. 各角色的輸出與驗證紀錄存在 `.crewai/runs/<執行編號>/`
 
 ## 文件
 
