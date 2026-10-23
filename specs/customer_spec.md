@@ -1,6 +1,6 @@
 # 客戶需求規格（Base Specification）
 
-> 這是客戶提供的原始需求，CrewAI 產生器與人工開發都以此為基準。
+> 這是客戶提供的原始需求，CrewAI 產生器（本機工具）與人工開發都以此為基準。
 > 與本規格不同的實作決策記錄在 [DECISIONS.md](DECISIONS.md)。
 
 1. 身分驗證與安全：

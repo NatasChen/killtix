@@ -145,13 +145,14 @@ npm run dev:web             # 前端 on :5173（代理 /api 到 :8080）
 ├── specs/                 客戶需求、實作決策、需求變更單
 ├── deploy/cloudflare/     Cloudflare 方案（實驗性，未實作）
 ├── AGENTS.md              接手指南：程式碼地圖、規則、常見任務、已知陷阱
-├── CLAUDE.md              讓 Claude Code 自動載入 AGENTS.md
-└── crewai_ticket_build.py AI 輔助迭代工具
+└── CLAUDE.md              讓 Claude Code 自動載入 AGENTS.md
 ```
 
-## AI 輔助迭代（CrewAI）
+## AI 輔助迭代（CrewAI，本機工具）
 
-`crewai_ticket_build.py` 讓 PM／架構師／工程師／QA 四個 AI agent 依需求變更修改專案：
+`crewai_ticket_build.py` 讓 PM／架構師／工程師／QA 四個 AI agent 依需求變更修改專案。
+它是**維護者本機的選用工具，不在 repo 內**（已列入 `.gitignore`）；沒有這個檔案不影響建置、測試與部署。
+需要使用時向專案維護者取得，放在專案根目錄，並準備好 CrewAI 的 Python 環境（`~/crewai-env`）。
 
 1. 在 [specs/change_request.md](specs/change_request.md) 寫下變更內容
 2. 確認 git 工作目錄乾淨，執行 `~/crewai-env/bin/python crewai_ticket_build.py`（需要 `.env` 中的 `OPENROUTER_API_KEY`）

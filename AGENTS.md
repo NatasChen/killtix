@@ -93,7 +93,8 @@ drizzle/              自動產生的 migration，不要手改
 tests/                Vitest：helpers.ts（測試環境工廠）、auth / tickets / notify / i18n 測試；e2e/ui.mjs（瀏覽器）
 scripts/              init-env.sh（建立 .env、只填空白密鑰）、validate.sh、smoke.sh、ui-e2e.sh、check-links.mjs
 specs/                客戶需求、決策紀錄、CrewAI 需求變更單
-crewai_ticket_build.py CrewAI 迭代工具（會讀取本文件作為規則）
+crewai_ticket_build.py CrewAI 迭代工具（會讀取本文件作為規則）。維護者本機工具，已列入 .gitignore，不在 repo 內；
+                      clone 下來的環境沒有它是正常的，不要重新建立或提交它
 ```
 
 ### 請求處理順序
@@ -213,7 +214,7 @@ docker compose --env-file /tmp/td.env -p tdtest down -v
 3. **shell 腳本中的 `[ … ] && ok` 會吞掉失敗**（`set -e` 不作用在 `&&` 串列）。`smoke.sh` 一律用 `check` 函式。
 4. **非互動 shell 沒有載入 nvm**：先執行 `export NVM_DIR="$HOME/.nvm"; . "$NVM_DIR/nvm.sh"`，否則找不到 `node`。
 5. **Docker 群組**：如果目前的 shell 是在使用者加入 docker 群組前啟動的，`docker` 會 permission denied，用 `sg docker -c "docker …"`。
-6. **專案根目錄的 `.env` 同時給 CrewAI（`OPENROUTER_API_KEY`）與 docker compose 使用**。測試部署請用 `--env-file` 指定其他檔案，不要覆寫它。`.dockerignore` 已排除 `.env`。
+6. **專案根目錄的 `.env` 同時給 CrewAI 本機工具（`OPENROUTER_API_KEY`）與 docker compose 使用**。測試部署請用 `--env-file` 指定其他檔案，不要覆寫它。`.dockerignore` 已排除 `.env`。
 7. **加密欄位長度**：AES-GCM 加密後的 TOTP 金鑰約 90 字元，`varchar(64)` 放不下（曾因此出錯，已改為 255）。新增加密欄位要預留長度。
 8. **瀏覽器 console 的 4xx**：未登入時 `/auth/me` 回 401 是正常的，瀏覽器會記為 console error；`tests/e2e/ui.mjs` 只忽略 4xx 資源錯誤，JS 例外、CSP 違規與 5xx 仍會失敗。
 9. **`.card + .card` 的 margin** 會套用到 grid 內的卡片造成錯位，已用 `.grid > .card + .card { margin-top: 0 }` 修正；改版面時要看截圖確認（`scripts/ui-e2e.sh`）。

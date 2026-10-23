@@ -122,3 +122,6 @@ temp/
 
 # UI E2E screenshots
 tests/e2e/shots/
+
+# Local-only tool (kept out of the repo; see README)
+crewai_ticket_build.py

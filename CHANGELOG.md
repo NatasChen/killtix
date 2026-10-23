@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Changed
+- `crewai_ticket_build.py` 改為維護者本機工具，不納入版本控制（已從 git 歷史移除並列入 `.gitignore`）；README 與 AGENTS.md 相應說明。
 - README 與部署指南補充：容器重建後 log 不會再出現一次性密碼，改用 `reset-password` 指令重設。
 
 ## [0.1.0] - 2026-10-23
