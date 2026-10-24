@@ -1,14 +1,34 @@
+/* TicketDesk styles.
+   Design tokens follow DESIGN.md (style only: no brand names, logos or external assets).
+   Existing variable names are kept — tests/styles.test.ts depends on them — and new tokens are additive. */
+
 :root,
 :root[data-theme='light'] {
-  --bg: #f6f7f9;
+  /* surfaces: warm paper canvas, white cards, hairline borders (DESIGN.md Surface) */
+  --canvas-soft: #f6f5f4;
+  --bg: var(--canvas-soft);
   --surface: #ffffff;
-  --surface-2: #f1f3f6;
-  --border: #dde1e7;
-  --text: #1a1f29;
-  --text-muted: #5b6474;
-  --accent: #2557d6;
+  --surface-2: #f1efec;
+  --hairline: #e6e6e6;
+  --border: var(--hairline);
+  /* interactive controls need a 3:1 boundary against the surface (WCAG 1.4.11) */
+  --border-strong: #8f8b86;
+
+  /* text: ink hierarchy (DESIGN.md Text) */
+  --ink-1: #191919;
+  --ink-2: #31302e;
+  --ink-3: #615d59;
+  --text: var(--ink-1);
+  --text-muted: var(--ink-3);
+
+  /* one structural accent: primary blue for buttons, links and focus (DESIGN.md Brand & Accent) */
+  --accent: #0075de;
   --accent-text: #ffffff;
-  --accent-soft: #e6edfc;
+  --accent-soft: #e6f0fb;
+  /* --accent is only 4.2:1 on the warm canvas, so links and accent text use the pressed blue */
+  --accent-strong: #005bab;
+
+  /* semantic colours stay independent of the accent (PRD FR-5.3) */
   --danger: #c0352b;
   --danger-soft: #fbe9e7;
   --warning: #a35c00;
@@ -17,20 +37,59 @@
   --success-soft: #e3f4ea;
   --internal: #fff8e1;
   --internal-border: #e7c86b;
-  --shadow: 0 1px 2px rgb(16 24 40 / 6%), 0 1px 3px rgb(16 24 40 / 8%);
+
+  /* elevation: hairline plus barely-there layered shadow (DESIGN.md Elevation) */
+  --shadow-soft: 0 0.175px 1.041px rgb(0 0 0 / 1%), 0 0.8px 2.925px rgb(0 0 0 / 2%),
+    0 2.025px 7.847px rgb(0 0 0 / 2.7%), 0 4px 18px rgb(0 0 0 / 4%);
+  --shadow-elevated: 0 0.8px 2.925px rgb(0 0 0 / 2%), 0 2.025px 7.847px rgb(0 0 0 / 2.7%),
+    0 4px 18px rgb(0 0 0 / 4%), 0 23px 52px rgb(0 0 0 / 5%);
+  --shadow: var(--shadow-soft);
+
+  /* radius scale (DESIGN.md Shapes) */
+  --radius-xs: 4px;
+  --radius-sm: 5px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+
+  /* spacing scale (DESIGN.md Layout) */
+  --space-xxs: 4px;
+  --space-xs: 8px;
+  --space-sm: 12px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 28px;
+  --space-xxl: 32px;
+
+  --overlay: rgb(0 0 0 / 45%);
+  --qr-canvas: #ffffff;
+
   color-scheme: light;
 }
 
+/* Dark theme is derived from the light one (DESIGN.md only defines light): same hues, lowered
+   luminance, warm near-black canvas and warm off-white ink instead of pure black/white. */
 :root[data-theme='dark'] {
-  --bg: #0f1218;
-  --surface: #171b23;
-  --surface-2: #1f2430;
-  --border: #2d3443;
-  --text: #e6e9ef;
-  --text-muted: #9aa3b5;
+  --canvas-soft: #1b1a18;
+  --bg: var(--canvas-soft);
+  --surface: #232220;
+  --surface-2: #2c2b28;
+  --hairline: #3a3835;
+  --border: var(--hairline);
+  --border-strong: #75726c;
+
+  --ink-1: #f2f0ed;
+  --ink-2: #d6d2cc;
+  --ink-3: #a8a39c;
+  --text: var(--ink-1);
+  --text-muted: var(--ink-3);
+
   --accent: #6f9bff;
   --accent-text: #0b1020;
   --accent-soft: #1c2847;
+  --accent-strong: #9dc0ff;
+
   --danger: #ff7b6e;
   --danger-soft: #3a1d1b;
   --warning: #f0b45a;
@@ -39,8 +98,46 @@
   --success-soft: #16301f;
   --internal: #2c2614;
   --internal-border: #7a6526;
-  --shadow: none;
+
+  --overlay: rgb(0 0 0 / 60%);
+  --qr-canvas: #ffffff;
+
+  --shadow-soft: 0 1px 2px rgb(0 0 0 / 40%), 0 1px 3px rgb(0 0 0 / 32%);
+  --shadow-elevated: 0 2px 6px rgb(0 0 0 / 45%), 0 12px 32px rgb(0 0 0 / 40%);
+  --shadow: var(--shadow-soft);
+
+  --radius-xs: 4px;
+  --radius-sm: 5px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+
+  --space-xxs: 4px;
+  --space-xs: 8px;
+  --space-sm: 12px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 28px;
+  --space-xxl: 32px;
+
   color-scheme: dark;
+}
+
+/* typography scale (DESIGN.md Typography). Sizes are theme independent, so they live outside the
+   theme blocks; components reference the role tokens instead of hardcoded pixel values. */
+:root {
+  --font-display-1: 64px;
+  --font-display-2: 54px;
+  --font-heading-1: 40px;
+  --font-heading-2: 26px;
+  --font-heading-3: 22px;
+  --font-title: 20px;
+  --font-body-md: 16px;
+  --font-body-sm: 15px;
+  --font-button: 16px;
+  --font-caption: 14px;
+  --font-eyebrow: 12px;
 }
 
 * { box-sizing: border-box; }
@@ -50,131 +147,168 @@ body {
   background: var(--bg);
   color: var(--text);
   /* Latin from Noto Sans Display, CJK falls through to Noto Sans TC (both bundled, see main.tsx) */
-  font: 14px/1.5 'Noto Sans Display Variable', 'Noto Sans TC Variable', system-ui, -apple-system, 'Segoe UI',
+  font-family: 'Noto Sans Display Variable', 'Noto Sans TC Variable', system-ui, -apple-system, 'Segoe UI',
     'PingFang TC', 'Microsoft JhengHei', sans-serif;
+  font-size: var(--font-caption);
+  line-height: 1.5;
 }
-a { color: var(--accent); text-decoration: none; }
+a { color: var(--accent-strong); text-decoration: none; }
 a:hover { text-decoration: underline; }
-h1 { font-size: 20px; margin: 0 0 16px; }
-h2 { font-size: 16px; margin: 0 0 12px; }
-h3 { font-size: 14px; margin: 0 0 8px; }
-code, .mono { font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace; font-size: 13px; }
+/* headings use the DESIGN.md type roles; the app shell stays at the dense caption/body sizes rather
+   than the marketing display sizes (see specs/DECISIONS.md D8) */
+h1 { font-size: var(--font-title); font-weight: 700; margin: 0 0 var(--space-md); }
+h2 { font-size: var(--font-body-md); font-weight: 700; margin: 0 0 var(--space-sm); }
+h3 { font-size: var(--font-caption); font-weight: 700; margin: 0 0 var(--space-xs); }
+code, .mono { font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace; font-size: var(--font-caption); }
 
 /* layout */
 .shell { display: grid; grid-template-columns: 220px 1fr; min-height: 100%; }
-.sidebar { background: var(--surface); border-right: 1px solid var(--border); padding: 16px 12px; display: flex; flex-direction: column; gap: 4px; }
-.brand { font-weight: 700; font-size: 16px; padding: 4px 8px 16px; display: flex; align-items: center; gap: 8px; }
-.nav-link { display: block; padding: 7px 10px; border-radius: 6px; color: var(--text); }
-.nav-link:hover { background: var(--surface-2); text-decoration: none; }
-.nav-link.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
-.nav-section { margin: 14px 10px 4px; font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; }
-.sidebar-footer { margin-top: auto; display: flex; flex-direction: column; gap: 8px; padding: 8px; border-top: 1px solid var(--border); }
-.main { padding: 24px 28px; min-width: 0; }
-.topline { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+.sidebar { background: var(--surface); border-right: 1px solid var(--border); padding: var(--space-md) var(--space-sm); display: flex; flex-direction: column; gap: var(--space-xxs); }
+.brand { font-weight: 700; font-size: var(--font-body-md); padding: var(--space-xxs) var(--space-xs) var(--space-md); display: flex; align-items: center; gap: var(--space-xs); }
+/* ex-app-shell-row: sidebar nav row; the active row is marked by the primary accent indicator.
+   .nav-link and .ex-app-shell-row share one declaration so the DESIGN.md hook and the existing
+   class name stay in sync (the sidebar keeps its position and its item list). */
+.nav-link,
+.ex-app-shell-row { display: block; padding: var(--space-xs) var(--space-sm); border-radius: var(--radius-md); color: var(--text); }
+.nav-link:hover,
+.ex-app-shell-row:hover { background: var(--surface-2); text-decoration: none; }
+.nav-link.active,
+.ex-app-shell-row.active { background: var(--accent-soft); color: var(--accent-strong); font-weight: 600; box-shadow: inset 2px 0 0 var(--accent); }
+.nav-section { margin: var(--space-sm) var(--space-xs) var(--space-xxs); font-size: var(--font-eyebrow); font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: .125px; }
+.sidebar-footer { margin-top: auto; display: flex; flex-direction: column; gap: var(--space-xs); padding: var(--space-xs); border-top: 1px solid var(--border); }
+.main { padding: var(--space-lg) var(--space-xl); min-width: 0; }
+.topline { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); margin-bottom: var(--space-md); flex-wrap: wrap; }
 .topline h1 { margin: 0; }
 
 /* surfaces */
-.card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; box-shadow: var(--shadow); }
-.card + .card { margin-top: 16px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: var(--space-lg); box-shadow: var(--shadow); }
+.card + .card { margin-top: var(--space-md); }
 .grid > .card + .card { margin-top: 0; }
-.grid { display: grid; gap: 16px; }
+.grid { display: grid; gap: var(--space-md); }
 .grid-kpi { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
 .grid-2 { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
-.detail { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
-.kpi { display: flex; flex-direction: column; gap: 4px; }
-.kpi .label { color: var(--text-muted); font-size: 12px; }
+.detail { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: var(--space-md); align-items: start; }
+.kpi { display: flex; flex-direction: column; gap: var(--space-xxs); }
+.kpi .label { color: var(--text-muted); font-size: var(--font-eyebrow); font-weight: 600; letter-spacing: .125px; }
 .kpi .value { font-size: 26px; font-weight: 650; font-variant-numeric: tabular-nums; }
 .kpi.alert .value { color: var(--danger); }
 
 /* forms */
-label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--text-muted); }
-label.inline { flex-direction: row; align-items: center; gap: 8px; color: var(--text); }
+label { display: flex; flex-direction: column; gap: var(--space-xxs); font-size: var(--font-caption); color: var(--text-muted); }
+label.inline { flex-direction: row; align-items: center; gap: var(--space-xs); color: var(--text); }
+/* text-input: tight 4px corners (DESIGN.md Inputs & Forms). The border uses --border-strong rather than
+   the hairline: DESIGN.md's rgb(221,221,221) field border is only 1.4:1 on white, below the 3:1 that
+   WCAG 1.4.11 requires for control boundaries. */
 input, select, textarea {
-  font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border);
-  border-radius: 6px; padding: 7px 10px; min-width: 0;
+  font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border-strong);
+  border-radius: var(--radius-xs); padding: 6px var(--space-sm); min-width: 0;
 }
 input[type='checkbox'] { width: 16px; height: 16px; padding: 0; }
 textarea { min-height: 110px; resize: vertical; }
 input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible, a:focus-visible {
   outline: 2px solid var(--accent); outline-offset: 1px;
 }
-.form { display: flex; flex-direction: column; gap: 12px; }
-.form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
-.filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin-bottom: 12px; }
+input:focus-visible, select:focus-visible, textarea:focus-visible { box-shadow: var(--shadow-soft); }
+.form { display: flex; flex-direction: column; gap: var(--space-sm); }
+.form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--space-sm); }
+.filters { display: flex; flex-wrap: wrap; gap: var(--space-xs); align-items: flex-end; margin-bottom: var(--space-sm); }
 .filters label { min-width: 130px; }
 
+/* buttons: app-shell utility buttons use the tighter 8px radius (DESIGN.md button-utility);
+   the pill marketing CTA does not apply inside the app shell. The border uses --border-strong
+   instead of the hairline so the control boundary reaches the 3:1 of WCAG 1.4.11. */
 button, .button {
-  font: inherit; cursor: pointer; border-radius: 6px; padding: 7px 14px; border: 1px solid var(--border);
-  background: var(--surface); color: var(--text); display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+  font: inherit; cursor: pointer; border-radius: var(--radius-md); padding: var(--space-xs) var(--space-md);
+  border: 1px solid var(--border-strong); background: var(--surface); color: var(--text);
+  display: inline-flex; align-items: center; gap: var(--space-xxs); white-space: nowrap;
 }
 button:hover:not(:disabled), .button:hover { background: var(--surface-2); text-decoration: none; }
 button.primary, .button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 600; }
-button.primary:hover:not(:disabled) { filter: brightness(1.08); background: var(--accent); }
-button.danger { color: var(--danger); border-color: var(--danger); }
-button.link { border: none; background: none; padding: 0; color: var(--accent); }
+button.primary:hover:not(:disabled), .button.primary:hover { background: var(--accent-strong); border-color: var(--accent-strong); }
+button.danger { color: var(--danger); border-color: var(--danger); background: var(--surface); }
+button.danger:hover:not(:disabled) { background: var(--danger-soft); }
+button.link { border: none; background: none; padding: 0; color: var(--accent-strong); }
 button:disabled { opacity: .55; cursor: not-allowed; }
-.actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.actions { display: flex; gap: var(--space-xs); flex-wrap: wrap; align-items: center; }
 
-/* tables */
+/* tables: ex-data-table-cell chrome — eyebrow header, body rows split by hairlines */
 .table-wrap { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; }
-th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
-th { font-size: 12px; color: var(--text-muted); font-weight: 600; white-space: nowrap; }
+th, td { text-align: left; padding: var(--space-xs) var(--space-sm); border-bottom: 1px solid var(--border); vertical-align: top; }
+/* ex-data-table-cell: header uses the eyebrow role (12px / 600 / +0.125px) on the secondary surface */
+th { font-size: 12px; color: var(--text-muted); font-weight: 600; white-space: nowrap; letter-spacing: .125px; background: var(--surface-2); }
 tr:hover td { background: var(--surface-2); }
 td.num { font-variant-numeric: tabular-nums; }
 
-/* badges */
-.badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--surface-2); color: var(--text-muted); white-space: nowrap; }
-.badge.new, .badge.open { background: var(--accent-soft); color: var(--accent); }
+/* badges: badge-pill — 12px/600, pill radius, 4px/8px padding (DESIGN.md badge-pill) */
+.badge { display: inline-block; padding: var(--space-xxs) var(--space-xs); border-radius: var(--radius-full); font-size: 12px; font-weight: 600; background: var(--surface-2); color: var(--text-muted); white-space: nowrap; }
+.badge.new, .badge.open { background: var(--accent-soft); color: var(--accent-strong); }
 .badge.pending_user, .badge.at_risk { background: var(--warning-soft); color: var(--warning); }
 .badge.resolved, .badge.closed, .badge.met { background: var(--success-soft); color: var(--success); }
 .badge.breached, .badge.p5 { background: var(--danger-soft); color: var(--danger); }
 .badge.p4 { background: var(--warning-soft); color: var(--warning); }
 /* L3 (medium) gets its own accent tint so it is distinguishable from the neutral L1/L2 grey.
-   DESIGN.md badge-pill: 12px/600 pill (inherited from .badge), accent token only, no hardcoded colour.
-   Contrast --accent on --accent-soft: 5.24:1 light / 5.41:1 dark (WCAG 2.1 AA, >= 4.5:1). */
-.badge.p3 { background: var(--accent-soft); color: var(--accent); }
-.tag { display: inline-block; padding: 0 7px; margin: 0 4px 4px 0; border: 1px solid var(--border); border-radius: 4px; font-size: 12px; }
+   Text uses --accent-strong: --accent itself is only 4.2:1 on the warm canvas.
+   Contrast --accent-strong on --accent-soft: 5.91:1 light / 7.91:1 dark (WCAG 2.1 AA, >= 4.5:1). */
+.badge.p3 { background: var(--accent-soft); color: var(--accent-strong); }
+.tag { display: inline-block; padding: 0 var(--space-xs); margin: 0 var(--space-xxs) var(--space-xxs) 0; border: 1px solid var(--border); border-radius: var(--radius-xs); font-size: 12px; }
 
 /* messages */
-.banner { padding: 10px 14px; border-radius: 8px; margin-bottom: 14px; border: 1px solid; }
+.banner { padding: var(--space-sm) var(--space-md); border-radius: var(--radius-md); margin-bottom: var(--space-sm); border: 1px solid; }
 .banner.error { background: var(--danger-soft); color: var(--danger); border-color: var(--danger); }
 .banner.warning { background: var(--warning-soft); color: var(--warning); border-color: var(--warning); }
 .banner.success { background: var(--success-soft); color: var(--success); border-color: var(--success); }
 .muted { color: var(--text-muted); }
 .small { font-size: 12px; }
 
+/* empty state (DESIGN.md ex-empty-state-card): caption typography, generous padding */
+.empty-state,
+.ex-empty-state-card { padding: var(--space-lg) var(--space-md); text-align: center; color: var(--text-muted); font-size: 14px; }
+.ex-empty-state-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); }
+
+/* modal + toast surfaces (DESIGN.md ex-modal-card / ex-toast); shared shells for later screens */
+.modal-backdrop { position: fixed; inset: 0; background: var(--overlay); display: flex; align-items: center; justify-content: center; padding: var(--space-md); }
+.modal-card,
+.ex-modal-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: var(--space-lg); box-shadow: var(--shadow-elevated); width: 100%; max-width: 520px; }
+.toast,
+.ex-toast { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: var(--space-sm) var(--space-md); box-shadow: var(--shadow-elevated); }
+
 /* thread */
-.thread { display: flex; flex-direction: column; gap: 12px; }
-.msg { border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; background: var(--surface); }
+.thread { display: flex; flex-direction: column; gap: var(--space-sm); }
+.msg { border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--space-sm) var(--space-md); background: var(--surface); }
 .msg.internal_note { background: var(--internal); border-color: var(--internal-border); }
-.msg.system_event { border-style: dashed; background: transparent; padding: 6px 12px; font-size: 12px; color: var(--text-muted); }
-.msg-head { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
+.msg.system_event { border-style: dashed; background: transparent; padding: 6px var(--space-sm); font-size: 12px; color: var(--text-muted); }
+.msg-head { display: flex; justify-content: space-between; gap: var(--space-xs); font-size: 12px; color: var(--text-muted); margin-bottom: var(--space-xxs); }
 .msg-body { white-space: pre-wrap; overflow-wrap: anywhere; }
-dl.props { display: grid; grid-template-columns: 110px 1fr; gap: 8px 10px; margin: 0; }
+dl.props { display: grid; grid-template-columns: 110px 1fr; gap: var(--space-xs) 10px; margin: 0; }
 dl.props dt { color: var(--text-muted); font-size: 12px; padding-top: 2px; }
 dl.props dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 dl.props select, dl.props input { width: 100%; max-width: 100%; }
 .detail aside { min-width: 0; }
 
-/* auth pages */
-.auth-wrap { min-height: 100%; display: flex; align-items: center; justify-content: center; padding: 24px; }
+/* auth pages: ex-auth-form-card — feature-card chrome with text-input primitives inside.
+   .auth-card and .ex-auth-form-card share one declaration so the login / change-password / 2FA
+   screens get the DESIGN.md card whether or not the extra hook class is present in the markup. */
+.auth-wrap { min-height: 100%; display: flex; align-items: center; justify-content: center; padding: var(--space-lg); background: var(--bg); }
+.auth-card,
+.ex-auth-form-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: var(--space-lg); box-shadow: var(--shadow-soft); }
 .auth-card { width: 100%; max-width: 400px; }
-.secret-box { padding: 12px; background: var(--surface-2); border-radius: 8px; word-break: break-all; }
+.secret-box { padding: var(--space-sm); background: var(--surface-2); border-radius: var(--radius-md); word-break: break-all; }
 .codes { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
-.qr { width: 180px; height: 180px; background: #fff; padding: 8px; border-radius: 8px; }
+/* the QR code needs a white quiet zone to stay scannable in both themes */
+.qr { width: 180px; height: 180px; background: var(--qr-canvas); padding: var(--space-xs); border-radius: var(--radius-md); }
 
-.pager { display: flex; gap: 8px; align-items: center; justify-content: flex-end; margin-top: 12px; }
-.bar { height: 8px; background: var(--accent); border-radius: 4px; min-width: 2px; }
-.bar-row { display: grid; grid-template-columns: 110px 1fr 40px; gap: 8px; align-items: center; margin-bottom: 6px; font-size: 13px; }
+.pager { display: flex; gap: var(--space-xs); align-items: center; justify-content: flex-end; margin-top: var(--space-sm); }
+.bar { height: 8px; background: var(--accent); border-radius: var(--radius-xs); min-width: 2px; }
+.bar-row { display: grid; grid-template-columns: 110px 1fr 40px; gap: var(--space-xs); align-items: center; margin-bottom: 6px; font-size: 13px; }
 
 @media (max-width: 860px) {
   .shell { grid-template-columns: 1fr; }
-  .sidebar { flex-direction: row; flex-wrap: wrap; align-items: center; border-right: none; border-bottom: 1px solid var(--border); padding: 12px 16px; }
-  .brand { width: 100%; padding: 0 0 8px; }
+  .sidebar { flex-direction: row; flex-wrap: wrap; align-items: center; border-right: none; border-bottom: 1px solid var(--border); padding: var(--space-sm) var(--space-md); }
+  .brand { width: 100%; padding: 0 0 var(--space-xs); }
   .nav-section { display: none; }
-  .sidebar-footer { width: 100%; flex-direction: row; flex-wrap: wrap; align-items: flex-end; margin-top: 8px; padding: 8px 0 0; }
+  .sidebar-footer { width: 100%; flex-direction: row; flex-wrap: wrap; align-items: flex-end; margin-top: var(--space-xs); padding: var(--space-xs) 0 0; }
   .sidebar-footer label { flex: 1 1 120px; }
-  .main { padding: 16px; }
+  .main { padding: var(--space-md); }
   .detail { grid-template-columns: 1fr; }
 }

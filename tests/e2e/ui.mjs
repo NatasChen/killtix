@@ -116,6 +116,50 @@ await p2.screenshot({ path: `${SHOTS}/08-mobile.png`, fullPage: true });
 const overflow = await p2.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
 if (overflow > 1) errors.push(`horizontal overflow on mobile: ${overflow}px`);
 
+// 375px is the narrowest supported phone width (PRD FR-5.4): no horizontal scrollbar on any screen.
+step('375px login page in light and dark');
+const noOverflow = async (target, label) => {
+  const px = await target.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  if (px > 1) errors.push(`horizontal overflow at 375px on ${label}: ${px}px`);
+};
+const p3 = await (await browser.newContext({ viewport: { width: 375, height: 812 }, locale: 'zh-TW' })).newPage();
+p3.on('console', onConsole);
+p3.on('pageerror', (e) => errors.push(String(e)));
+await p3.goto(BASE);
+await p3.getByLabel('電子郵件').waitFor();
+await noOverflow(p3, 'login page (light)');
+await p3.screenshot({ path: `${SHOTS}/09-login-375-light.png`, fullPage: true });
+await p3.evaluate(() => { document.documentElement.dataset.theme = 'dark'; });
+await noOverflow(p3, 'login page (dark)');
+await p3.screenshot({ path: `${SHOTS}/10-login-375-dark.png`, fullPage: true });
+
+step('375px signed-in screens');
+// The admin's saved preferences are dark + en-US after the theme step; reset them so labels match.
+{
+  const api = ctx.request;
+  const h = { 'X-Requested-With': 'XMLHttpRequest' };
+  await api.post(`${BASE}/api/v1/auth/login`, { data: ADMIN, headers: h });
+  await api.patch(`${BASE}/api/v1/auth/me`, { data: { locale: 'zh-TW', theme: 'light' }, headers: h });
+  await api.post(`${BASE}/api/v1/auth/logout`, { headers: h });
+}
+await p3.goto(BASE);
+await p3.getByLabel('電子郵件').fill(ADMIN.email);
+await p3.getByLabel('密碼').fill(ADMIN.password);
+await p3.getByRole('button', { name: '登入' }).click();
+await p3.getByRole('heading', { name: '儀表板' }).waitFor();
+await noOverflow(p3, 'dashboard');
+for (const [label, path] of [['ticket list', '/tickets'], ['admin users', '/admin/users']]) {
+  await p3.goto(`${BASE}${path}`);
+  await p3.waitForLoadState('networkidle');
+  await noOverflow(p3, label);
+}
+await p3.screenshot({ path: `${SHOTS}/11-admin-users-375.png`, fullPage: true });
+await p3.goto(`${BASE}/tickets`);
+await p3.getByRole('link', { name: 'UI 測試：印表機無法列印' }).first().click();
+await p3.getByRole('heading', { name: 'UI 測試：印表機無法列印' }).waitFor();
+await noOverflow(p3, 'ticket detail');
+await p3.screenshot({ path: `${SHOTS}/12-ticket-detail-375.png`, fullPage: true });
+
 await browser.close();
 if (errors.length) { console.log('BROWSER ERRORS:\n' + errors.join('\n')); process.exit(1); }
 console.log('UI E2E PASS');

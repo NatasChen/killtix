@@ -103,7 +103,7 @@ export function Loading() {
 
 export function Empty({ children }: { children?: ReactNode }) {
   const { t } = useI18n();
-  return <p className="muted">{children ?? t('ui.common.empty')}</p>;
+  return <p className="muted empty-state">{children ?? t('ui.common.empty')}</p>;
 }
 
 /** Runs an async action with busy + error state. */

@@ -9,7 +9,7 @@ type SessionResponse = { stage: Stage; user: Me };
 function AuthCard({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="auth-wrap">
-      <div className="card auth-card">
+      <div className="card auth-card ex-auth-form-card">
         <div className="brand">
           <img src="/favicon.svg" width={24} height={24} alt="" /> TicketDesk
         </div>

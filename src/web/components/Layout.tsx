@@ -5,7 +5,9 @@ import { useI18n } from '../i18n';
 import { applyTheme, currentThemePref, type ThemePref } from '../theme';
 import { useState } from 'react';
 
-const link = ({ isActive }: { isActive: boolean }) => `nav-link${isActive ? ' active' : ''}`;
+// ex-app-shell-row is the DESIGN.md hook for a sidebar row; .nav-link stays so existing styles and
+// tests keep working. The sidebar keeps its position and its item list.
+const link = ({ isActive }: { isActive: boolean }) => `nav-link ex-app-shell-row${isActive ? ' active' : ''}`;
 
 export function Layout() {
   const { user, can, logout } = useAuth();
