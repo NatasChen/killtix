@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Changed
+- AGENTS.md 新增「增量迭代原則」：每次工作都是在現有程式碼上的增量修改，不重建骨架、延伸既有模組、只改需求涉及的檔案、保留既有功能與測試、先接續 `[Unreleased]` 中進行中的項目。
+- CrewAI 產生器（本機工具）：每個角色的 prompt 加入執行前的專案現況（版本、最近的 commit、CHANGELOG `[Unreleased]`），讓 agent 接續既有進度；驗證失敗的修正回合也會拿到 AGENTS.md、專案現況與 PM 的驗收條件。README 相應更新。
+
 ## [0.2.0] - 2026-10-24
 
 介面視覺基礎：加入 UI 視覺規範 `DESIGN.md`，介面字型改為自架的 Google Noto。API、資料庫與部署設定沒有變更，從 0.1.0 升級只需重新建置映像。

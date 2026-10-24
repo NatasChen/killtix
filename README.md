@@ -156,7 +156,7 @@ npm run dev:web             # 前端 on :5173（代理 /api 到 :8080）
 
 1. 在 [specs/change_request.md](specs/change_request.md) 寫下變更內容
 2. 確認 git 工作目錄乾淨，執行 `~/crewai-env/bin/python crewai_ticket_build.py`（需要 `.env` 中的 `OPENROUTER_API_KEY`；`--check` 只檢查設定、不呼叫 LLM）
-3. 先驗證目前狀態，再切到新分支 `crewai/<執行編號>`；agent 以 [AGENTS.md](AGENTS.md) 為工作規則，每個角色只能寫自己負責的路徑（讀不到 `.env`）
+3. 先驗證目前狀態，再切到新分支 `crewai/<執行編號>`；agent 以 [AGENTS.md](AGENTS.md) 為工作規則，並會拿到執行前的專案現況（版本、最近的 commit、CHANGELOG `[Unreleased]`），在既有進度上接續修改；每個角色只能寫自己負責的路徑（讀不到 `.env`）
 4. 完成後自動產生 migration 並執行 `scripts/validate.sh`；失敗會交回工程師 agent 修正（最多 2 次）。通過才在分支上 commit，確認後再合併回 `main`
 5. 各角色的輸出與驗證紀錄存在 `.crewai/runs/<執行編號>/`
 
