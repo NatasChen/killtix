@@ -3,8 +3,8 @@
 | 項目 | 內容 |
 | --- | --- |
 | 文件編號 | QA-TD-001 |
-| 版本 | **v1.0.0** |
-| 文件狀態 | 初版發布 (Baseline for M5 測試與資安審查) |
+| 版本 | **v1.1.0**（v1.0.0 之後的增量修訂，未隨產品發版） |
+| 文件狀態 | 增量修訂：新增 FR-5.3「優先度標籤色彩區分」的測試案例（REG-THEME-004~011）與自動化對照（v0.2.0 之後） |
 | 建立日期 | 2026-02-18 |
 | 文件擁有者 | 品質測試與資安工程師 (QA) |
 | 審閱者 | 系統架構師 (SAr)、資深全端工程師 (PG)、產品需求專案經理 (PM) |
@@ -18,6 +18,11 @@
 > 設定 `TEST_DATABASE_URL` 可改用真實 PostgreSQL），端到端煙霧測試為 `scripts/smoke.sh`。
 > 改密前的業務 API 一律回 `403`（`code=password_change_required`），不是原計畫的 422，見 [`specs/DECISIONS.md`](../specs/DECISIONS.md)。
 > 尚未實作的功能（SSO、FIDO2、附件、`/users` 端點等）相關案例暫不適用。
+>
+> **增量修訂（v0.2.0 之後，未發布）**：新增 §6.7 的 REG-THEME-004~011，涵蓋 PRD FR-5.3「優先度標籤色彩區分」
+> （AC-THEME-02.1~02.7）。其中 REG-THEME-004~010 已由 `tests/styles.test.ts` 自動化（純 CSS 契約測試，
+> 不啟動 DB／app，隨 `npm test` 執行）；REG-THEME-011 為部署後的雙主題目視確認，仍屬半自動（`scripts/ui-e2e.sh`）。
+> 本次為純樣式變更：無 API、資料庫、字典 key、環境變數變更，故 §3~§5 與 §6.2~§6.6、§6.8~§6.9 的案例不受影響。
 
 
 ## 0. 閱讀指引
@@ -108,6 +113,7 @@
 | **效能測試 (PERF)** | 100 RPS 開單、列表查詢 10 萬筆、Dashboard 首屏 | k6、Artillery、Lighthouse | P95 ≤ 300ms（API）、≤ 500ms（列表）、首屏 ≤ 2s |
 | **回歸測試 (REG)** | 全 P0 驗收條件 | Playwright + API 契約測試（Schemathesis / Dredd） | 100% P0 案例通過 |
 | **相容性** | Chrome / Edge / Safari / Firefox 最新兩版；≥375px | Playwright projects、BrowserStack（選用） | 無阻斷性版面/功能缺陷 |
+| **樣式契約測試 (CSS)** | 語意色 badge 的選擇器結構、變數引用、雙主題對比（FR-5.3） | Vitest（Node，直接讀取 `src/web/styles.css`，不啟動 DB／app） | 每個語意色 badge 選擇器至少 1 條斷言；雙主題對比 ≥ 4.5:1 |
 
 ### 1.3 環境矩陣
 
@@ -177,7 +183,8 @@
 | SOC API Rate Limiting | §5.1 | 18 | 12 | 5 | 1 | 16 ✅ / 2 ⚠️ |
 | SOC API 資料過濾（>3 天） | §5.2 | 22 | 16 | 5 | 1 | 20 ✅ / 2 ⚠️ |
 | 系統回歸 | §6 | 48 | 30 | 15 | 3 | 40 ✅ / 6 ⚠️ / 2 ❌ |
-| **合計** | — | **148** | **104** | **37** | **7** | **126 ✅ / 17 ⚠️ / 5 ❌** |
+| 優先度 badge 色彩區分（FR-5.3，v0.2.0 之後） | §6.7 | 8 | 6 | 2 | 0 | 7 ✅ / 1 ⚠️ |
+| **合計** | — | **156** | **110** | **39** | **7** | **133 ✅ / 18 ⚠️ / 5 ❌** |
 
 > 自動化比例約 **85%**；手動案例集中於 UI 視覺、瀏覽器相容性與需人工判讀的資安探索。
 
@@ -608,6 +615,32 @@
 | REG-THEME-002 | 無 FOUC | AC-THEME-01 | 重新載入頁面（Dark） | 無白閃；`data-theme` 於首屏前套用 | ⚠️ | P1 |
 | REG-THEME-003 | WCAG AA 對比度 | AC-THEME-01 | axe-core 掃描 | 無 contrast 違規（≥ 4.5:1） | ✅ | P1 |
 
+#### 6.7.1 優先度 badge 色彩區分（FR-5.3 / AC-THEME-02，v0.2.0 之後新增）
+
+> **對應需求**：PRD §FR-5.3、§9.2 AC-THEME-02.1~02.7。**變更範圍**：僅 `src/web/styles.css` 的 `.badge.p3` 規則；
+> 不涉及 API、資料庫、字典 key、環境變數。**自動化位置**：`tests/styles.test.ts`（純 CSS 契約測試，隨 `npm test` 執行，
+> 不啟動 DB／app）。**回歸意義**：若有人把 `.p3` 併回 `.badge.new, .badge.open` 選擇器串、寫死色碼、
+> 改動 L4／L5 或狀態／SLA badge 顏色、或把 accent 變數調到對比不足，測試會失敗。
+
+| ID | 標題 | 對應 AC | 步驟摘要 | 預期結果 | 自動化 | 優先級 |
+| --- | --- | --- | --- | --- | --- | --- |
+| REG-THEME-004 | `.badge.p3` 為獨立規則 | AC-THEME-02.1 | 解析 `src/web/styles.css`，尋找選擇器 **完全等於** `.badge.p3` 的規則 | 存在且僅 1 條（不得只出現在 `.badge.new, .badge.open` 選擇器串內）；宣告為 `background: var(--accent-soft)`、`color: var(--accent)` | ✅ | P0 |
+| REG-THEME-005 | `.badge.p3` 只用 CSS 變數（無寫死色碼） | AC-THEME-02.1 | 對該規則 body 檢查 `#rgb`／`rgb()`／`hsl()`／具名顏色；並逐一驗證每個宣告值符合 `var(--…)` | 無任何色碼命中；所有宣告皆為 `var(--…)` | ✅ | P0 |
+| REG-THEME-006 | L1／L2 維持 `.badge` 預設中性灰 | AC-THEME-02.2 | 檢查 `.badge.p1`、`.badge.p2` 是否被定義；檢查 `.badge` 基底 | `.badge.p1`／`.badge.p2` **無** 專屬規則；`.badge` 仍為 `background: var(--surface-2)`、`color: var(--text-muted)` | ✅ | P0 |
+| REG-THEME-007 | L4／L5 未被改動 | AC-THEME-02.4 | 比對 `.badge.p4`、`.badge.p5` 的 `background`／`color` | `.badge.p4` = warning 系列；`.badge.p5` = danger 系列（逐字不變） | ✅ | P0 |
+| REG-THEME-008 | 狀態／SLA badge 未被改動 | AC-THEME-02.4 | 比對 `.badge.new`、`.open`、`.pending_user`、`.at_risk`、`.resolved`、`.closed`、`.met`、`.breached` | 全部維持原語意色（accent／warning／success／danger），逐字不變 | ✅ | P0 |
+| REG-THEME-009 | 雙主題對比 ≥ 4.5:1（WCAG 2.1 AA） | AC-THEME-02.5 | 以 WCAG 相對亮度公式計算 `.badge.p3` 文字／背景對比（淺色 `:root, :root[data-theme='light']`、深色 `:root[data-theme='dark']`） | 淺色 ≈ 5.24:1、深色 ≈ 5.41:1，兩者皆 ≥ 4.5:1（12px/600 屬一般文字，不適用 3:1 大字門檻） | ✅ | P0 |
+| REG-THEME-010 | L3 與 L1／L2 在雙主題下可分辨 | AC-THEME-02.3 | 解析兩主題變數，比較 `.badge.p3` 背景與 `.badge` 背景 | 兩主題下 `--accent-soft` ≠ `--surface-2`；L1~L5 四個不同底色（`.badge`／`.p3`／`.p4`／`.p5`）皆互異 | ✅ | P1 |
+| REG-THEME-011 | 雙主題目視確認（部署後） | AC-THEME-02.7 | `scripts/ui-e2e.sh <url> <管理員密碼>`；檢視 `tests/e2e/shots/`（含 `06-dashboard-dark-en.png`） | 工單清單／詳情的 L1~L5 badge 在淺色與深色下皆可分辨、文字可讀；無 CSP 違規 | ⚠️ | P1 |
+
+> **補充回歸保護（同屬 `tests/styles.test.ts`，不另編案例 ID）**：
+> ① `.badge.p3` 只定義一次（避免後續規則覆蓋）；② `.badge.p3` 不覆寫 `.badge` 的 pill 形狀／字級／字重（不破壞 DESIGN.md `badge-pill`）；
+> ③ badge 規則引用的 CSS 變數在淺色與深色主題皆有定義（避免深色主題缺變數而落到瀏覽器預設色）；
+> ④ `.badge.p3` 與 `.badge.new`／`.open` 同屬 accent 語意色系（PRD FR-5.3 明文要求）；
+> ⑤ 所有 badge 選擇器在雙主題的對比皆 ≥ 4.5:1（防止改動共用變數造成其他 badge 退化）；
+> ⑥ badge 規則不含 `!important`、`url()`、`@import`（維持 CSP 同源）；
+> ⑦ `PriorityBadge` 仍為純 className 輸出（`className={\`badge p${priority}\`}`），無 inline style、無色碼字面值（元件行為未變更）。
+
 ### 6.8 雙軌佈署回歸（REG-DEPLOY）
 
 | ID | 標題 | 對應 AC | 步驟摘要 | 預期結果 | 自動化 | 優先級 |
@@ -840,6 +873,7 @@ $PSQL -f scripts/qa/fixtures.sql
 | FR-4.2 多管道通知 | AC-NOTIFY-01~02 | REG-NOTIFY-001~008 | §6.6 |
 | FR-5.1 Glossary | AC-I18N-01~02 | REG-I18N-001~003 | §6.7 |
 | FR-5.2 Light/Dark | AC-THEME-01 | REG-THEME-001~003 | §6.7 |
+| FR-5.3 優先度 badge 色彩區分（v0.2.0 之後） | **AC-THEME-02.1~02.7** | REG-THEME-004~011（004~010 由 `tests/styles.test.ts` 自動化） | §6.7.1 |
 | FR-6.1~6.3 雙軌佈署 | AC-DEPLOY-01~02 | REG-DEPLOY-001~008 | §6.8 |
 | FR-7 GitHub 門面 | AC-GH-01 | 文件審查（SEC-BA-055） | §3.8 |
 

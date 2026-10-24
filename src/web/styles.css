@@ -130,6 +130,10 @@ td.num { font-variant-numeric: tabular-nums; }
 .badge.resolved, .badge.closed, .badge.met { background: var(--success-soft); color: var(--success); }
 .badge.breached, .badge.p5 { background: var(--danger-soft); color: var(--danger); }
 .badge.p4 { background: var(--warning-soft); color: var(--warning); }
+/* L3 (medium) gets its own accent tint so it is distinguishable from the neutral L1/L2 grey.
+   DESIGN.md badge-pill: 12px/600 pill (inherited from .badge), accent token only, no hardcoded colour.
+   Contrast --accent on --accent-soft: 5.24:1 light / 5.41:1 dark (WCAG 2.1 AA, >= 4.5:1). */
+.badge.p3 { background: var(--accent-soft); color: var(--accent); }
 .tag { display: inline-block; padding: 0 7px; margin: 0 4px 4px 0; border: 1px solid var(--border); border-radius: 4px; font-size: 12px; }
 
 /* messages */
