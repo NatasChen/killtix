@@ -15,10 +15,6 @@
 > **實作狀態（2026-10-24，v0.2.0）**：本文件是需求基線。Docker 版 MVP 已實作並通過自動化測試；
 > AD/LDAP/SAML/OIDC/SCIM、FIDO2、附件、SLA 營業時間與 Cloudflare 方案尚未實作。
 > 與本文件不同的決策（預設管理員密碼、403 回應碼、3 天邊界）見 [`specs/DECISIONS.md`](../specs/DECISIONS.md)。
->
-> **增量變更（v0.2.0 之後，未發布）**：新增 FR-5.3「優先度標籤色彩區分」與驗收條件 AC-THEME-02
-> （L3 使用 accent 系列 CSS 變數、L1／L2 維持中性灰、雙主題 WCAG AA），驗證明細見 §9.2「AC-THEME-02 驗證明細」。
-> 純樣式變更，不涉及 API、資料庫、字典 key 與元件行為；不新增環境變數、不影響部署方式。
 
 
 ## 1. 文件目的與範圍
@@ -425,15 +421,10 @@ ORDER BY t.created_at ASC;
 - 切換不得造成頁面閃爍 (FOUC)：須於 HTML 載入前以 inline script 套用 `data-theme`。
 - 色彩需符合 WCAG 2.1 AA 對比度 (≥ 4.5:1)；表單、表格、圖表、狀態標籤皆需雙主題驗證。
 
-#### FR-5.3 優先度標籤色彩區分（P2，v0.2.0 之後新增）
-工單清單與工單詳情以 `PriorityBadge`（`src/web/components/common.tsx`）顯示 5 級優先度，樣式為 `src/web/styles.css` 的 `.badge.p1`–`.badge.p5`。目前 L4 使用警告色、L5 使用危險色，L1–L3 共用同一種中性灰，使用者無法從顏色分辨「中」與「低」。
 
-- **L3（中）** 使用 accent 系列 CSS 變數（`--accent-soft` 為背景、`--accent` 為文字），與狀態 badge 的 `new` / `open` 同一語意色系；必須是**獨立的一條 `.badge.p3` 規則**，不可併入 `.badge.new, .badge.open` 的選擇器串（否則 L3 沒有自己的樣式，驗收條件不成立）。
-- **L1、L2** 維持 `.badge` 預設的中性灰（`--surface-2` / `--text-muted`），不新增樣式。
-- **L4、L5** 維持現行警告色／危險色，**不得變更**；狀態 badge（`new`、`open`、`pending_user`、`resolved`、`closed`、`at_risk`、`met`、`breached`）與 SLA badge 樣式同樣不得變更。
-- 顏色一律取自 `styles.css` 既有的 CSS 變數；若確有不足，才在 `:root, :root[data-theme='light']` 與 `:root[data-theme='dark']` 兩處同時新增變數，**不得寫死色碼**。
-- 淺色與深色主題的 badge 文字／背景對比皆需 ≥ 4.5:1（WCAG 2.1 AA）。以現行變數值計算，`--accent` 對 `--accent-soft` 的對比為淺色約 5.2:1、深色約 5.4:1，**沿用既有變數即可達標，不需要新增變數**；若實作改動了變數值，必須重新量測並記錄。
-- 純樣式變更：不新增 glossary key、不改動元件行為（`PriorityBadge` 的 props 與輸出結構不變）、不改動 API、資料庫或部署設定。
+#### FR-5.3 優先度標籤色彩區分（P2，v0.2.0 之後）
+- L3（中）的優先度 badge 使用 accent 系列 CSS 變數（`--accent-soft` 背景、`--accent` 文字），與 L1／L2 的中性灰區分；L4 警告色、L5 危險色不變。
+- 只使用 CSS 變數、不寫死色碼；淺色與深色主題的文字／背景對比皆 ≥ 4.5:1（WCAG 2.1 AA）。
 
 ---
 
@@ -653,59 +644,10 @@ curl -X POST https://ticket.example.com/api/v1/tickets \
 | AC-I18N-01 | Glossary | 切換 `zh-TW`/`en-US` 全站生效；缺字回退 `en-US` 且不顯示原始 key |
 | AC-I18N-02 | 擴充語系 | 新增 `ja-JP` 僅需匯入字典檔，無需重新編譯 |
 | AC-THEME-01 | Light/Dark | 切換即時生效、無 FOUC、偏好持久化；對比度符合 WCAG AA |
-| AC-THEME-02 | 優先度 badge 色彩區分（FR-5.3） | `.badge.p3` 有獨立規則且只引用 CSS 變數（無寫死色碼）；L1／L2 仍走 `.badge` 預設中性灰；L4、L5 與狀態、SLA badge 樣式未被改動；淺色與深色主題之 badge 文字／背景對比皆 ≥ 4.5:1；未新增字典 key、元件行為與 API 未變更；`npm run validate` 通過 |
+| AC-THEME-02 | 優先度 badge 色彩 | L3 與 L1／L2 可分辨；所有 badge 在兩種主題下對比 ≥ 4.5:1；只使用 CSS 變數 |
 | AC-DEPLOY-01 | Docker | `docker-compose up -d` 後 3 分鐘內可登入；健康檢查通過 |
 | AC-DEPLOY-02 | Cloudflare | `wrangler deploy` 後 API 可用；D1 migration 成功；Queues 通知可送達 |
 | AC-GH-01 | GitHub 門面 | `README.md`、`CHANGELOG.md`、`.gitignore` 齊備且內容正確 |
-
-#### AC-THEME-02 驗證明細（FR-5.3 優先度 badge 色彩區分）
-
-**前置條件**：系統已部署且可登入；工單清單中存在優先度 1~5 的工單（或於詳情頁切換優先度觀察 badge）。
-
-**AC-THEME-02.1 獨立規則且只用變數**
-- **Given** `src/web/styles.css`
-- **When** 檢查 badge 樣式
-- **Then** 存在**獨立**的 `.badge.p3 { … }` 規則（不可只把 `.p3` 併入 `.badge.new, .badge.open` 之類的選擇器串）
-- **And** 該規則的 `background` / `color` 只引用 CSS 變數（`var(--…)`），規則內**沒有**寫死色碼（`#rgb`、`rgb()`、`hsl()`、具名顏色）
-- **驗證**：`grep -n '\.badge\.p3' src/web/styles.css` 有結果；對該規則內容 `grep -E '#[0-9a-fA-F]{3,8}|rgba?\(|hsla?\('` 無命中
-
-**AC-THEME-02.2 L1／L2 維持中性灰**
-- **Given** 工單清單／詳情的優先度 badge
-- **When** 檢視 L1、L2
-- **Then** 仍套用 `.badge` 預設樣式（`--surface-2` 背景、`--text-muted` 文字）
-- **And** `git diff src/web/styles.css` 不含 `.badge.p1` / `.badge.p2` 的新增或修改行
-
-**AC-THEME-02.3 L3 使用 accent 語意色**
-- **Given** 工單清單／詳情的優先度 badge
-- **When** 檢視 L3（中）
-- **Then** 背景為 `--accent-soft`、文字為 `--accent`，與狀態 badge 的 `new` / `open` 同一語意色系
-- **And** 在淺色與深色主題下皆與 L1／L2 的中性灰有明顯區別
-
-**AC-THEME-02.4 L4／L5 與狀態、SLA badge 不受影響**
-- **Given** `src/web/styles.css`
-- **When** 比對變更
-- **Then** `.badge.p4`（警告色）、`.badge.p5`（危險色）與 `.badge.new`、`.badge.open`、`.badge.pending_user`、`.badge.at_risk`、`.badge.resolved`、`.badge.closed`、`.badge.met`、`.badge.breached` 的樣式**未被改動**
-- **驗證**：`git diff src/web/styles.css` 不含上述選擇器的變更行
-
-**AC-THEME-02.5 雙主題對比 ≥ 4.5:1（WCAG 2.1 AA）**
-- **Given** 淺色主題（`:root, :root[data-theme='light']`）與深色主題（`:root[data-theme='dark']`）
-- **When** 量測 `.badge.p3` 的文字色對背景色的對比
-- **Then** 兩者皆 ≥ 4.5:1（badge 為 12px／600 字重，屬一般文字，不適用 3:1 的大字門檻）
-- **And** 沿用現行變數值即可達標：淺色 `--accent` #2557d6 對 `--accent-soft` #e6edfc ≈ 5.2:1；深色 `--accent` #6f9bff 對 `--accent-soft` #1c2847 ≈ 5.4:1
-- **And** 若實作改動了變數值，必須重新量測並在 PR 說明記錄數值；改動共用 accent 變數會連帶影響按鈕、連結等元件，應改為新增 badge 專用變數並於 `specs/DECISIONS.md` 記錄
-
-**AC-THEME-02.6 純樣式變更（無字典、無行為、無 API）**
-- **Given** 本次變更的 diff
-- **When** 檢查檔案清單
-- **Then** 不含 `src/server/i18n/locales/*.ts`、`tests/i18n.test.ts`（未新增字典 key）
-- **And** 不含 `src/web/components/common.tsx`（`PriorityBadge` 的 props 與輸出結構不變）、`src/server/routes/*`、`src/server/services/*`、`src/server/db/schema.ts`、`drizzle/`（無 API、無 migration）
-- **And** 不含 `src/server/config.ts`、`.env.example`、`docker-compose.yml`、`docs/DEPLOYMENT_GUIDE.md`、`docs/openapi.json`（無部署設定變更）
-
-**AC-THEME-02.7 品質關卡與雙主題目視確認**
-- **Given** 變更完成
-- **When** 執行 `npm run validate`
-- **Then** 全部檢查通過（型別、schema/migration 一致、測試、建置、OpenAPI JSON、Markdown 連結、compose 設定）
-- **And** `scripts/ui-e2e.sh <url> <管理員密碼>` 產生 `tests/e2e/shots/` 截圖，L1~L5 在淺色與深色主題下皆可分辨且文字可讀
 
 ### 9.3 完成定義 (Definition of Done)
 1. 所有 P0 需求之自動化測試通過（單元 + 整合 + E2E）。
@@ -794,7 +736,7 @@ curl -X POST https://ticket.example.com/api/v1/tickets \
 | FR-4.2 | 需求 4（多管道通知） | AC-NOTIFY-01~02 | §Notification |
 | FR-5.1 | 需求 5（Glossary 多語系） | AC-I18N-01~02 | §i18n |
 | FR-5.2 | 需求 5（Light/Dark） | AC-THEME-01 | §UI |
-| FR-5.3 | 需求變更單（v0.2.0 之後：L3 badge 區分色） | AC-THEME-02.1~02.7 | §UI（雙主題截圖） |
+| FR-5.3 | 需求變更（v0.2.0 之後） | AC-THEME-02 | §UI |
 | FR-6.1~6.3 | 需求 6（雙軌佈署） | AC-DEPLOY-01~02 | §Deployment |
 | FR-7 | 需求 7（GitHub 規範） | AC-GH-01 | §Docs Review |
 

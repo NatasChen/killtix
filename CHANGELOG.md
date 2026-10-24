@@ -7,7 +7,8 @@
 ### Changed
 - AGENTS.md 新增「增量迭代原則」：每次工作都是在現有程式碼上的增量修改，不重建骨架、延伸既有模組、只改需求涉及的檔案、保留既有功能與測試、先接續 `[Unreleased]` 中進行中的項目。
 - CrewAI 產生器（本機工具）：每個角色的 prompt 加入執行前的專案現況（版本、最近的 commit、CHANGELOG `[Unreleased]`），讓 agent 接續既有進度；驗證失敗的修正回合也會拿到 AGENTS.md、專案現況與 PM 的驗收條件。README 相應更新。
-- 優先度 badge 色彩區分（`src/web/styles.css`）：新增獨立的 `.badge.p3` 規則，L3（中）改用 accent 系列 CSS 變數（背景 `--accent-soft`、文字 `--accent`），與狀態 badge 的 `new` / `open` 同一語意色系；L1、L2 維持 `.badge` 預設中性灰（`--surface-2` / `--text-muted`），不新增樣式。L4、L5 與狀態、SLA badge 樣式不變。淺色與深色主題的 badge 文字／背景對比皆 ≥ 4.5:1（WCAG 2.1 AA；沿用既有變數值，淺色約 5.2:1、深色約 5.4:1）。純樣式變更：無新增字典 key、無元件行為或 API 變更、無 migration、無新環境變數。需求與驗收條件見 `docs/PRD_SPEC.md` FR-5.3 / AC-THEME-02。
+- AGENTS.md「增量迭代原則」補充：文件與測試的篇幅要和變更大小成比例；測試數量有變時同步更新 AGENTS.md 與 README。CrewAI 產生器（本機工具）相應調整：PM 只在需求有變時更新 PRD、QA 只為新增的案例更新測試計畫並負責更新測試數（可寫 README）、QA 只回報自己實際執行的結果；commit 標題去掉變更單開頭的 Markdown `#`。
+- 優先度 badge：L3（中）改用 accent 系列 CSS 變數，與 L1／L2 的中性灰區分；L4、L5 與狀態、SLA badge 不變，兩種主題的對比皆達 WCAG AA。新增 `tests/styles.test.ts` 檢查 badge 只使用兩種主題都有定義的變數，且對比達標。
 
 ## [0.2.0] - 2026-10-24
 
