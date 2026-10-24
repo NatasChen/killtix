@@ -198,27 +198,27 @@ export function TicketListPage() {
               <tbody>
                 {data.items.map((row) => (
                   <tr key={row.id}>
-                    <td className="mono">
+                    <td className="mono nowrap">
                       <Link to={`/tickets/${row.number}`}>{row.number}</Link>
                     </td>
-                    <td>
+                    <td className="grow">
                       <Link to={`/tickets/${row.number}`}>{row.subject}</Link>
                       <div>
                         <Tags tags={row.tags} />
                       </div>
                     </td>
-                    <td>
+                    <td className="nowrap">
                       <StatusBadge status={row.status} />
                     </td>
-                    <td>
+                    <td className="nowrap">
                       <PriorityBadge priority={row.priority} />
                     </td>
-                    <td>
+                    <td className="nowrap">
                       <SlaBadge status={row.sla.status} paused={row.sla.paused} />
                     </td>
                     <td>{row.requester?.displayName ?? '—'}</td>
-                    <td>{row.assignee?.displayName ?? <span className="muted">{t('ui.tickets.unassigned')}</span>}</td>
-                    <td className="num">{t('ui.tickets.age_value', { days: Math.floor(row.ageHours / 24), hours: row.ageHours % 24 })}</td>
+                    <td className="nowrap">{row.assignee?.displayName ?? <span className="muted">{t('ui.tickets.unassigned')}</span>}</td>
+                    <td className="num nowrap">{t('ui.tickets.age_value', { days: Math.floor(row.ageHours / 24), hours: row.ageHours % 24 })}</td>
                     <td>
                       <DateTime value={row.createdAt} />
                     </td>

@@ -18,16 +18,28 @@ interface Dashboard {
   failedNotifications: number | null;
 }
 
-function Bars({ rows, label }: { rows: { key: string | number; n: number }[]; label: (k: string | number) => string }) {
+type Tone = 'blue' | 'green' | 'amber' | 'red' | 'grey' | 'sky' | 'purple' | 'pink' | 'orange' | 'teal';
+
+const STATUS_TONE: Record<string, Tone> = { new: 'purple', open: 'teal', pending_user: 'pink', resolved: 'green', closed: 'grey' };
+const PRIORITY_TONE: Record<string, Tone> = { 1: 'grey', 2: 'grey', 3: 'blue', 4: 'amber', 5: 'red' };
+const ROTATION: Tone[] = ['sky', 'purple', 'pink', 'orange', 'teal'];
+
+function Bars({ rows, label, tone }: {
+  rows: { key: string | number; n: number }[];
+  label: (k: string | number) => string;
+  tone: (k: string | number, i: number) => Tone | undefined;
+}) {
   const { t } = useI18n();
   const max = Math.max(1, ...rows.map((r) => r.n));
   if (!rows.length) return <p className="muted small">{t('ui.common.empty')}</p>;
   return (
     <div>
-      {rows.map((r) => (
-        <div key={r.key} className="bar-row">
+      {rows.map((r, i) => (
+        <div key={r.key} className={`bar-row tone-${tone(r.key, i) ?? 'blue'}`}>
           <span>{label(r.key)}</span>
-          <div className="bar" style={{ width: `${(r.n / max) * 100}%` }} />
+          <div className="bar-track">
+            <div className="bar" style={{ width: `${(r.n / max) * 100}%` }} />
+          </div>
           <span className="num">{r.n}</span>
         </div>
       ))}
@@ -41,17 +53,17 @@ export function DashboardPage() {
   if (loading && !data) return <Loading />;
   if (!data) return <ErrorBanner error={error} />;
 
-  const kpis: { label: string; value: string | number; to?: string; alert?: boolean }[] = [
-    { label: t('ui.dashboard.open'), value: data.openCount, to: '/tickets?status=new,open,pending_user' },
-    { label: t('ui.dashboard.new_today'), value: data.newToday },
-    { label: t('ui.dashboard.resolved_today'), value: data.resolvedToday },
-    { label: t('ui.dashboard.older_than_3_days'), value: data.olderThan3Days, to: '/tickets?olderThanDays=3', alert: data.olderThan3Days > 0 },
-    { label: t('ui.dashboard.sla_breached'), value: data.slaBreached, to: '/tickets?slaStatus=breached&status=new,open,pending_user', alert: data.slaBreached > 0 },
-    { label: t('ui.dashboard.sla_at_risk'), value: data.slaAtRisk, to: '/tickets?slaStatus=at_risk' },
-    { label: t('ui.dashboard.sla_met_rate'), value: data.slaMetRate30d == null ? '—' : `${data.slaMetRate30d}%` },
+  const kpis: { label: string; value: string | number; tone: Tone; to?: string; alert?: boolean }[] = [
+    { label: t('ui.dashboard.open'), value: data.openCount, tone: 'blue', to: '/tickets?status=new,open,pending_user' },
+    { label: t('ui.dashboard.new_today'), value: data.newToday, tone: 'sky' },
+    { label: t('ui.dashboard.resolved_today'), value: data.resolvedToday, tone: 'green' },
+    { label: t('ui.dashboard.older_than_3_days'), value: data.olderThan3Days, tone: 'orange', to: '/tickets?olderThanDays=3', alert: data.olderThan3Days > 0 },
+    { label: t('ui.dashboard.sla_breached'), value: data.slaBreached, tone: 'red', to: '/tickets?slaStatus=breached&status=new,open,pending_user', alert: data.slaBreached > 0 },
+    { label: t('ui.dashboard.sla_at_risk'), value: data.slaAtRisk, tone: 'amber', to: '/tickets?slaStatus=at_risk' },
+    { label: t('ui.dashboard.sla_met_rate'), value: data.slaMetRate30d == null ? '—' : `${data.slaMetRate30d}%`, tone: 'teal' },
   ];
   if (data.failedNotifications != null) {
-    kpis.push({ label: t('ui.dashboard.failed_notifications'), value: data.failedNotifications, alert: data.failedNotifications > 0 });
+    kpis.push({ label: t('ui.dashboard.failed_notifications'), value: data.failedNotifications, tone: 'pink', alert: data.failedNotifications > 0 });
   }
 
   return (
@@ -59,7 +71,7 @@ export function DashboardPage() {
       <h1>{t('ui.nav.dashboard')}</h1>
       <div className="grid grid-kpi">
         {kpis.map((k) => (
-          <div key={k.label} className={`card kpi${k.alert ? ' alert' : ''}`}>
+          <div key={k.label} className={`card kpi tone-${k.tone}${k.alert ? ' alert' : ''}`}>
             <span className="label">{k.label}</span>
             <span className="value">{k.to ? <Link to={k.to}>{k.value}</Link> : k.value}</span>
           </div>
@@ -68,19 +80,19 @@ export function DashboardPage() {
       <div className="grid grid-2" style={{ marginTop: 16 }}>
         <div className="card">
           <h2>{t('ui.dashboard.by_status')}</h2>
-          <Bars rows={data.byStatus} label={(k) => t(`ticket.status.${k}`)} />
+          <Bars rows={data.byStatus} label={(k) => t(`ticket.status.${k}`)} tone={(k) => STATUS_TONE[k]} />
         </div>
         <div className="card">
           <h2>{t('ui.dashboard.by_priority')}</h2>
-          <Bars rows={[...data.byPriority].sort((a, b) => b.key - a.key)} label={(k) => t(`ticket.priority.${k}`)} />
+          <Bars rows={[...data.byPriority].sort((a, b) => b.key - a.key)} label={(k) => t(`ticket.priority.${k}`)} tone={(k) => PRIORITY_TONE[k]} />
         </div>
         <div className="card">
           <h2>{t('ui.dashboard.top_tags')}</h2>
-          <Bars rows={data.topTags} label={(k) => String(k)} />
+          <Bars rows={data.topTags} label={(k) => String(k)} tone={(_, i) => ROTATION[i % ROTATION.length]} />
         </div>
         <div className="card">
           <h2>{t('ui.dashboard.top_help_topics')}</h2>
-          <Bars rows={data.topHelpTopics} label={(k) => String(k)} />
+          <Bars rows={data.topHelpTopics} label={(k) => String(k)} tone={(_, i) => ROTATION[(i + 2) % ROTATION.length]} />
         </div>
       </div>
     </>

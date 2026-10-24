@@ -176,8 +176,8 @@
 | 外部廠商 IDOR 越權 | §4 | 26 | 20 | 5 | 1 | 22 ✅ / 3 ⚠️ / 1 ❌ |
 | SOC API Rate Limiting | §5.1 | 18 | 12 | 5 | 1 | 16 ✅ / 2 ⚠️ |
 | SOC API 資料過濾（>3 天） | §5.2 | 22 | 16 | 5 | 1 | 20 ✅ / 2 ⚠️ |
-| 系統回歸 | §6 | 50 | 30 | 16 | 4 | 41 ✅ / 7 ⚠️ / 2 ❌ |
-| **合計** | — | **150** | **104** | **38** | **8** | **127 ✅ / 18 ⚠️ / 5 ❌** |
+| 系統回歸 | §6 | 51 | 30 | 17 | 4 | 42 ✅ / 7 ⚠️ / 2 ❌ |
+| **合計** | — | **151** | **104** | **39** | **8** | **128 ✅ / 18 ⚠️ / 5 ❌** |
 
 > 自動化比例約 **85%**；手動案例集中於 UI 視覺、瀏覽器相容性與需人工判讀的資安探索。
 
@@ -609,6 +609,7 @@
 | REG-THEME-003 | WCAG AA 對比度 | AC-THEME-01 | axe-core 掃描 | 無 contrast 違規（≥ 4.5:1） | ✅ | P1 |
 | REG-THEME-004 | 優先度 badge 色彩與對比 | AC-THEME-02 | 解析 `styles.css` 與兩種主題的 CSS 變數（`tests/styles.test.ts`） | L3 有獨立的 accent 樣式；L1／L2 為中性灰；所有 badge 在淺色與深色下對比 ≥ 4.5:1 | ✅ | P1 |
 | REG-THEME-005 | 優先度 badge 目視確認 | AC-THEME-02 | `scripts/ui-e2e.sh` 截圖 | L1~L5 在兩種主題下可分辨、文字可讀 | ⚠️ | P2 |
+| REG-THEME-006 | 資料色與側邊欄對比 | AC-THEME-05 | 解析 `styles.css`（`tests/styles.test.ts`） | 狀態 badge 互不同色且不同於 L3～L5；sticker 與 `--nav-*` 變數在兩種主題達 AA（非文字 3:1） | ✅ | P1 |
 
 ### 6.8 雙軌佈署回歸（REG-DEPLOY）
 
@@ -843,6 +844,7 @@ $PSQL -f scripts/qa/fixtures.sql
 | FR-5.1 Glossary | AC-I18N-01~02 | REG-I18N-001~003 | §6.7 |
 | FR-5.2 Light/Dark | AC-THEME-01 | REG-THEME-001~003 | §6.7 |
 | FR-5.3 優先度 badge 色彩 | AC-THEME-02 | REG-THEME-004~005 | §6.7 |
+| FR-5.4 第 2 批 資料色與側邊欄 | AC-THEME-05 | REG-THEME-006 | §6.7 |
 | FR-6.1~6.3 雙軌佈署 | AC-DEPLOY-01~02 | REG-DEPLOY-001~008 | §6.8 |
 | FR-7 GitHub 門面 | AC-GH-01 | 文件審查（SEC-BA-055） | §3.8 |
 

@@ -8,6 +8,8 @@ import { useState } from 'react';
 // ex-app-shell-row is the DESIGN.md hook for a sidebar row; .nav-link stays so existing styles and
 // tests keep working. The sidebar keeps its position and its item list.
 const link = ({ isActive }: { isActive: boolean }) => `nav-link ex-app-shell-row${isActive ? ' active' : ''}`;
+// A colour tile per nav group: tickets (sky), catalog (purple), system admin (orange), records (teal).
+const tile = (tone: 'sky' | 'purple' | 'orange' | 'teal') => (state: { isActive: boolean }) => `${link(state)} tile-${tone}`;
 
 export function Layout() {
   const { user, can, logout } = useAuth();
@@ -32,54 +34,54 @@ export function Layout() {
         <div className="brand">
           <img src="/favicon.svg" width={22} height={22} alt="" /> TicketDesk
         </div>
-        <NavLink to="/" end className={link}>
+        <NavLink to="/" end className={tile('sky')}>
           {t('ui.nav.dashboard')}
         </NavLink>
-        <NavLink to="/tickets" end className={link}>
+        <NavLink to="/tickets" end className={tile('sky')}>
           {t('ui.nav.tickets')}
         </NavLink>
         {can('ticket:create') && (
-          <NavLink to="/tickets/new" className={link}>
+          <NavLink to="/tickets/new" className={tile('sky')}>
             {t('ui.nav.new_ticket')}
           </NavLink>
         )}
         {(canCatalog || isAdmin) && <div className="nav-section">{t('ui.nav.admin')}</div>}
         {isAdmin && (
-          <NavLink to="/admin/users" className={link}>
+          <NavLink to="/admin/users" className={tile('orange')}>
             {t('ui.nav.users')}
           </NavLink>
         )}
         {canCatalog && (
           <>
-            <NavLink to="/admin/teams" className={link}>
+            <NavLink to="/admin/teams" className={tile('purple')}>
               {t('ui.nav.teams')}
             </NavLink>
-            <NavLink to="/admin/help-topics" className={link}>
+            <NavLink to="/admin/help-topics" className={tile('purple')}>
               {t('ui.nav.help_topics')}
             </NavLink>
-            <NavLink to="/admin/sla-plans" className={link}>
+            <NavLink to="/admin/sla-plans" className={tile('purple')}>
               {t('ui.nav.sla_plans')}
             </NavLink>
-            <NavLink to="/admin/forms" className={link}>
+            <NavLink to="/admin/forms" className={tile('purple')}>
               {t('ui.nav.forms')}
             </NavLink>
-            <NavLink to="/admin/canned-responses" className={link}>
+            <NavLink to="/admin/canned-responses" className={tile('purple')}>
               {t('ui.nav.canned')}
             </NavLink>
           </>
         )}
         {isAdmin && (
           <>
-            <NavLink to="/admin/api-tokens" className={link}>
+            <NavLink to="/admin/api-tokens" className={tile('orange')}>
               {t('ui.nav.api_tokens')}
             </NavLink>
-            <NavLink to="/admin/notifications" className={link}>
+            <NavLink to="/admin/notifications" className={tile('teal')}>
               {t('ui.nav.notifications')}
             </NavLink>
-            <NavLink to="/admin/settings" className={link}>
+            <NavLink to="/admin/settings" className={tile('orange')}>
               {t('ui.nav.settings')}
             </NavLink>
-            <NavLink to="/admin/audit" className={link}>
+            <NavLink to="/admin/audit" className={tile('teal')}>
               {t('ui.nav.audit')}
             </NavLink>
           </>

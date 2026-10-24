@@ -42,7 +42,7 @@ const THEMES = [
 const BASE_VARS = varsOf(RULES.find((r) => r.selectors.length === 1 && r.selectors[0] === ':root')?.body ?? '');
 
 const BADGES = ['.badge', '.badge.new', '.badge.open', '.badge.pending_user', '.badge.at_risk', '.badge.resolved',
-  '.badge.closed', '.badge.met', '.badge.breached', '.badge.p3', '.badge.p4', '.badge.p5'];
+  '.badge.met', '.badge.breached', '.badge.p3', '.badge.p4', '.badge.p5'];
 
 /** The variable names a badge uses for its background and text colour. */
 function badgeVars(selector: string): { background: string; color: string } {
@@ -104,9 +104,10 @@ describe('badge colours (FR-5.3)', () => {
     expect(badgeVars('.badge.p3')).toEqual({ background: '--accent-soft', color: '--accent-strong' });
   });
 
-  it('keeps L1 and L2 on the neutral .badge default', () => {
+  it('keeps L1, L2 and closed on the neutral .badge default', () => {
     expect(declarations('.badge.p1')).toBeUndefined();
     expect(declarations('.badge.p2')).toBeUndefined();
+    expect(declarations('.badge.closed')).toBeUndefined();
   });
 
   it('uses only variables that both themes define', () => {
@@ -127,6 +128,14 @@ describe('badge colours (FR-5.3)', () => {
   it.each(THEMES)('keeps the priority levels distinguishable in the %s theme', (_, vars) => {
     const backgrounds = ['.badge', '.badge.p3', '.badge.p4', '.badge.p5'].map((s) => resolve(badgeVars(s).background, vars));
     expect(new Set(backgrounds.map((c) => c.toLowerCase())).size).toBe(4);
+  });
+
+  it.each(THEMES)('gives every open status its own colour, none shared with a priority, in the %s theme', (_, vars) => {
+    // The status and priority columns sit side by side in the ticket list (the old "new" = L3 blue clash).
+    const bg = (s: string) => resolve(badgeVars(s).background, vars).toLowerCase();
+    const statuses = ['.badge.new', '.badge.open', '.badge.pending_user', '.badge.resolved'].map(bg);
+    expect(new Set(statuses).size).toBe(4);
+    for (const p of ['.badge.p3', '.badge.p4', '.badge.p5']) expect(statuses).not.toContain(bg(p));
   });
 });
 
@@ -221,8 +230,30 @@ describe('design tokens (FR-5.4)', () => {
     for (const selector of components) {
       const body = declarations(selector);
       expect(body, selector).toBeDefined();
-      expect(body, selector).toMatch(/var\(--(radius|space|shadow|accent|surface|border|ink|danger|warning|success)/);
+      expect(body, selector).toMatch(/var\(--(radius|space|shadow|accent|surface|border|ink|danger|warning|success|nav)/);
       expect(body, selector).not.toMatch(/#[0-9a-f]{3,6}\b/i);
+    }
+  });
+
+  it.each(THEMES)('keeps the sticker data colours readable in the %s theme', (theme, vars) => {
+    for (const hue of ['sky', 'purple', 'pink', 'orange', 'teal']) {
+      const c = (fg: string, bg: string) => contrast(resolve(fg, vars), resolve(bg, vars));
+      // solid fills bars, bands and tiles (non-text, 3:1); ink is text on the soft tint and on cards (4.5:1)
+      expect(c(`--sticker-${hue}`, '--surface'), `${hue} solid in ${theme}`).toBeGreaterThanOrEqual(3);
+      expect(c(`--sticker-${hue}-ink`, `--sticker-${hue}-soft`), `${hue} ink in ${theme}`).toBeGreaterThanOrEqual(4.5);
+      expect(c(`--sticker-${hue}-ink`, '--surface'), `${hue} ink on surface in ${theme}`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it.each(THEMES)('keeps the indigo sidebar readable in the %s theme', (theme, vars) => {
+    const c = (fg: string, bg: string) => contrast(resolve(fg, vars), resolve(bg, vars));
+    for (const bg of ['--nav-bg', '--nav-hover', '--nav-active', '--nav-field']) {
+      expect(c('--nav-text', bg), `--nav-text on ${bg} in ${theme}`).toBeGreaterThanOrEqual(4.5);
+    }
+    expect(c('--nav-muted', '--nav-bg'), theme).toBeGreaterThanOrEqual(4.5);
+    for (const fg of ['--nav-indicator', '--nav-field-border', '--nav-tile-sky', '--nav-tile-purple', '--nav-tile-orange',
+      '--nav-tile-teal']) {
+      expect(c(fg, '--nav-bg'), `${fg} on --nav-bg in ${theme}`).toBeGreaterThanOrEqual(3);
     }
   });
 

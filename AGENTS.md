@@ -14,7 +14,7 @@
 | --- | --- |
 | 目前版本 | **0.3.0**（2026-10-24，git tag `v0.3.0`），見 [CHANGELOG.md](CHANGELOG.md) |
 | 支援部署 | Docker Compose（app + PostgreSQL 16 + Redis 7）。Cloudflare 為實驗性、**未實作** |
-| 測試狀態 | 66 個 Vitest 測試、`scripts/validate.sh`、`scripts/smoke.sh`（24 項）、`scripts/ui-e2e.sh` 全部通過 |
+| 測試狀態 | 72 個 Vitest 測試、`scripts/validate.sh`、`scripts/smoke.sh`（24 項）、`scripts/ui-e2e.sh` 全部通過 |
 | 未實作 | AD/LDAP、SAML、OIDC、SCIM、FIDO2、附件、SLA 營業時間、Cloudflare、多副本背景工作 |
 | 待客戶確認 | 見 [specs/DECISIONS.md](specs/DECISIONS.md) 中標示 ⏳ 的項目（預設管理員密碼、SSO 時程、Cloudflare 去留） |
 | 下一步建議 | v1.1：SSO（`users.identity_provider` 已預留）→ 附件 → SLA 營業時間 |
@@ -171,6 +171,8 @@ crewai_ticket_build.py CrewAI 迭代工具（PM → SAr → PG → UI 設計師 
     （`main.tsx` 匯入，Vite 打包成同源檔案），**不要改成 Google Fonts CDN**：CSP 只允許同源，而且內網部署連不到外部。
     CSS 的 family 名稱是 `'Noto Sans Display Variable', 'Noto Sans TC Variable'`（英文在前，中文字自動落到 TC）。
   - 工單系統需要語意色（錯誤、成功、警告、SLA 逾時、優先度）：定義為獨立的 CSS 變數，不受「裝飾色不能用在結構」的限制。
+  - sticker 色盤可用於有意義的資料色（`--sticker-*`：狀態 badge、儀表板色帶與長條圖、選單群組色塊），側邊欄用深靛藍（`--nav-*`），
+    見 [specs/DECISIONS.md](specs/DECISIONS.md) D9。主要動作、連結與焦點仍只用主色藍；顏色一定要搭配文字，不單靠顏色傳達。
   - 用到的是應用程式元件（`ex-app-shell-row`、`ex-data-table-cell`、`ex-auth-form-card`、`ex-modal-card`、`ex-toast`、
     `ex-empty-state-card`、`text-input`、`button-*`、`badge-pill`）；hero、pricing 等行銷區塊不適用。
 - 不可以用 inline `<script>`（CSP 禁止）；CSP 只允許同源資源，不可引入外部字型、CDN 或 UI 套件。
@@ -193,7 +195,7 @@ crewai_ticket_build.py CrewAI 迭代工具（PM → SAr → PG → UI 設計師 
 
 | 指令 | 內容 | 需要 |
 | --- | --- | --- |
-| `npm test` | 66 個單元/整合測試（PGlite） | Node |
+| `npm test` | 72 個單元/整合測試（PGlite） | Node |
 | `TEST_DATABASE_URL=postgres://… npm test` | 同上，改用真實 PostgreSQL + 正式驅動 | 一個 Postgres（見下） |
 | `npm run validate` | 型別、schema/migration 一致、測試、建置、OpenAPI JSON、Markdown 連結、compose 設定 | Node（Docker 可選） |
 | `scripts/smoke.sh <url> <預設管理員密碼>` | 部署後 API 端到端 24 項（會改管理員密碼為 `Smoke-Test-Passw0rd!`） | 執行中的系統 |
