@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Added
+- `scripts/seed-sample-tickets.py`：經 API 建立 30 張範例工單（各種服務類別、優先度、狀態、負責人與回覆，標籤 `sample`），可用 `--psql` 把部分工單日期往前推以填滿「超過 3 天未結案」與報表；只用 Python 標準函式庫，Email 已設定時預設停止。
 - 新增工單時可直接指派負責人（有 `ticket:assign` 權限的系統管理員、IT 主管、工程師才看得到這個欄位）；指派後工單直接為「處理中」，並通知負責人，與事後指派相同。
 - 企業標誌（PRD FR-5.5，DECISIONS D11）：系統管理員可在「系統設定」上傳 PNG 標誌（512 KB 以內，伺服器檢查 PNG 檔頭），顯示在登入頁與側邊欄頂端並依比例縮放；可另外上傳深色背景用的標誌，側邊欄與深色主題的登入頁使用，沒有時改用淺色的。標誌存在新的 `brand_logos` 資料表（migration `0001_brand_logos`），由公開的 `GET /api/v1/branding` 與 `/api/v1/branding/logo/{light|dark}` 提供；新增 `tests/branding.test.ts`（5 項）與 e2e 的上傳步驟。
 - 郵件設定（PRD FR-4.3，DECISIONS D13）：系統管理員可在「系統設定 → 郵件設定」選擇寄信方式：`env`（沿用 `SMTP_*` 環境變數，預設，升級後行為不變）、`smtp`（介面填寫）或 `resend`（以 `fetch` 呼叫 Resend API，不新增套件）。設定存在 `system_settings`，SMTP 密碼與 API Key 以 `secretBox` 加密、只寫不讀，留空表示不變更，無法解密時視為未設定並提示重新輸入；頁面顯示目前實際使用的寄信方式。可寄送測試信（每人每分鐘 5 次，結果直接顯示）。新增 `tests/mailSettings.test.ts`（8 項）與 e2e 步驟。

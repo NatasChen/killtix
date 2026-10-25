@@ -82,6 +82,8 @@ docker compose logs app | grep -A4 "bootstrap administrator"   # 取得預設管
 - `APP_SECRET` 與 `POSTGRES_PASSWORD` 在首次啟動後**不要再更改**（前者會讓已啟用的 2FA 失效，後者會讓 app 連不上既有資料庫）。
 
 - 想使用客戶規格指定的固定初始密碼，在 `.env` 設定 `BOOTSTRAP_ADMIN_PASSWORD=Admin@InitTemp2026!`（首次登入仍會強制改密）。
+- 想先看有資料的畫面（展示、測試）：`TD_PASSWORD='<改過的密碼>' python3 scripts/seed-sample-tickets.py http://localhost:8080 --psql "docker compose exec -T postgres psql -U ticketdesk -d ticketdesk"`
+  會建立 30 張範例工單（各種狀態、優先度、標籤，部分日期往前推，標籤 `sample`）。只用 Python 標準函式庫；Email 已設定時會停止，避免寄信給範例申請人。不要在正式環境執行。
 - 正式環境設定（TLS、反向代理、備份、通知管道）見 [docs/DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md)。
 
 ## API 範例（SOC 自動開單）
@@ -140,7 +142,7 @@ npm run dev:web             # 前端 on :5173（代理 /api 到 :8080）
 ├── src/web/               前端（React）
 ├── drizzle/               資料庫 migration（自動產生）
 ├── tests/                 Vitest 測試
-├── scripts/               init-env.sh（產生 .env 密鑰）、validate.sh（品質檢查）、smoke.sh（部署後 API 檢查）、ui-e2e.sh（瀏覽器測試）
+├── scripts/               init-env.sh（產生 .env 密鑰）、validate.sh（品質檢查）、smoke.sh（部署後 API 檢查）、ui-e2e.sh（瀏覽器測試）、seed-sample-tickets.py（範例工單）
 ├── docs/                  PRD、部署指南、QA 測試計畫、OpenAPI
 ├── specs/                 客戶需求、實作決策、需求變更單
 ├── deploy/cloudflare/     Cloudflare 方案（實驗性，未實作）

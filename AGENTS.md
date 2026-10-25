@@ -110,7 +110,8 @@ src/web/
   public/theme-init.js 首次繪製前套用主題（CSP 不允許 inline script，所以是外部檔）
 drizzle/              自動產生的 migration，不要手改
 tests/                Vitest：helpers.ts（測試環境工廠）、auth / tickets / notify / i18n 測試；e2e/ui.mjs（瀏覽器）
-scripts/              init-env.sh（建立 .env、只填空白密鑰）、validate.sh、smoke.sh、ui-e2e.sh、check-links.mjs
+scripts/              init-env.sh（建立 .env、只填空白密鑰）、validate.sh、smoke.sh、ui-e2e.sh、check-links.mjs、
+                      seed-sample-tickets.py（經 API 建立 30 張範例工單，只用 Python 標準函式庫）
 specs/                客戶需求、決策紀錄、CrewAI 需求變更單
 crewai_ticket_build.py CrewAI 迭代工具（PM → SAr → PG → UI 設計師 → QA，全部以本文件為規則）。維護者本機工具，
                       與其設計紀錄 crewai_fix.md、執行紀錄 .crewai/ 都列入 .gitignore，不在 repo 內；
