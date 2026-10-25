@@ -16,6 +16,14 @@ const useOptions = (path: string) => useLoad(() => get<Opt[]>(path), [path]).dat
 const sectionTitle = (text: string) => <h2 style={{ fontSize: 16, margin: 0 }}>{text}</h2>;
 const tableProps = { rowKey: 'id', pagination: false, size: 'middle', scroll: { x: 'max-content' } } as const;
 
+type MailSettings = {
+  provider: 'env' | 'smtp' | 'resend';
+  smtp: { host: string; port: number; secure: boolean; user: string; from: string; hasPassword: boolean; passwordInvalid: boolean };
+  resend: { from: string; hasApiKey: boolean; apiKeyInvalid: boolean };
+  effectiveProvider: 'env' | 'smtp' | 'resend';
+  env: { host: string; from: string };
+};
+
 /** Shows a secret exactly once with a copy button. */
 function OneTimeSecret({ label, value, onClose }: { label: string; value: string; onClose: () => void }) {
   const { t } = useI18n();
@@ -481,6 +489,212 @@ function LogoSettings() {
   );
 }
 
+function MailSettingsCard() {
+  const { t } = useI18n();
+  const { user: me } = useAuth();
+  const action = useAction();
+  const testAction = useAction();
+  const mail = useLoad(() => get<MailSettings>('/admin/settings/email'), []);
+  const [form, setForm] = useState({
+    provider: 'env' as MailSettings['provider'],
+    smtpHost: '',
+    smtpPort: '587',
+    smtpSecure: false,
+    smtpUser: '',
+    smtpPassword: '',
+    smtpFrom: '',
+    resendApiKey: '',
+    resendFrom: '',
+  });
+  const [testTo, setTestTo] = useState(me?.email ?? '');
+  const [testResult, setTestResult] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const applyLoaded = (m: MailSettings) => {
+    setForm({
+      provider: m.provider,
+      smtpHost: m.smtp.host,
+      smtpPort: String(m.smtp.port),
+      smtpSecure: m.smtp.secure,
+      smtpUser: m.smtp.user,
+      smtpPassword: '',
+      smtpFrom: m.smtp.from,
+      resendApiKey: '',
+      resendFrom: m.resend.from,
+    });
+  };
+
+  const save = () =>
+    void action.run(async () => {
+      const body: Record<string, unknown> = { provider: form.provider };
+      if (form.provider === 'smtp') {
+        body.smtp = {
+          host: form.smtpHost,
+          port: Number(form.smtpPort),
+          secure: form.smtpSecure,
+          user: form.smtpUser,
+          from: form.smtpFrom,
+          ...(form.smtpPassword ? { password: form.smtpPassword } : {}),
+        };
+      } else if (form.provider === 'resend') {
+        body.resend = {
+          from: form.resendFrom,
+          ...(form.resendApiKey ? { apiKey: form.resendApiKey } : {}),
+        };
+      }
+      const saved = await put<MailSettings>('/admin/settings/email', body);
+      applyLoaded(saved);
+    });
+
+  const sendTest = () =>
+    void testAction.run(async () => {
+      setTestResult(null);
+      try {
+        await post('/admin/settings/email/test', { to: testTo });
+        setTestResult({ ok: true, text: t('ui.settings.mail.test_sent') });
+      } catch (err) {
+        const e = err as { title?: string; detail?: string };
+        setTestResult({ ok: false, text: e.detail ?? e.title ?? String(err) });
+      }
+    });
+
+  const providerOptions = (['env', 'smtp', 'resend'] as const).map((p) => ({ value: p, label: t(`ui.settings.mail.provider.${p}`) }));
+  const effective = mail.data?.effectiveProvider ?? 'env';
+
+  return (
+    <Card title={sectionTitle(t('ui.settings.mail.title'))} style={{ marginBottom: 16 }}>
+      <p className="small muted" style={{ marginTop: 0 }}>{t('ui.settings.mail.hint')}</p>
+      <ErrorBanner error={action.error ?? mail.error} />
+      <Form
+        layout="vertical"
+        requiredMark={false}
+        onFinish={save}
+        initialValues={{ provider: form.provider }}
+      >
+        <Row gutter={12}>
+          <Col xs={24} sm={12} lg={8}>
+            <Field label={t('ui.settings.mail.provider_label')}>
+              <Choice
+                value={form.provider}
+                onChange={(v) => setForm({ ...form, provider: v as MailSettings['provider'] })}
+                options={providerOptions}
+                style={{ width: '100%' }}
+              />
+            </Field>
+          </Col>
+        </Row>
+
+        {form.provider === 'env' && (
+          <Alert
+            type="info"
+            showIcon
+            style={{ marginBottom: 12 }}
+            title={t('ui.settings.mail.env_notice')}
+            description={
+              <>
+                <div>{t('ui.settings.mail.host')}: {mail.data?.env.host || '—'}</div>
+                <div>{t('ui.settings.mail.from')}: {mail.data?.env.from || '—'}</div>
+              </>
+            }
+          />
+        )}
+
+        {form.provider === 'smtp' && (
+          <Row gutter={12}>
+            <Col xs={24} sm={12} lg={8}>
+              <Field label={t('ui.settings.mail.host')} required>
+                <Input required value={form.smtpHost} onChange={(e) => setForm({ ...form, smtpHost: e.target.value })} />
+              </Field>
+            </Col>
+            <Col xs={24} sm={12} lg={4}>
+              <Field label={t('ui.settings.mail.port')} required>
+                <Input required inputMode="numeric" value={form.smtpPort} onChange={(e) => setForm({ ...form, smtpPort: e.target.value })} />
+              </Field>
+            </Col>
+            <Col xs={24} sm={12} lg={4}>
+              <Field label={t('ui.settings.mail.secure')}>
+                <Checkbox checked={form.smtpSecure} onChange={(e) => setForm({ ...form, smtpSecure: e.target.checked })}>
+                  {t('ui.settings.mail.secure')}
+                </Checkbox>
+              </Field>
+            </Col>
+            <Col xs={24} sm={12} lg={8}>
+              <Field label={t('ui.settings.mail.user')}>
+                <Input value={form.smtpUser} onChange={(e) => setForm({ ...form, smtpUser: e.target.value })} />
+              </Field>
+            </Col>
+            <Col xs={24} sm={12} lg={8}>
+              <Field label={t('ui.settings.mail.password')} extra={mail.data?.smtp.hasPassword ? t('ui.settings.mail.password_set') : undefined}>
+                <Input.Password value={form.smtpPassword} onChange={(e) => setForm({ ...form, smtpPassword: e.target.value })} autoComplete="new-password" />
+              </Field>
+            </Col>
+            <Col xs={24} sm={12} lg={8}>
+              <Field label={t('ui.settings.mail.from')} required>
+                <Input required value={form.smtpFrom} onChange={(e) => setForm({ ...form, smtpFrom: e.target.value })} placeholder="TicketDesk <no-reply@example.com>" />
+              </Field>
+            </Col>
+          </Row>
+        )}
+
+        {form.provider === 'resend' && (
+          <Row gutter={12}>
+            <Col xs={24} sm={12} lg={8}>
+              <Field label={t('ui.settings.mail.api_key')} required extra={mail.data?.resend.hasApiKey ? t('ui.settings.mail.api_key_set') : undefined}>
+                <Input.Password value={form.resendApiKey} onChange={(e) => setForm({ ...form, resendApiKey: e.target.value })} autoComplete="new-password" />
+              </Field>
+            </Col>
+            <Col xs={24} sm={12} lg={8}>
+              <Field label={t('ui.settings.mail.from')} required>
+                <Input required value={form.resendFrom} onChange={(e) => setForm({ ...form, resendFrom: e.target.value })} placeholder="TicketDesk <no-reply@example.com>" />
+              </Field>
+            </Col>
+          </Row>
+        )}
+
+        {mail.data && (
+          <p className="small muted">
+            {t('ui.settings.mail.effective')}: {t(`ui.settings.mail.provider.${effective}`)}
+          </p>
+        )}
+
+        <Button type="primary" htmlType="submit" loading={action.busy} disabled={action.busy}>
+          {t('ui.common.save')}
+        </Button>
+      </Form>
+
+      <Card size="small" title={t('ui.settings.mail.test_title')} style={{ marginTop: 16 }}>
+        <Form
+          layout="vertical"
+          requiredMark={false}
+          onFinish={sendTest}
+        >
+          <Row gutter={12} align="bottom">
+            <Col xs={24} sm={12} lg={8}>
+              <Field label={t('ui.settings.mail.test_to')} required>
+                <Input required value={testTo} onChange={(e) => setTestTo(e.target.value)} />
+              </Field>
+            </Col>
+            <Col xs={24} sm={12} lg={4}>
+              <Form.Item style={{ marginBottom: 12 }}>
+                <Button type="primary" htmlType="submit" loading={testAction.busy} disabled={testAction.busy}>
+                  {t('ui.settings.mail.test_send')}
+                </Button>
+              </Form.Item>
+            </Col>
+          </Row>
+        </Form>
+        {testResult && (
+          <Alert
+            type={testResult.ok ? 'success' : 'error'}
+            showIcon
+            title={testResult.ok ? t('ui.settings.mail.test_sent') : t('ui.settings.mail.test_failed')}
+            description={testResult.text}
+          />
+        )}
+      </Card>
+    </Card>
+  );
+}
+
 function SettingsPage() {
   const { t, locales } = useI18n();
   const settings = useLoad(() => get<{ '2faEnforced': boolean }>('/admin/settings'), []);
@@ -524,6 +738,7 @@ function SettingsPage() {
         <p className="small muted">{t('ui.settings.enforce_2fa_hint')}</p>
       </Card>
       <LogoSettings />
+      <MailSettingsCard />
       <Card title={sectionTitle(t('ui.settings.glossary'))}>
         <p className="small muted">{t('ui.settings.glossary_hint')}</p>
         <Form

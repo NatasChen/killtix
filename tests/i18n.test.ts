@@ -22,6 +22,7 @@ const DYNAMIC: Record<string, string[]> = {
   'ui.role.': ['super_admin', 'it_manager', 'agent', 'vendor', 'end_user', 'api_client'],
   'ui.notify.': ['pending', 'sending', 'sent', 'dead', 'skipped'],
   'ui.password.rule.': ['min_length', 'max_length', 'uppercase', 'lowercase', 'digit', 'symbol'],
+  'ui.settings.mail.provider.': ['env', 'smtp', 'resend'],
   'ui.source.': ['web', 'api', 'email'],
   'ui.thread.': ['customer_message', 'agent_reply', 'internal_note', 'system_event'],
   'ui.visibility.': ['public', 'internal'],

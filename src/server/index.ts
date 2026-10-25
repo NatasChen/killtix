@@ -58,7 +58,6 @@ async function main() {
   const server = serve({ fetch: app.fetch, port: config.port }, (info) => log('info', 'listening', { port: info.port }));
 
   // Background jobs (single-instance scheduler; see docs/DEPLOYMENT_GUIDE.md for scaling notes).
-  const senders = defaultSenders(deps);
   const every = (ms: number, name: string, job: () => Promise<unknown>) => {
     let running = false;
     return setInterval(async () => {
@@ -74,7 +73,7 @@ async function main() {
     }, ms);
   };
   const timers = [
-    every(5_000, 'notification dispatch', () => dispatchPending(deps, senders)),
+    every(5_000, 'notification dispatch', async () => dispatchPending(deps, await defaultSenders(deps))),
     every(60_000, 'sla scan', () => scanSla(deps)),
     every(300_000, 'aging digest', () => agingDigest(deps)),
   ];

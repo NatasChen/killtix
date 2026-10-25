@@ -42,7 +42,7 @@ SOC、SIEM 等外部系統可以透過 API 自動開單。
 - 工單清單可依狀態、優先度、負責人、標籤、SLA、自訂欄位、「超過 3 天未結案」篩選
 - CSV 匯出（含自訂欄位、Excel 可直接開啟中文、防公式注入）
 
-**通知**：Email、Telegram Bot、Microsoft Teams；outbox 佇列、失敗重試、可在介面查看與重送
+**通知**：Email、Telegram Bot、Microsoft Teams；outbox 佇列、失敗重試、可在介面查看與重送。Email 的寄信方式由系統管理員在「系統設定 → 郵件設定」選擇：沿用 `SMTP_*` 環境變數（預設）、介面填寫的 SMTP，或 Resend API；儲存後立即生效，密碼與 API Key 加密儲存、只寫不讀，並可寄送測試信
 
 **外部 API**：API Token（權限範圍 `tickets:write` / `tickets:read`）、`Idempotency-Key` 防重複開單、每 Token 速率限制，規格見 [docs/openapi.json](docs/openapi.json)
 

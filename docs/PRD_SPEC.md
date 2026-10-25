@@ -393,6 +393,20 @@ ORDER BY t.created_at ASC;
 4. 通知內容不得包含內部備忘；外部收件者僅能看到對外資訊。
 5. 提供 `notification_logs` 查詢與重送 (Resend) 功能。
 
+#### FR-4.3 郵件設定與寄信方式（P1，`[Unreleased]`）
+Email 的寄信方式由系統管理員在「系統設定 → 郵件設定」選擇，存在 `system_settings`，預設 `env`（DECISIONS D13）。
+- **三種寄信方式**：
+  - `env`：沿用 `SMTP_*` 環境變數，行為與先前完全相同；既有部署升級後不需任何設定。
+  - `smtp`：使用介面填寫的 host、port、secure、帳號、密碼、寄件者。
+  - `resend`：使用介面填寫的 Resend API Key 與寄件者，以 `fetch` 呼叫 `POST https://api.resend.com/emails`（`Authorization: Bearer <key>`，JSON 含 `from`、`to`、`subject`、`text`）；不安裝 Resend SDK、不新增套件。
+- **立即生效**：寄信時依目前設定決定 email 的寄送方式，`channelConfigured('email')` 亦同；儲存後不需重新啟動。Telegram、Teams 仍只由環境變數設定。
+- **秘密只寫不讀**：SMTP 密碼與 Resend API Key 以 `deps.secretBox` 加密後存入；API 回應、稽核紀錄與 log 都不出現原文或密文。讀取設定只回傳「是否已設定」（如 `hasPassword: true`）；儲存時密碼欄位留空或省略表示不變更；解密失敗（例如更換 `APP_SECRET`）不可讓程式中止，該寄信方式視為未設定，設定頁提示需要重新輸入。
+- **測試寄信**：設定頁提供「寄送測試信」按鈕與收件者欄位（預設為目前登入者的 Email），用**目前已儲存**的設定同步寄出一封測試信，成功或失敗都直接顯示在頁面；失敗訊息不含密碼或 API Key。端點每位使用者每分鐘 5 次。
+- **權限與稽核**：讀取、儲存、測試寄信都只有系統管理員（`admin:settings`）；儲存與測試寄信寫稽核紀錄（不含秘密）。
+- **設定頁**：`pages/admin/AdminRoutes.tsx` 的 SettingsPage 新增「郵件設定」卡片，放在「企業標誌」之後；選 `env` 時唯讀顯示目前環境變數的 host 與寄件者（不顯示密碼），選 `smtp`／`resend` 時顯示對應欄位；頁面看得出目前實際使用的來源。所有文字走 glossary，兩個語系都要加。
+- **輸入驗證**（zod v4）：寄件者為 Email 或 `名稱 <email>` 格式；port 為 1–65535；`smtp` 的 host 必填；`resend` 第一次設定時 API Key 必填。
+- **不在範圍**：Telegram／Teams 的介面設定、HTML 郵件與附件、寄信佇列與重試邏輯（沿用現有 outbox）、新增環境變數或修改 `docker-compose.yml`（沒有部署變更）、新的視覺樣式。
+
 ---
 
 ### FR-5 使用者體驗
@@ -659,6 +673,9 @@ curl -X POST https://ticket.example.com/api/v1/tickets \
 | AC-REPORT-03 | 匯出 | CSV/XLSX/PDF 筆數與畫面一致；匯出寫入審計日誌 |
 | AC-NOTIFY-01 | 多管道 | Email/Telegram/Teams 皆可送達；失敗重試 3 次並記錄 |
 | AC-NOTIFY-02 | 冪等與隔離 | 同一事件不重複發送；通知內容不含內部備忘 |
+| AC-MAIL-01 | 郵件設定與寄信方式（FR-4.3） | 未設定時寄信走 `env`（既有測試全數通過）；切換 `resend` 後 outbox 以正確 payload 呼叫 Resend、切回 `env` 改用 SMTP（測試用假 `fetch`／sender，不打外部服務）；儲存後不需重新啟動即生效 |
+| AC-MAIL-02 | 秘密保護與權限 | 非系統管理員讀取／儲存／測試寄信皆回 `403`；讀取回應不含密碼與 API Key；DB 存的是密文；密碼留空儲存時保留原值；換 `APP_SECRET` 後讀取不報錯且回應表示秘密需重新輸入；稽核紀錄與錯誤訊息不含秘密 |
+| AC-MAIL-03 | 測試寄信 | 成功與失敗都回傳可顯示的結果（失敗訊息不含秘密）；同一使用者同一分鐘第 6 次回 `429` |
 | AC-I18N-01 | Glossary | 切換 `zh-TW`/`en-US` 全站生效；缺字回退 `en-US` 且不顯示原始 key |
 | AC-I18N-02 | 擴充語系 | 新增 `ja-JP` 僅需匯入字典檔，無需重新編譯 |
 | AC-THEME-01 | Light/Dark | 切換即時生效、無 FOUC、偏好持久化；對比度符合 WCAG AA |
@@ -756,6 +773,7 @@ curl -X POST https://ticket.example.com/api/v1/tickets \
 | FR-3.1~3.4 | 需求 3（Dashboard / 報表 / 3 天未結案） | AC-REPORT-01~03 | §Reporting |
 | FR-4.1 | 需求 4（RBAC） | AC-RBAC-01~02 | §RBAC/IDOR |
 | FR-4.2 | 需求 4（多管道通知） | AC-NOTIFY-01~02 | §Notification |
+| FR-4.3 | 需求變更（郵件設定與 Resend） | AC-MAIL-01~03 | §Notification |
 | FR-5.1 | 需求 5（Glossary 多語系） | AC-I18N-01~02 | §i18n |
 | FR-5.2 | 需求 5（Light/Dark） | AC-THEME-01 | §UI |
 | FR-5.3 | 需求變更（v0.2.0 之後） | AC-THEME-02 | §UI |
