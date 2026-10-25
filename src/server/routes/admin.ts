@@ -30,7 +30,7 @@ import { audit } from '../services/audit.js';
 import { deleteLogo, LOGO_MAX_BYTES, logoUrls, setLogo } from '../services/branding.js';
 import { sendTestEmail } from '../services/notify.js';
 import { getMailSettings, getSetting, hasResendKey, MAIL_PROVIDERS, saveMailSettings, setSetting } from '../services/settings.js';
-import { idParam, parseJson, parseWith, publicUser, rateLimit } from './util.js';
+import { idParam, parseJson, parseWith, publicUser, rateLimit, teamIdsFor } from './util.js';
 
 const ROLE_KEYS = ['super_admin', 'it_manager', 'agent', 'vendor', 'end_user'] as const;
 const TOKEN_SCOPES = ['tickets:read', 'tickets:write'] as const;
@@ -97,17 +97,6 @@ async function activeSuperAdmins(c: AppContext) {
     .from(users)
     .where(and(eq(users.roleKey, 'super_admin'), eq(users.isActive, true)));
   return n;
-}
-
-async function teamIdsFor(db: DB, userIds: number[]): Promise<Map<number, number[]>> {
-  const map = new Map<number, number[]>();
-  if (!userIds.length) return map;
-  const rows = await db
-    .select({ userId: teamMembers.userId, teamId: teamMembers.teamId })
-    .from(teamMembers)
-    .where(inArray(teamMembers.userId, userIds));
-  for (const r of rows) map.set(r.userId, [...(map.get(r.userId) ?? []), r.teamId]);
-  return map;
 }
 
 async function assertTeamsExist(db: DB, teamIds: number[]) {
@@ -216,12 +205,16 @@ export const adminRoutes = new Hono<AppEnv>()
       throw new ApiError(409, 'cannot_modify_self');
     }
     if (body.teamIds) await assertTeamsExist(db, body.teamIds);
-    const [updated] = await db
-      .update(users)
-      .set({ displayName: body.displayName, roleKey: body.role, isActive: body.isActive })
-      .where(eq(users.id, userId))
-      .returning();
-    if (body.teamIds) await replaceTeamMembers(db, userId, body.teamIds);
+    const { teamIds, ...fields } = body;
+    // A teams-only change has nothing to set on the users row.
+    const [updated] = Object.values(fields).some((v) => v !== undefined)
+      ? await db
+          .update(users)
+          .set({ displayName: fields.displayName, roleKey: fields.role, isActive: fields.isActive })
+          .where(eq(users.id, userId))
+          .returning()
+      : [target];
+    if (teamIds) await replaceTeamMembers(db, userId, teamIds);
     if (body.isActive === false || body.role) await db.delete(sessions).where(eq(sessions.userId, userId));
     await audit(c, 'admin.user_updated', { type: 'user', id: userId }, body);
     return c.json(publicUser(updated, body.teamIds ?? (await teamIdsFor(db, [userId])).get(userId) ?? []));

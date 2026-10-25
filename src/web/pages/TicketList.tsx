@@ -24,7 +24,7 @@ export interface TicketRow {
 }
 
 const UNRESOLVED = 'new,open,pending_user';
-const FILTER_KEYS = ['q', 'status', 'priority', 'assignee', 'olderThanDays', 'tags', 'tagsMode', 'slaStatus', 'sort'];
+const FILTER_KEYS = ['q', 'status', 'priority', 'assignee', 'teamId', 'olderThanDays', 'tags', 'tagsMode', 'slaStatus', 'sort'];
 
 export function TicketListPage() {
   const { t } = useI18n();
@@ -36,7 +36,7 @@ export function TicketListPage() {
     () => get<{ items: TicketRow[]; total: number; page: number; perPage: number }>(`/tickets?${query}`),
     [query],
   );
-  const catalog = useLoad(() => get<{ filterableFields?: { key: string; label: string; form: string }[] }>('/catalog'), []);
+  const catalog = useLoad(() => get<{ filterableFields?: { key: string; label: string; form: string }[]; teams?: { id: number; name: string }[] }>('/catalog'), []);
   const [draft, setDraft] = useState(() => Object.fromEntries(FILTER_KEYS.map((k) => [k, params.get(k) ?? ''])));
   const cfEntry = [...params.entries()].find(([k]) => k.startsWith('cf.') || k.startsWith('cfc.'));
   const [cfKey, setCfKey] = useState(cfEntry?.[0] ?? '');
@@ -85,6 +85,7 @@ export function TicketListPage() {
       className: 'nowrap',
       render: (_, row) => row.assignee?.displayName ?? <span className="muted">{t('ui.tickets.unassigned')}</span>,
     },
+    { key: 'team', title: t('ui.tickets.team'), className: 'nowrap', render: (_, row) => row.team ?? '—' },
     {
       key: 'age',
       title: t('ui.tickets.age'),
@@ -156,6 +157,21 @@ export function TicketListPage() {
                 />
               </Field>
             </div>
+            {catalog.data?.teams && (
+              <div {...filter}>
+                <Field label={t('ui.tickets.team')}>
+                  <Choice
+                    value={draft.teamId}
+                    onChange={(v) => set('teamId', v)}
+                    empty={all}
+                    options={[
+                      { value: 'mine', label: t('ui.tickets.my_teams') },
+                      ...catalog.data.teams.map((tm) => ({ value: String(tm.id), label: tm.name })),
+                    ]}
+                  />
+                </Field>
+              </div>
+            )}
             <div {...filter}>
               <Field label={t('ui.tickets.sla')}>
                 <Choice

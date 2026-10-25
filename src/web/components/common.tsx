@@ -116,6 +116,36 @@ export function Choice({
   );
 }
 
+/** antd multiple Select over plain options (values are ids); options carry `title` for e2e like <Choice>. */
+export function MultiChoice({
+  value,
+  onChange,
+  options,
+  ...rest
+}: {
+  value: number[];
+  onChange: (v: number[]) => void;
+  options: Option[];
+  id?: string;
+  disabled?: boolean;
+  placeholder?: ReactNode;
+  style?: React.CSSProperties;
+  'aria-label'?: string;
+}) {
+  return (
+    <Select
+      {...rest}
+      mode="multiple"
+      allowClear
+      value={value}
+      onChange={(v) => onChange((v as (string | number)[]).map(Number))}
+      options={options.map((o) => ({ value: o.value, label: o.label, title: typeof o.label === 'string' ? o.label : undefined }))}
+      popupMatchSelectWidth={false}
+      style={{ minWidth: 160, ...rest.style }}
+    />
+  );
+}
+
 /** Shows an API error (localized title from the server, plus field details). */
 export function ErrorBanner({ error }: { error: unknown }) {
   const { t } = useI18n();

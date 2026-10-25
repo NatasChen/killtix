@@ -1,7 +1,8 @@
 import { and, asc, eq, inArray, lte } from 'drizzle-orm';
 import nodemailer from 'nodemailer';
 import type { Deps } from '../context.js';
-import { notificationLogs, users, type Ticket } from '../db/schema.js';
+import { notificationLogs, teamMembers, teams, users, type Ticket } from '../db/schema.js';
+import { can, ROLE_DEFINITIONS } from '../rbac.js';
 import { mailTransport, type MailTransport } from './settings.js';
 
 export type Channel = 'email' | 'telegram' | 'teams';
@@ -15,6 +16,7 @@ export interface Senders {
 export type TicketEvent =
   | { kind: 'created'; ticket: Ticket }
   | { kind: 'assigned'; ticket: Ticket }
+  | { kind: 'team_assigned'; ticket: Ticket; actorId: number | null }
   | { kind: 'agent_reply'; ticket: Ticket; threadId: number; body: string }
   | { kind: 'customer_reply'; ticket: Ticket; threadId: number; body: string }
   | { kind: 'sla_breached'; ticket: Ticket };
@@ -103,6 +105,22 @@ export async function notifyTicketEvent(deps: Deps, event: TicketEvent) {
     case 'assigned':
       await toUser(t.assigneeId, 'assigned');
       break;
+    case 'team_assigned': {
+      // Internal members of the ticket's team (vendors and end users only see tickets assigned to them).
+      if (!t.teamId || t.assigneeId) break;
+      const [team] = await db.select({ name: teams.name }).from(teams).where(eq(teams.id, t.teamId));
+      const members = await db
+        .select({ id: users.id, role: users.roleKey })
+        .from(teamMembers)
+        .innerJoin(users, eq(users.id, teamMembers.userId))
+        .where(eq(teamMembers.teamId, t.teamId));
+      for (const m of members) {
+        const perms = ROLE_DEFINITIONS[m.role]?.permissions ?? [];
+        if (m.id === event.actorId || !(can(perms, 'ticket:read:team') || can(perms, 'ticket:read:all'))) continue;
+        await toUser(m.id, 'team_assigned', { team: team?.name ?? '' });
+      }
+      break;
+    }
     case 'agent_reply': {
       const requester = await loadUser(t.requesterId);
       // Requesters created by external systems have no inbox worth mailing unless they are real users.

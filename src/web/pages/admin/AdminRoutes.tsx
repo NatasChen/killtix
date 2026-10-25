@@ -4,7 +4,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { del, get, patch, post, put } from '../../api';
 import { useAuth } from '../../auth';
 import { useBranding, type LogoUrls } from '../../branding';
-import { Choice, DateTime, ErrorBanner, Field, PageHeader, ToneTag, useAction, useLoad, usePalette } from '../../components/common';
+import { Choice, DateTime, ErrorBanner, Field, MultiChoice, PageHeader, ToneTag, useAction, useLoad, usePalette } from '../../components/common';
 import { useI18n } from '../../i18n';
 import { CrudPage } from './Crud';
 
@@ -57,14 +57,14 @@ function UsersPage() {
   const teams = useOptions('/admin/teams');
   const action = useAction();
   const [secret, setSecret] = useState<{ email: string; password: string } | null>(null);
-  const [form, setForm] = useState({ email: '', displayName: '', role: 'end_user', teamId: '' });
+  const [form, setForm] = useState({ email: '', displayName: '', role: 'end_user', teamIds: [] as number[] });
   const roles = ROLES.map((r) => ({ value: r, label: t(`ui.role.${r}`) }));
 
   const create = () => {
     void action.run(async () => {
-      const res = await post('/admin/users', { ...form, teamId: form.teamId ? Number(form.teamId) : null });
+      const res = await post('/admin/users', form);
       setSecret({ email: res.user.email, password: res.temporaryPassword });
-      setForm({ email: '', displayName: '', role: 'end_user', teamId: '' });
+      setForm({ email: '', displayName: '', role: 'end_user', teamIds: [] });
       await reload();
     });
   };
@@ -93,11 +93,11 @@ function UsersPage() {
       key: 'team',
       title: t('ui.tickets.team'),
       render: (_, u) => (
-        <Choice
+        <MultiChoice
           aria-label={t('ui.tickets.team')}
-          value={u.teamId ?? ''}
-          onChange={(v) => void update(u.id, { teamId: v ? Number(v) : null })}
-          empty="—"
+          value={u.teamIds ?? []}
+          onChange={(v) => void update(u.id, { teamIds: v })}
+          placeholder="—"
           options={teams}
         />
       ),
@@ -170,7 +170,7 @@ function UsersPage() {
             </Col>
             <Col xs={24} sm={12} lg={6}>
               <Field label={t('ui.tickets.team')}>
-                <Choice value={form.teamId} onChange={(v) => setForm({ ...form, teamId: v })} empty="—" options={teams} style={{ width: '100%' }} />
+                <MultiChoice value={form.teamIds} onChange={(v) => setForm({ ...form, teamIds: v })} options={teams} style={{ width: '100%' }} />
               </Field>
             </Col>
           </Row>
@@ -895,6 +895,7 @@ export function AdminRoutes() {
                 columns={[
                   { label: t('ui.admin.name'), render: (r: any) => r.name },
                   { label: t('ui.admin.description'), render: (r: any) => r.description },
+                  { label: t('ui.admin.members'), render: (r: any) => r.memberCount },
                 ]}
                 fields={[
                   { key: 'name', label: t('ui.admin.name'), type: 'text', required: true },

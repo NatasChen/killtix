@@ -95,7 +95,7 @@ function SystemEvent({ body }: { body: string }) {
 export function TicketDetailPage() {
   const { id } = useParams();
   const { t } = useI18n();
-  const { can } = useAuth();
+  const { can, user: me } = useAuth();
   const p = usePalette();
   const staff = can('ticket:note');
   const { data, error, loading, reload, setData } = useLoad(() => get<TicketDetail>(`/tickets/${encodeURIComponent(id!)}`), [id]);
@@ -126,6 +126,8 @@ export function TicketDetailPage() {
   const canUpdate = can('ticket:update');
   const canTriage = can('ticket:triage');
   const canAssign = can('ticket:assign');
+  // "I'll take it": a team member makes themselves the assignee (same PATCH as choosing yourself in the list).
+  const canClaim = canAssign && !!me && data.assignee?.id !== me.id && !['resolved', 'closed'].includes(data.status);
 
   const applyCanned = (id: string) => {
     const c = catalog.data?.cannedResponses?.find((x) => x.id === Number(id));
@@ -182,14 +184,21 @@ export function TicketDetailPage() {
       key: 'assignee',
       label: t('ui.tickets.assignee'),
       children: canAssign ? (
-        <Choice
-          {...full}
-          aria-label={t('ui.tickets.assignee')}
-          value={data.assignee?.id ?? ''}
-          onChange={(v) => void update({ assigneeId: v ? Number(v) : null })}
-          empty={t('ui.tickets.unassigned')}
-          options={assignable.map((u) => ({ value: u.id, label: `${u.displayName} (${t(`ui.role.${u.role}`)})` }))}
-        />
+        <Flex vertical gap={6} style={{ width: '100%' }}>
+          <Choice
+            {...full}
+            aria-label={t('ui.tickets.assignee')}
+            value={data.assignee?.id ?? ''}
+            onChange={(v) => void update({ assigneeId: v ? Number(v) : null })}
+            empty={t('ui.tickets.unassigned')}
+            options={assignable.map((u) => ({ value: u.id, label: `${u.displayName} (${t(`ui.role.${u.role}`)})` }))}
+          />
+          {canClaim && (
+            <Button size="small" style={{ alignSelf: 'flex-start' }} loading={action.busy} disabled={action.busy} onClick={() => void update({ assigneeId: me.id })}>
+              {t('ui.tickets.claim')}
+            </Button>
+          )}
+        </Flex>
       ) : (
         (data.assignee?.displayName ?? t('ui.tickets.unassigned'))
       ),

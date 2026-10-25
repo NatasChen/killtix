@@ -3,7 +3,8 @@
 import { chromium } from 'playwright';
 const BASE = process.env.BASE_URL ?? 'http://localhost:8080';
 const SHOTS = process.env.SHOTS_DIR ?? '/work/shots';
-const VENDOR = `vendor.${Date.now()}@example.com`;
+const RUN = Date.now();
+const VENDOR = `vendor.${RUN}@example.com`;
 const ADMIN = { email: process.env.ADMIN_EMAIL ?? 'admin@ticket.local', password: process.env.ADMIN_PASSWORD };
 if (!ADMIN.password) throw new Error('ADMIN_PASSWORD is required (a fully set-up super admin)');
 const errors = [];
@@ -83,6 +84,47 @@ await pick(page.getByLabel('角色').first(), '外部廠商');
 await page.getByRole('button', { name: '新增' }).first().click();
 const temp = (await page.locator('.secret-box').first().innerText()).trim();
 await shot('05-admin-users');
+
+step('teams: assign a ticket to a team, filter, claim, multi-team user');
+const NET = `E2E 網路組 ${RUN}`;
+const DESK = `E2E 桌面支援 ${RUN}`;
+for (const name of [NET, DESK]) {
+  const res = await page.request.post(`${BASE}/api/v1/admin/teams`, { data: { name }, headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+  if (!res.ok()) throw new Error(`create team ${name}: ${res.status()}`);
+}
+await page.getByLabel('主選單').getByRole('link', { name: '新增工單' }).click();
+await page.getByLabel('主旨').fill('UI 測試：交換器斷線');
+await pick(page.getByLabel('團隊'), NET);
+await page.getByRole('button', { name: '送出工單' }).click();
+await page.getByRole('heading', { name: 'UI 測試：交換器斷線' }).waitFor();
+await page.locator('.ant-descriptions').getByText('新建立').waitFor(); // a team alone does not start the work
+await page.getByLabel('主選單').getByRole('link', { name: '工單', exact: true }).click();
+await pick(page.getByLabel('團隊'), NET);
+await page.getByRole('button', { name: '套用' }).click();
+await page.waitForURL(/teamId=\d+/);
+const teamRow = page.getByRole('row').filter({ hasText: 'UI 測試：交換器斷線' });
+await teamRow.getByText(NET).waitFor();
+// the list reloads after the filter applies: tickets of other teams must go away
+await page.getByRole('row').filter({ hasText: 'UI 測試：印表機無法列印' }).first().waitFor({ state: 'detached' });
+await teamRow.getByRole('link', { name: 'UI 測試：交換器斷線' }).click();
+await page.getByRole('button', { name: '我來處理' }).click();
+await page.locator('.ant-descriptions').getByText('Bootstrap Administrator (系統管理員)').waitFor();
+await page.locator('.ant-descriptions').getByText('處理中').waitFor();
+if (await page.getByRole('button', { name: '我來處理' }).count()) throw new Error('claim button should disappear once claimed');
+await shot('05a-ticket-claimed');
+await page.getByLabel('主選單').getByRole('link', { name: '使用者' }).click();
+const vendorTeams = page.getByRole('row').filter({ hasText: VENDOR }).getByLabel('團隊');
+await vendorTeams.click(); // a multiple select stays open: pick both, then close it
+for (const name of [NET, DESK]) {
+  await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').getByTitle(name, { exact: true }).click();
+  await page.getByRole('row').filter({ hasText: VENDOR }).getByText(name).waitFor();
+}
+await page.keyboard.press('Escape');
+await page.waitForLoadState('networkidle');
+await page.reload();
+const vendorRow = page.getByRole('row').filter({ hasText: VENDOR });
+await vendorRow.getByText(NET).waitFor();
+await vendorRow.getByText(DESK).waitFor();
 
 step('admin: company logo');
 await page.getByLabel('主選單').getByRole('link', { name: '設定' }).click();

@@ -1,5 +1,7 @@
+import { inArray } from 'drizzle-orm';
 import type { z } from 'zod';
-import type { User } from '../db/schema.js';
+import type { DB } from '../db/client.js';
+import { teamMembers, type User } from '../db/schema.js';
 import { ApiError, badRequest, notFound } from '../errors.js';
 import type { AppContext } from '../context.js';
 
@@ -37,6 +39,23 @@ export async function rateLimit(c: AppContext, key: string, limit: number, windo
     c.header('Retry-After', String(result.resetSeconds));
     throw new ApiError(429, 'rate_limited');
   }
+}
+
+/** Team memberships of the given users (a user can be in several teams). */
+export async function teamIdsFor(db: DB, userIds: number[]): Promise<Map<number, number[]>> {
+  const map = new Map<number, number[]>();
+  if (!userIds.length) return map;
+  const rows = await db
+    .select({ userId: teamMembers.userId, teamId: teamMembers.teamId })
+    .from(teamMembers)
+    .where(inArray(teamMembers.userId, userIds));
+  for (const r of rows) map.set(r.userId, [...(map.get(r.userId) ?? []), r.teamId]);
+  return map;
+}
+
+/** publicUser() with the user's teams loaded. */
+export async function publicUserWithTeams(db: DB, u: User) {
+  return publicUser(u, (await teamIdsFor(db, [u.id])).get(u.id) ?? []);
 }
 
 export function publicUser(u: User, teamIds: number[] = []) {

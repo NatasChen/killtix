@@ -8,7 +8,7 @@ export interface Me {
   email: string;
   displayName: string;
   role: string;
-  teamId: number | null;
+  teamIds: number[];
   locale: string;
   theme: 'light' | 'dark' | 'system';
   twoFactorEnabled: boolean;

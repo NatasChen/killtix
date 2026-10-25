@@ -27,11 +27,12 @@ export function TicketNewPage() {
   const [tags, setTags] = useState('');
   const [fields, setFields] = useState<Record<string, unknown>>({});
   const [assigneeId, setAssigneeId] = useState<number | ''>('');
+  const [teamId, setTeamId] = useState<number | ''>('');
   const topic = topics.data?.find((tp) => tp.id === topicId);
   const staff = can('ticket:note');
   const canAssign = can('ticket:assign');
   const catalog = useLoad(
-    () => (canAssign ? get<{ users?: { id: number; displayName: string; role: string }[] }>('/catalog') : Promise.resolve({ users: [] })),
+    () => (canAssign ? get<{ users?: { id: number; displayName: string; role: string }[]; teams?: { id: number; name: string }[] }>('/catalog') : Promise.resolve({ users: [], teams: [] })),
     [canAssign],
   );
   const assignable = (catalog.data?.users ?? []).filter((u) => ['super_admin', 'it_manager', 'agent', 'vendor'].includes(u.role));
@@ -47,6 +48,7 @@ export function TicketNewPage() {
         customFields,
         tags: tags.split(',').map((s) => s.trim()).filter(Boolean),
         assigneeId: assigneeId || undefined,
+        teamId: teamId || undefined, // blank: the help topic's default team
       });
       navigate(`/tickets/${created.number}`);
     });
@@ -93,6 +95,17 @@ export function TicketNewPage() {
                     onChange={(v) => setAssigneeId(v ? Number(v) : '')}
                     empty={t('ui.tickets.unassigned')}
                     options={assignable.map((u) => ({ value: u.id, label: `${u.displayName} (${t(`ui.role.${u.role}`)})` }))}
+                    style={{ width: '100%' }}
+                  />
+                </Field>
+              </Col>
+              <Col xs={24} sm={12}>
+                <Field label={t('ui.tickets.team')}>
+                  <Choice
+                    value={teamId}
+                    onChange={(v) => setTeamId(v ? Number(v) : '')}
+                    empty={t('ui.tickets.team_default')}
+                    options={(catalog.data?.teams ?? []).map((tm) => ({ value: tm.id, label: tm.name }))}
                     style={{ width: '100%' }}
                   />
                 </Field>

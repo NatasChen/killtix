@@ -19,7 +19,7 @@ import { clientIp, type AppContext, type AppEnv } from '../context.js';
 import { SUPPORTED_LOCALES } from '../i18n/index.js';
 import { audit } from '../services/audit.js';
 import { getSetting } from '../services/settings.js';
-import { parseJson, publicUser, rateLimit } from './util.js';
+import { parseJson, publicUserWithTeams, rateLimit } from './util.js';
 
 const PASSWORD_HISTORY_DEPTH = 5;
 // Compared against when the e-mail is unknown so response time does not reveal account existence.
@@ -66,7 +66,7 @@ export const authRoutes = new Hono<AppEnv>()
     const stage = await nextStage(c, user, false);
     await issueSession(c, user, stage);
     await audit(c, 'auth.login', { type: 'user', id: user.id }, { stage }, user.id);
-    return c.json({ stage, user: publicUser(user) });
+    return c.json({ stage, user: await publicUserWithTeams(c.var.deps.db, user) });
   })
 
   .post('/logout', anyStage, async (c) => {
@@ -78,7 +78,7 @@ export const authRoutes = new Hono<AppEnv>()
 
   .get('/me', anyStage, async (c) => {
     const auth = authOf(c);
-    return c.json({ stage: auth.stage, permissions: auth.permissions, user: publicUser(auth.user) });
+    return c.json({ stage: auth.stage, permissions: auth.permissions, user: await publicUserWithTeams(c.var.deps.db, auth.user) });
   })
 
   .patch('/me', guard(), async (c) => {
@@ -94,7 +94,7 @@ export const authRoutes = new Hono<AppEnv>()
     );
     const patch = { ...body, telegramChatId: body.telegramChatId === '' ? null : body.telegramChatId };
     await c.var.deps.db.update(users).set(patch).where(eq(users.id, auth.user.id));
-    return c.json({ user: publicUser(await reloadUser(c, auth.user.id)) });
+    return c.json({ user: await publicUserWithTeams(c.var.deps.db, await reloadUser(c, auth.user.id)) });
   })
 
   .post('/change-password', guard({ stages: ['full', 'password_change'] }), async (c) => {
@@ -144,7 +144,7 @@ export const authRoutes = new Hono<AppEnv>()
     const stage = await nextStage(c, updated, auth.stage === 'full');
     await issueSession(c, updated, stage);
     await audit(c, 'auth.password_changed', { type: 'user', id: user.id });
-    return c.json({ stage, user: publicUser(updated) });
+    return c.json({ stage, user: await publicUserWithTeams(c.var.deps.db, updated) });
   })
 
   .post('/2fa/setup', guard({ stages: ['full', 'mfa_enroll'] }), async (c) => {
@@ -177,7 +177,7 @@ export const authRoutes = new Hono<AppEnv>()
     const updated = await reloadUser(c, auth.user.id);
     await replaceSession(c, updated, 'full');
     await audit(c, 'auth.2fa_enabled', { type: 'user', id: auth.user.id });
-    return c.json({ stage: 'full', recoveryCodes: recovery.plain, user: publicUser(updated) });
+    return c.json({ stage: 'full', recoveryCodes: recovery.plain, user: await publicUserWithTeams(c.var.deps.db, updated) });
   })
 
   .post('/2fa/verify', guard({ stages: ['mfa_verify'] }), async (c) => {
@@ -209,7 +209,7 @@ export const authRoutes = new Hono<AppEnv>()
     }
     const stage = await nextStage(c, user, true);
     await replaceSession(c, user, stage);
-    return c.json({ stage, user: publicUser(user) });
+    return c.json({ stage, user: await publicUserWithTeams(c.var.deps.db, user) });
   })
 
   .post('/2fa/disable', guard(), async (c) => {
@@ -226,5 +226,5 @@ export const authRoutes = new Hono<AppEnv>()
       .set({ twoFactorEnabled: false, totpSecret: null, totpPendingSecret: null, recoveryCodeHashes: [] })
       .where(eq(users.id, user.id));
     await audit(c, 'auth.2fa_disabled', { type: 'user', id: user.id });
-    return c.json({ user: publicUser(await reloadUser(c, user.id)) });
+    return c.json({ user: await publicUserWithTeams(c.var.deps.db, await reloadUser(c, user.id)) });
   });

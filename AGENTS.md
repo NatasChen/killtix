@@ -14,7 +14,7 @@
 | --- | --- |
 | 目前版本 | **0.4.0**（2026-10-25，git tag `v0.4.0`），見 [CHANGELOG.md](CHANGELOG.md) |
 | 支援部署 | Docker Compose（app + PostgreSQL 16 + Redis 7）。Cloudflare 為實驗性、**未實作** |
-| 測試狀態 | 83 個 Vitest 測試、`scripts/validate.sh`、`scripts/smoke.sh`（24 項）、`scripts/ui-e2e.sh` 全部通過 |
+| 測試狀態 | 91 個 Vitest 測試、`scripts/validate.sh`、`scripts/smoke.sh`（24 項）、`scripts/ui-e2e.sh` 全部通過 |
 | 未實作 | AD/LDAP、SAML、OIDC、SCIM、FIDO2、附件、SLA 營業時間、Cloudflare、多副本背景工作 |
 | 待客戶確認 | 見 [specs/DECISIONS.md](specs/DECISIONS.md) 中標示 ⏳ 的項目（預設管理員密碼、SSO 時程、Cloudflare 去留） |
 | 下一步建議 | v1.1：SSO（`users.identity_provider` 已預留）→ 附件 → SLA 營業時間 |
@@ -74,7 +74,7 @@ src/server/
   config.ts           所有環境變數的唯一入口（loadConfig）。新增環境變數要同時更新 .env.example、docker-compose.yml、docs/DEPLOYMENT_GUIDE.md
   context.ts          Deps（db/config/glossary/rateLimiter/secretBox/clock）、AuthContext、AppEnv 型別
   errors.ts           ApiError(status, code)；code 對應 glossary 的 error.<code>
-  rbac.ts             ROLE_DEFINITIONS（角色→權限）、can()、isStaff()、ticketScope()（查詢層授權）
+  rbac.ts             ROLE_DEFINITIONS（角色→權限）、can()、isStaff()、ticketScope()（查詢層授權；團隊範圍經 `team_members` 子查詢，一人可屬多個團隊）
   cli.ts              維運指令：reset-password <email>
   auth/crypto.ts      sha256、隨機 token、bcrypt、密碼政策、隨機密碼、AES-GCM secretBox
   auth/session.ts     session cookie、API token 驗證（authenticate）、csrfGuard、guard()、nextStage()
@@ -109,7 +109,7 @@ src/web/
   pages/…             各頁面；pages/admin/Crud.tsx 是簡單資源的通用 CRUD 元件
   public/theme-init.js 首次繪製前套用主題（CSP 不允許 inline script，所以是外部檔）
 drizzle/              自動產生的 migration，不要手改
-tests/                Vitest：helpers.ts（測試環境工廠）、auth / tickets / notify / i18n 測試；e2e/ui.mjs（瀏覽器）
+tests/                Vitest：helpers.ts（測試環境工廠）、auth / tickets / teams / notify / i18n 測試；e2e/ui.mjs（瀏覽器）
 scripts/              init-env.sh（建立 .env、只填空白密鑰）、validate.sh、smoke.sh、ui-e2e.sh、check-links.mjs、
                       seed-sample-tickets.py（經 API 建立 30 張範例工單，只用 Python 標準函式庫）
 specs/                客戶需求、決策紀錄、CrewAI 需求變更單
@@ -132,6 +132,7 @@ crewai_ticket_build.py CrewAI 迭代工具（PM → SAr → PG → UI 設計師 
 違反任何一條都視為安全或資料正確性問題，必須有測試保護。
 
 1. **授權在 SQL 查詢層套用**：讀取工單一律透過 `loadVisibleTicket()` 或 `buildTicketConditions()`，兩者都使用 `ticketScope()`。不可以先查全部再在程式中過濾。
+   團隊成員資格只看 `team_members`（`users.team_id` 已停用、只保留給一次性回填，DECISIONS D14）；廠商與一般使用者即使在團隊中也不會因此看到團隊工單。
 2. **看不到的工單回 404**，不是 403（不洩漏存在性）。
 3. **`visibility='internal'` 的自訂欄位、系統事件與既有的內部備忘**永遠不回傳給非 staff（`isStaff()` = 有 `ticket:note` 權限），也**永遠不觸發通知**。
    新的回覆一律公開，不可再新增內部備忘（DECISIONS D12）；回覆是否通知由 `POST /tickets/{id}/threads` 的 `notify` 決定。
@@ -210,7 +211,7 @@ crewai_ticket_build.py CrewAI 迭代工具（PM → SAr → PG → UI 設計師 
 
 | 指令 | 內容 | 需要 |
 | --- | --- | --- |
-| `npm test` | 83 個單元/整合測試（PGlite） | Node |
+| `npm test` | 91 個單元/整合測試（PGlite） | Node |
 | `TEST_DATABASE_URL=postgres://… npm test` | 同上，改用真實 PostgreSQL + 正式驅動 | 一個 Postgres（見下） |
 | `npm run validate` | 型別、schema/migration 一致、測試、文件中的測試數、建置、OpenAPI JSON、Markdown 連結、compose 設定 | Node（Docker 可選） |
 | `scripts/smoke.sh <url> <預設管理員密碼>` | 部署後 API 端到端 24 項（會改管理員密碼為 `Smoke-Test-Passw0rd!`） | 執行中的系統 |
