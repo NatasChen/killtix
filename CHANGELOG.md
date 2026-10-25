@@ -5,14 +5,17 @@
 ## [Unreleased]
 
 ### Added
+- 新增工單時可直接指派負責人（有 `ticket:assign` 權限的系統管理員、IT 主管、工程師才看得到這個欄位）；指派後工單直接為「處理中」，並通知負責人，與事後指派相同。
 - 企業標誌（PRD FR-5.5，DECISIONS D11）：系統管理員可在「系統設定」上傳 PNG 標誌（512 KB 以內，伺服器檢查 PNG 檔頭），顯示在登入頁與側邊欄頂端並依比例縮放；可另外上傳深色背景用的標誌，側邊欄與深色主題的登入頁使用，沒有時改用淺色的。標誌存在新的 `brand_logos` 資料表（migration `0001_brand_logos`），由公開的 `GET /api/v1/branding` 與 `/api/v1/branding/logo/{light|dark}` 提供；新增 `tests/branding.test.ts`（5 項）與 e2e 的上傳步驟。
 
 ### Changed
+- 回覆不再區分對外回覆與內部備忘（DECISIONS D12）：所有新回覆都對能看到工單的人公開，回覆時用「寄送 Email 通知」勾選框（預設勾選）決定是否通知對方（工程師回覆通知申請人，申請人回覆通知負責人）。API 的 `POST /tickets/{id}/threads` 改為 `{ body, notify }`，舊的 `type: "internal_note"` 回 400；已存在的內部備忘仍只有內部人員看得到。
 - 介面改用 Ant Design（antd 6.6.5，DECISIONS D10）：所有頁面改用 antd 的 Layout、Menu、Card、Table、Form、Select、Tag、Alert 等元件；顏色集中在 `src/web/palette.ts`，以 theme token 傳給 antd，深色主題用 `darkAlgorithm`。D9 的配色（深靛藍側邊欄、狀態色、sticker 色盤）與文字、行為、路由不變。`styles.css` 只剩版面；`tests/styles.test.ts` 改為檢查 `palette.ts` 與 antd 主題（25 項），e2e 改用 antd 下拉選單的操作方式。
 - UI 重新設計第 2 批（PRD FR-5.4）：介面加入色彩。側邊欄改為深靛藍；選單項目依功能群組加上色塊；狀態 badge 各用一種色相，不再與 L3 優先度撞色；儀表板統計卡依意義加上色帶，數字統一為內文色；長條圖依狀態、優先度上色，標籤與服務類別輪流使用 sticker 色。sticker 色盤改為可用於有意義的資料色（`specs/DECISIONS.md` D9）。
 - 版面修正：工單清單的編號、badge、負責人、已開立不再折行；表格內容垂直置中；使用者表格操作欄的框線對齊；儀表板卡片每列 4 張、圖表每列 2 張；工單詳情右欄加寬，「加入關注者」選單與按鈕在同一列。
 
 ### Fixed
+- 工單詳情右欄：負責人名稱較長時，下拉選單會把面板撐寬，手機寬度出現水平捲軸；改為截斷顯示（滑過可看完整名稱）。
 - 未登入時 `/auth/me` 的 401 會觸發重新整理登入狀態，而重新整理又呼叫 `/auth/me`，登入頁因此不斷輪詢伺服器；`/auth/me` 本身的 401 不再觸發重新整理。
 
 ## [0.3.0] - 2026-10-24

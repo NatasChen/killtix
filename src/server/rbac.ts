@@ -4,10 +4,10 @@ import { tickets, ticketWatchers, type User } from './db/schema.js';
 /**
  * Permission catalogue.
  *  ticket:read:all | ticket:read:team | ticket:read:own  - which tickets are visible
- *  ticket:note    - staff: see/write internal notes and internal custom fields
+ *  ticket:note    - staff: see internal custom fields and the internal notes written before replies became public (D12)
  *  ticket:update  - change status
  *  ticket:triage  - change priority, tags, help topic
- *  ticket:assign  - change assignee/team, manage watchers
+ *  ticket:assign  - set the assignee (also when creating), change team, manage watchers
  */
 export const ROLE_DEFINITIONS: Record<string, { name: string; description: string; permissions: string[] }> = {
   super_admin: { name: '系統管理員', description: '全功能系統管理', permissions: ['*'] },

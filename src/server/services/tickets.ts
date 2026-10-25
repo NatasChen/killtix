@@ -191,8 +191,19 @@ export const createTicketSchema = z.object({
   requesterId: z.number().int().positive().optional(),
   requester: z.object({ email: z.email().max(255), name: z.string().trim().min(1).max(128).optional() }).optional(),
   externalId: z.string().trim().min(1).max(255).optional(),
+  assigneeId: z.number().int().positive().optional(), // web form; needs ticket:assign
 });
 export type CreateTicketInput = z.infer<typeof createTicketSchema>;
+
+const ASSIGNABLE_ROLES = ['super_admin', 'it_manager', 'agent', 'vendor'];
+
+/** Only active staff and vendor accounts can be assignees. */
+async function assertAssignable(db: DB, userId: number) {
+  const [u] = await db.select().from(users).where(eq(users.id, userId));
+  if (!u || !u.isActive || !ASSIGNABLE_ROLES.includes(u.roleKey)) {
+    throw badRequest(undefined, { errors: [{ path: 'assigneeId', message: 'user cannot be assigned' }] });
+  }
+}
 
 export async function createTicket(
   deps: Deps,
@@ -258,6 +269,11 @@ export async function createTicket(
     }
   }
 
+  if (input.assigneeId) {
+    if (!can(actor.permissions, 'ticket:assign')) throw forbidden();
+    await assertAssignable(db, input.assigneeId);
+  }
+
   const now = clock();
   // Free-form tags are created by staff/API; end users may only pick existing tags.
   const requestedTagIds =
@@ -283,6 +299,8 @@ export async function createTicket(
           slaPlanId,
           requesterId,
           teamId: topic?.defaultTeamId ?? null,
+          // assigned on creation: someone is already working on it, as when assigning later
+          ...(input.assigneeId ? { assigneeId: input.assigneeId, status: 'open' as const } : {}),
           source,
           externalSource,
           externalId,
@@ -305,6 +323,16 @@ export async function createTicket(
         source,
         createdAt: now,
       });
+      if (row.assigneeId) {
+        await tx.insert(ticketThreads).values({
+          ticketId: row.id,
+          authorId: actor.user.id,
+          type: 'system_event',
+          visibility: 'internal',
+          body: JSON.stringify({ event: 'assignee', from: null, to: row.assigneeId }),
+          createdAt: now,
+        });
+      }
       return row;
     });
   } catch (err) {
@@ -320,6 +348,7 @@ export async function createTicket(
   }
 
   await notifyTicketEvent(deps, { kind: 'created', ticket });
+  if (ticket.assigneeId) await notifyTicketEvent(deps, { kind: 'assigned', ticket });
   return { ticket, created: true };
 }
 
@@ -677,12 +706,7 @@ export async function updateTicket(
   }
   if (input.assigneeId !== undefined && input.assigneeId !== ticket.assigneeId) {
     need('ticket:assign');
-    if (input.assigneeId) {
-      const [u] = await db.select().from(users).where(eq(users.id, input.assigneeId));
-      if (!u || !u.isActive || !['super_admin', 'it_manager', 'agent', 'vendor'].includes(u.roleKey)) {
-        throw badRequest(undefined, { errors: [{ path: 'assigneeId', message: 'user cannot be assigned' }] });
-      }
-    }
+    if (input.assigneeId) await assertAssignable(db, input.assigneeId);
     patch.assigneeId = input.assigneeId;
     if (input.assigneeId && ticket.status === 'new' && !patch.status) patch.status = 'open';
     events.push({ event: 'assignee', from: ticket.assigneeId, to: input.assigneeId });
@@ -745,24 +769,28 @@ export async function updateTicket(
 }
 
 // ---------------------------------------------------------------------------
-// Threads (replies & internal notes)
+// Threads (replies)
 // ---------------------------------------------------------------------------
-export const threadSchema = z.object({
-  type: z.enum(['reply', 'internal_note']).default('reply'),
-  body: z.string().trim().min(1).max(100_000),
-});
+// Every reply is visible to everyone who can see the ticket; the writer only decides whether it is
+// notified (DECISIONS D12). New internal notes are no longer accepted: strict() turns the old
+// `type: 'internal_note'` into a 400 instead of silently publishing the text.
+export const threadSchema = z
+  .object({
+    body: z.string().trim().min(1).max(100_000),
+    notify: z.boolean().default(true),
+  })
+  .strict();
 
 export async function addThread(deps: Deps, actor: Actor, ticket: Ticket, input: z.infer<typeof threadSchema>) {
   const { db, clock } = deps;
   const now = clock();
   const staff = isStaff(actor.permissions);
-  if (input.type === 'internal_note' && !staff) throw forbidden();
-  if (input.type === 'reply' && !can(actor.permissions, 'ticket:reply')) throw forbidden();
+  if (!can(actor.permissions, 'ticket:reply')) throw forbidden();
   if (ticket.status === 'closed') throw new ApiError(409, 'ticket_closed');
 
   // Staff (and assigned vendors) answer the requester; everyone else writes as the customer.
   const isAgentSide = staff || (ticket.assigneeId === actor.user.id && actor.user.id !== ticket.requesterId);
-  const type = input.type === 'internal_note' ? 'internal_note' : isAgentSide ? 'agent_reply' : 'customer_message';
+  const type = isAgentSide ? 'agent_reply' : 'customer_message';
   const patch: Partial<Ticket> = {};
   if (type === 'agent_reply') {
     if (!ticket.firstRespondedAt) patch.firstRespondedAt = now;
@@ -781,7 +809,7 @@ export async function addThread(deps: Deps, actor: Actor, ticket: Ticket, input:
         ticketId: ticket.id,
         authorId: actor.user.id,
         type,
-        visibility: type === 'internal_note' ? 'internal' : 'public',
+        visibility: 'public',
         body: input.body,
         createdAt: now,
       })
@@ -794,8 +822,10 @@ export async function addThread(deps: Deps, actor: Actor, ticket: Ticket, input:
     return { thread, updated };
   });
 
-  if (type === 'agent_reply') await notifyTicketEvent(deps, { kind: 'agent_reply', ticket: updated, threadId: thread.id, body: input.body });
-  if (type === 'customer_message') await notifyTicketEvent(deps, { kind: 'customer_reply', ticket: updated, threadId: thread.id, body: input.body });
+  if (input.notify) {
+    const kind = type === 'agent_reply' ? 'agent_reply' : 'customer_reply';
+    await notifyTicketEvent(deps, { kind, ticket: updated, threadId: thread.id, body: input.body });
+  }
   return { thread, ticket: updated };
 }
 

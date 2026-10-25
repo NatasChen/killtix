@@ -38,14 +38,14 @@ describe('notification outbox', () => {
     expect(assigned.find((m) => m.channel === 'telegram')!.recipient).toBe('4242');
   });
 
-  it('never notifies about internal notes and only sends the public reply to the requester', async () => {
+  it('notifies about a reply only when the writer asks for it, with only that reply', async () => {
     const requester = await ctx.login('requester@example.com');
     const t = (await requester.post('/api/v1/tickets', { subject: 'Need help' })).body;
     const before = (await outbox()).length;
-    await admin.post(`/api/v1/tickets/${t.id}/threads`, { type: 'internal_note', body: 'internal: user is VIP' });
+    await admin.post(`/api/v1/tickets/${t.id}/threads`, { body: 'checked the VIP list', notify: false });
     expect((await outbox()).length).toBe(before);
 
-    await admin.post(`/api/v1/tickets/${t.id}/threads`, { body: 'Please restart.' });
+    await admin.post(`/api/v1/tickets/${t.id}/threads`, { body: 'Please restart.' }); // notify defaults to true
     const [mail] = (await outbox(eq(notificationLogs.recipient, 'requester@example.com')));
     expect(mail.body).toContain('Please restart.');
     expect(mail.body).not.toContain('VIP');

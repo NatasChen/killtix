@@ -53,6 +53,10 @@ code, .mono { font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, mono
 .bar-row .ant-progress { margin: 0; }
 .bar-row .num { text-align: right; }
 
+/* ticket properties: let the value column shrink so a long selected name (assignee) is truncated, not widening the panel */
+.ticket-props table { table-layout: fixed; width: 100%; }
+.ticket-props .ant-descriptions-item-container .ant-descriptions-item-content { min-width: 0; }
+
 /* conversation */
 .msg { border-radius: 8px; padding: 12px 16px; }
 .msg.system_event { padding: 6px 12px; font-size: 12px; }

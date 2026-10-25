@@ -176,8 +176,8 @@
 | 外部廠商 IDOR 越權 | §4 | 26 | 20 | 5 | 1 | 22 ✅ / 3 ⚠️ / 1 ❌ |
 | SOC API Rate Limiting | §5.1 | 18 | 12 | 5 | 1 | 16 ✅ / 2 ⚠️ |
 | SOC API 資料過濾（>3 天） | §5.2 | 22 | 16 | 5 | 1 | 20 ✅ / 2 ⚠️ |
-| 系統回歸 | §6 | 54 | 31 | 19 | 4 | 45 ✅ / 7 ⚠️ / 2 ❌ |
-| **合計** | — | **154** | **105** | **41** | **8** | **131 ✅ / 18 ⚠️ / 5 ❌** |
+| 系統回歸 | §6 | 56 | 32 | 20 | 4 | 47 ✅ / 7 ⚠️ / 2 ❌ |
+| **合計** | — | **156** | **106** | **42** | **8** | **133 ✅ / 18 ⚠️ / 5 ❌** |
 
 > 自動化比例約 **85%**；手動案例集中於 UI 視覺、瀏覽器相容性與需人工判讀的資安探索。
 
@@ -421,7 +421,7 @@
 | SEC-IDOR-020 | 內部備忘不可見（API） | `TCK-D` 含 `internal_note`，`U-VD1` 被指派 | `GET /tickets/{TCK-D}` | `200`；`threads` **不含** `type='internal_note'` 或 `visibility='internal'` 之項目 | ✅ | P0 |
 | SEC-IDOR-021 | 內部備忘不可見（UI） | 同上 | Playwright 開啟 `TCK-D` | 畫面無內部備忘內容；DOM 不含該文字 | ✅ | P0 |
 | SEC-IDOR-022 | 直接以 thread id 讀取 | 取得 `internal_note` 的 thread id（由管理員查得） | `GET /threads/{internal_thread_id}` | `404`；不得回傳內容 | ✅ | P0 |
-| SEC-IDOR-023 | 回覆時注入內部備忘 | `U-VD1` | `POST /tickets/{TCK-A}/threads` body `{"type":"internal_note","body":"..."}` | `403 forbidden`（vendor 無 `internal_note` 權限）；不得建立 | ✅ | P0 |
+| SEC-IDOR-023 | 以舊格式新增內部備忘 | 任何角色 | `POST /tickets/{TCK-A}/threads` body `{"type":"internal_note","body":"..."}` | `400`（D12 起不再接受內部備忘）；不得建立，也不得當成公開回覆 | ✅ | P0 |
 | SEC-IDOR-024 | 回覆可見性強制 | 同上 | `POST .../threads` body `{"type":"agent_reply","visibility":"internal"}` | `403` 或自動降級為 `public`；不得產生內部可見項目 | ✅ | P0 |
 | SEC-IDOR-025 | 通知內容不含內部備忘 | 觸發 `ticket.assigned` 給 `U-VD1` | 檢視 Mailpit / Telegram 測試訊息 | 訊息不含 `internal_note` 內容；不含 `visibility=internal` 欄位 | ✅ | P0 |
 | SEC-IDOR-026 | 附件下載越權 | `TCK-C` 有附件 | `GET /attachments/{id}/download`（`U-VD1`） | `404`；不得回 `302` 預簽 URL | ✅ | P0 |
@@ -550,7 +550,7 @@
 | REG-TICKET-005 | 狀態機合法轉移 | FR-2.8 | `new→open→pending_user→open→resolved→closed` | 全部 `200` | ✅ | P0 |
 | REG-TICKET-006 | 非法狀態轉移 | FR-2.8 | `closed→new`、`new→resolved` | `409 Conflict` | ✅ | P0 |
 | REG-TICKET-007 | Reopen 計數 | FR-2.8 | `resolved→open` | `reopen_count` +1 | ✅ | P0 |
-| REG-TICKET-008 | Thread 類型與可見性 | AC-TICKET-04 | 建立 4 類型 thread | `visibility` 正確；內部備忘隔離 | ✅ | P0 |
+| REG-TICKET-008 | Thread 類型與可見性 | AC-TICKET-04 | 回覆、系統事件、既有內部備忘 | 新回覆為 `public`；既有內部備忘隔離 | ✅ | P0 |
 | REG-TICKET-009 | Email 執行緒歸併 | AC-TICKET-04 | 寄送主旨含 `[#TCK-...]` 之郵件 | 歸併至原工單；不建立新單 | ⚠️ | P1 |
 | REG-TICKET-010 | Canned Response 變數插值 | AC-TICKET-05 | 插入範本 | `%{ticket.number}` 等正確替換 | ✅ | P0 |
 | REG-TICKET-011 | Tag any/all 篩選 | AC-TICKET-06 | `tags=a,b&tags_mode=any/all` | 結果符合集合語意 | ✅ | P0 |
@@ -558,6 +558,8 @@
 | REG-TICKET-013 | 優先級語意別名 | FR-2.7 | `priority="critical"` | 映射為 5 | ✅ | P0 |
 | REG-TICKET-014 | 附件型別白名單 | FR-1.7 | 上傳 `.exe` | `400`；不儲存 | ✅ | P0 |
 | REG-TICKET-015 | 附件病毒掃描狀態 | FR-1.7 | 上傳測試惡意樣本 | `scan_status='infected'`；不可下載 | ⚠️ | P1 |
+| REG-TICKET-016 | 新增工單時指派 | FR-2.10 | 系統管理員開單並指定工程師；一般使用者帶 `assigneeId`；指派給一般使用者 | 工單為 `open`、負責人正確並通知負責人；一般使用者 `403`；不可指派的對象 `400` | ✅ | P1 |
+| REG-TICKET-017 | 回覆的通知勾選 | AC-TICKET-04 | 回覆 `notify:false`，再以預設值回覆 | 第一則不產生任何通知；第二則通知申請人且只含該則內容 | ✅ | P0 |
 
 ### 6.4 SLA 回歸（REG-SLA）
 
@@ -593,7 +595,7 @@
 | REG-NOTIFY-003 | Teams 送達 | AC-NOTIFY-01 | 同上 | 測試頻道收到 Adaptive Card | ✅ | P0 |
 | REG-NOTIFY-004 | 失敗重試 3 次 | AC-NOTIFY-01 | 停用 SMTP → 觸發 | `attempts=3`；`status='failed'`；`last_error` 有值 | ✅ | P0 |
 | REG-NOTIFY-005 | 冪等去重 | AC-NOTIFY-02 | 同一 `event_id` 重送 | 僅 1 筆 `sent`；其餘 `skipped_duplicate` | ✅ | P0 |
-| REG-NOTIFY-006 | 內容不含內部備忘 | AC-NOTIFY-02 | 觸發含內部備忘之工單通知 | 訊息不含內部內容 | ✅ | P0 |
+| REG-NOTIFY-006 | 內容不含其他回覆 | AC-NOTIFY-02 | 先回覆 `notify:false`，再回覆並通知 | 通知只含該則回覆，不含未通知的回覆 | ✅ | P0 |
 | REG-NOTIFY-007 | 連續失敗 5 次告警 | FR-4.2 | 模擬 Teams 連續失敗 | 觸發 `notification.failed_alert` 給管理員 | ⚠️ | P1 |
 | REG-NOTIFY-008 | 重送 API | FR-4.2 | `POST /notifications/{id}/resend` | 新 `event_id`；重新入佇列 | ✅ | P1 |
 
@@ -838,7 +840,7 @@ $PSQL -f scripts/qa/fixtures.sql
 | FR-1.5 Session / Token | AC-SEC-01.5 | SEC-BA-033~037、REG-AUTH-011~012 | §3.5、§6.2 |
 | FR-1.6 審計日誌 | AC-SEC-01.5 / 01.6 | SEC-BA-030、SEC-BF-010~011、SEC-IDOR-035 | §3、§4 |
 | FR-1.7 資料保護 | REG-SEC-001~008 | §6.9 |
-| FR-2.1~2.8 工單核心 | AC-TICKET-01~07 | REG-TICKET-001~015 | §6.3 |
+| FR-2.1~2.10 工單核心 | AC-TICKET-01~07 | REG-TICKET-001~017 | §6.3 |
 | FR-2.9 SOC REST API | AC-API-01~02 | API-RL-001~018 | §5.1 |
 | FR-3.1~3.3 報表 | AC-REPORT-02~03 | REG-REPORT-001~008 | §6.5 |
 | FR-3.4 >3 天未結案 | **AC-REPORT-01** | API-FLT-001~022 | §5.2 |

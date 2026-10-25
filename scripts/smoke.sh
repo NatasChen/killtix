@@ -46,7 +46,7 @@ code=$(req POST /tickets '{"subject":"Smoke: VPN down","description":"cannot con
 [ "$code" = 201 ] || fail "create ticket: $code $(body)"
 number=$(body | json "d['number']")
 ok "ticket $number created"
-check "internal note added" 201 "$(req POST "/tickets/$number/threads" '{"type":"internal_note","body":"internal smoke note"}')"
+check "reply without notification" 201 "$(req POST "/tickets/$number/threads" '{"body":"smoke reply","notify":false}')"
 check "status → pending_user" 200 "$(req PATCH "/tickets/$number" '{"status":"pending_user"}')"
 check "illegal transition → 409" 409 "$(req PATCH "/tickets/$number" '{"status":"new"}')"
 

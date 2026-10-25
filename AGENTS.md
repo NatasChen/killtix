@@ -14,7 +14,7 @@
 | --- | --- |
 | 目前版本 | **0.3.0**（2026-10-24，git tag `v0.3.0`），見 [CHANGELOG.md](CHANGELOG.md) |
 | 支援部署 | Docker Compose（app + PostgreSQL 16 + Redis 7）。Cloudflare 為實驗性、**未實作** |
-| 測試狀態 | 73 個 Vitest 測試、`scripts/validate.sh`、`scripts/smoke.sh`（24 項）、`scripts/ui-e2e.sh` 全部通過 |
+| 測試狀態 | 75 個 Vitest 測試、`scripts/validate.sh`、`scripts/smoke.sh`（24 項）、`scripts/ui-e2e.sh` 全部通過 |
 | 未實作 | AD/LDAP、SAML、OIDC、SCIM、FIDO2、附件、SLA 營業時間、Cloudflare、多副本背景工作 |
 | 待客戶確認 | 見 [specs/DECISIONS.md](specs/DECISIONS.md) 中標示 ⏳ 的項目（預設管理員密碼、SSO 時程、Cloudflare 去留） |
 | 下一步建議 | v1.1：SSO（`users.identity_provider` 已預留）→ 附件 → SLA 營業時間 |
@@ -132,7 +132,8 @@ crewai_ticket_build.py CrewAI 迭代工具（PM → SAr → PG → UI 設計師 
 
 1. **授權在 SQL 查詢層套用**：讀取工單一律透過 `loadVisibleTicket()` 或 `buildTicketConditions()`，兩者都使用 `ticketScope()`。不可以先查全部再在程式中過濾。
 2. **看不到的工單回 404**，不是 403（不洩漏存在性）。
-3. **內部備忘與 `visibility='internal'` 的自訂欄位**永遠不回傳給非 staff（`isStaff()` = 有 `ticket:note` 權限），也**永遠不觸發通知**。
+3. **`visibility='internal'` 的自訂欄位、系統事件與既有的內部備忘**永遠不回傳給非 staff（`isStaff()` = 有 `ticket:note` 權限），也**永遠不觸發通知**。
+   新的回覆一律公開，不可再新增內部備忘（DECISIONS D12）；回覆是否通知由 `POST /tickets/{id}/threads` 的 `notify` 決定。
 4. **改密前、2FA 前不能使用任何業務 API**：由 `guard()` 的 stage 檢查保證。新增路由一定要加 `guard()`。唯一例外是 `routes/branding.ts` 的企業標誌讀取（登入前就要顯示，DECISIONS D11），不可再加其他資料到這裡。
 5. **所有使用者可見文字走 glossary**：前端 `t('ui.…')`、後端錯誤 `ApiError` code → `error.<code>`、通知 `notify.*`。新 key 必須**同時**加到 `zh-TW.ts` 與 `en-US.ts`（`tests/i18n.test.ts` 會檢查）。動態 key（`` t(`ui.role.${x}`) ``）要把前綴與可能值登記到該測試的 `DYNAMIC` 表。
 6. **資料表只在 `src/server/db/schema.ts` 定義**，改完執行 `npm run db:generate`，連同 `drizzle/` 一起提交。不要手寫或修改已發布的 migration。
@@ -207,7 +208,7 @@ crewai_ticket_build.py CrewAI 迭代工具（PM → SAr → PG → UI 設計師 
 
 | 指令 | 內容 | 需要 |
 | --- | --- | --- |
-| `npm test` | 73 個單元/整合測試（PGlite） | Node |
+| `npm test` | 75 個單元/整合測試（PGlite） | Node |
 | `TEST_DATABASE_URL=postgres://… npm test` | 同上，改用真實 PostgreSQL + 正式驅動 | 一個 Postgres（見下） |
 | `npm run validate` | 型別、schema/migration 一致、測試、建置、OpenAPI JSON、Markdown 連結、compose 設定 | Node（Docker 可選） |
 | `scripts/smoke.sh <url> <預設管理員密碼>` | 部署後 API 端到端 24 項（會改管理員密碼為 `Smoke-Test-Passw0rd!`） | 執行中的系統 |

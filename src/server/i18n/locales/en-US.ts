@@ -116,9 +116,9 @@ const enUS: Record<string, string> = {
   'ui.source.web': 'web', 'ui.source.api': 'API', 'ui.source.email': 'e-mail',
 
   'ui.thread.customer_message': 'Customer', 'ui.thread.agent_reply': 'Reply', 'ui.thread.internal_note': 'Internal note',
-  'ui.thread.system_event': 'System', 'ui.thread.reply_public': 'Public reply', 'ui.thread.canned': 'Insert canned response…',
-  'ui.thread.reply_placeholder': 'Write a reply (the requester is notified)', 'ui.thread.internal_placeholder': 'Visible to staff only; the requester is not notified',
-  'ui.thread.send': 'Send reply', 'ui.thread.add_note': 'Add internal note',
+  'ui.thread.system_event': 'System', 'ui.thread.canned': 'Insert canned response…',
+  'ui.thread.reply_placeholder': 'Write a reply',
+  'ui.thread.notify_email': 'Send email notification', 'ui.thread.send': 'Send reply',
   'ui.event.created': 'Ticket created (source: {source})', 'ui.event.status': 'Status: {from} → {to}', 'ui.event.priority': 'Priority: {from} → {to}',
   'ui.event.assignee': 'Assignee changed', 'ui.event.team': 'Team changed', 'ui.event.tags': 'Tags: {tags}', 'ui.event.help_topic': 'Help topic changed',
   'ui.event.custom_fields': 'Custom fields updated: {keys}',

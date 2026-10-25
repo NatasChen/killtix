@@ -78,7 +78,7 @@ TicketDesk 是一套 **API-First、雙軌佈署、企業級權限** 的 ITSM 工
 | --- | --- |
 | **Help Topic** | 服務類別（如「帳號權限申請」、「資安事件通報」），決定該類工單使用的表單、SLA Plan 與預設指派團隊 |
 | **SLA Plan** | 服務時效政策，定義首次回應時間 (First Response) 與結案時間 (Resolution) 的目標與逾時動作 |
-| **Ticket Thread** | 工單對話串，區分「對外回覆 (Customer Visible)」與「內部備忘 (Internal Note)」 |
+| **Ticket Thread** | 工單對話串；回覆一律公開，回覆者決定是否寄送通知（DECISIONS D12） |
 | **Canned Response** | 預先撰寫的回覆範本，支援變數插值（如 `%{ticket.assignee}`） |
 | **Custom Field** | 自訂表單欄位，隸屬於 Ticket Form，支援多種型別與可見性控制 |
 | **Tag** | 工單標籤，多對多關聯，可作為篩選與報表維度 |
@@ -247,11 +247,12 @@ TicketDesk 是一套 **API-First、雙軌佈署、企業級權限** 的 ITSM 工
 - 每張工單具備多筆 Thread Entry，型別：
   - `customer_message`（客戶來訊）
   - `agent_reply`（對外回覆，客戶可見）
-  - `internal_note`（內部備忘，**永不**對 `end_user` / `vendor` 顯示）
+  - `internal_note`（內部備忘，**永不**對 `end_user` / `vendor` 顯示；已停止新增，只保留既有資料，見 DECISIONS D12）
   - `system_event`（狀態變更、指派、SLA 事件，供稽核）
 - Thread Entry 需記錄作者、時間、來源管道（Web / Email / API）、是否含附件、是否已讀。
 - Email 回覆需支援以 `[#TICKET-<id>]` 標記於主旨進行執行緒歸併 (Thread Matching)。
 - 內部備忘與對外回覆在 API 回應中須以 `visibility` 欄位區分，並於查詢層過濾。
+- 回覆時以「寄送 Email 通知」勾選框（預設勾選）決定是否通知對方：工程師與被指派的廠商回覆通知申請人，申請人回覆通知負責人。
 
 #### FR-2.5 Canned Responses 回覆範本（P1）
 - 管理員/主管可建立範本：名稱、所屬團隊、內容（支援變數插值）、可用 Help Topic 範圍。
@@ -299,7 +300,7 @@ new ──▶ open ──▶ pending_user ──▶ open
 | `GET` | `/api/v1/tickets` | 查詢列表（分頁、篩選、排序） |
 | `GET` | `/api/v1/tickets/{id}` | 取得單筆（含 thread） |
 | `PATCH` | `/api/v1/tickets/{id}` | 更新狀態/指派/優先級/Tag |
-| `POST` | `/api/v1/tickets/{id}/threads` | 新增回覆或內部備忘 |
+| `POST` | `/api/v1/tickets/{id}/threads` | 新增回覆（`{ body, notify }`） |
 | `GET` | `/api/v1/reports/tickets` | 報表查詢與匯出 |
 | `GET` | `/api/v1/help-topics` | 取得服務類別清單 |
 | `POST` | `/api/v1/webhooks` | 註冊外部事件回呼（選用） |
@@ -312,6 +313,7 @@ new ──▶ open ──▶ pending_user ──▶ open
 #### FR-2.10 指派與協作（P0）
 - 指派對象可為個人或團隊 (Team)；支援「搶單 (Claim)」與「轉派 (Transfer)」。
 - 支援 Watcher / CC 名單；被加入者依角色取得可見權限。
+- 有指派權限（`ticket:assign`）的人在新增工單時即可指派負責人；指派後工單為 `open`，並通知負責人。
 - 工單合併 (Merge) 與子工單 (Linked Tickets) 為 P1。
 
 ---
@@ -646,7 +648,7 @@ curl -X POST https://ticket.example.com/api/v1/tickets \
 | AC-TICKET-01 | 自訂欄位 | 12 種型別皆可建立、驗證、儲存、查詢；刪除採軟刪除且歷史資料不遺失 |
 | AC-TICKET-02 | Help Topics | 依 Topic 載入對應表單與 SLA；停用後不可被新單選用 |
 | AC-TICKET-03 | SLA | 首次回應/結案目標依營業時間計算；逾時標記 `overdue` 並通知 |
-| AC-TICKET-04 | Threading | 對外回覆與內部備忘分流正確；Email 主旨 `[#TCK-...]` 可歸併 |
+| AC-TICKET-04 | Threading | 新回覆一律公開，取消勾選通知時不產生通知；既有內部備忘仍隔離；Email 主旨 `[#TCK-...]` 可歸併 |
 | AC-TICKET-05 | Canned Responses | 變數插值正確；非授權團隊不可見該範本 |
 | AC-TICKET-06 | Tag | 多對多關聯；`tags_mode=any/all` 篩選結果正確 |
 | AC-TICKET-07 | 優先級 5 級 | `priority` 僅接受 1~5；非法值回傳 `400` |

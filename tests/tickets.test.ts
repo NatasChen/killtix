@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { tickets } from '../src/server/db/schema.js';
+import { notificationLogs, tickets, ticketThreads, users } from '../src/server/db/schema.js';
 import { createTestContext, type TestContext } from './helpers.js';
 
 let ctx: TestContext;
@@ -78,6 +78,21 @@ describe('ticket lifecycle', () => {
     expect(detail.status).toBe('open');
     expect(detail.sla.firstRespondedAt).not.toBeNull();
   });
+
+  it('lets staff assign on creation: the ticket opens assigned and the assignee is notified', async () => {
+    const t = (await admin.post('/api/v1/tickets', { subject: 'assigned on creation', assigneeId: ids.agent })).body;
+    const detail = (await admin.get(`/api/v1/tickets/${t.id}`)).body;
+    expect(detail.assignee.id).toBe(ids.agent);
+    expect(detail.status).toBe('open');
+    const mails = await ctx.db.select().from(notificationLogs).where(eq(notificationLogs.recipient, 'agent@example.com'));
+    expect(mails.some((m) => m.eventId.startsWith(`assigned:${t.id}:`))).toBe(true);
+  });
+
+  it('rejects assignment on creation without ticket:assign or to a user who cannot be assigned', async () => {
+    const user = await ctx.login('user@example.com');
+    expect((await user.post('/api/v1/tickets', { subject: 'pick my own agent', assigneeId: ids.agent })).status).toBe(403);
+    expect((await admin.post('/api/v1/tickets', { subject: 'to an end user', assigneeId: ids.user2 })).status).toBe(400);
+  });
 });
 
 describe('RBAC and IDOR protection', () => {
@@ -90,7 +105,9 @@ describe('RBAC and IDOR protection', () => {
     await admin.patch(`/api/v1/tickets/${assigned}`, { assigneeId: ids.vendor });
     await admin.post(`/api/v1/tickets/${watched}/watchers`, { userId: ids.vendor2 });
     await admin.patch(`/api/v1/tickets/${teamTicket}`, { teamId: ids.otherTeam });
-    await admin.post(`/api/v1/tickets/${assigned}/threads`, { type: 'internal_note', body: 'SECRET internal note' });
+    // Internal notes can no longer be written (D12); one written before that change must stay staff-only.
+    const [author] = await ctx.db.select().from(users).where(eq(users.email, 'admin@ticket.local'));
+    await ctx.db.insert(ticketThreads).values({ ticketId: assigned, authorId: author.id, type: 'internal_note', visibility: 'internal', body: 'SECRET internal note' });
   });
 
   it('vendors see only tickets assigned to them or that they watch; others are 404', async () => {
@@ -112,7 +129,7 @@ describe('RBAC and IDOR protection', () => {
     expect((await vendor2.get(`/api/v1/tickets/${watched}`)).status).toBe(404);
   });
 
-  it('never exposes internal notes to vendors or requesters', async () => {
+  it('never exposes earlier internal notes to vendors or requesters', async () => {
     for (const email of ['vendor@example.com', 'user@example.com']) {
       const client = await ctx.login(email);
       const detail = await client.get(`/api/v1/tickets/${assigned}`);
@@ -123,9 +140,10 @@ describe('RBAC and IDOR protection', () => {
     expect(staffView.text).toContain('SECRET internal note');
   });
 
-  it('forbids internal notes and triage fields to non-staff', async () => {
+  it('accepts no new internal notes and forbids triage fields to non-staff', async () => {
     const vendor = await ctx.login('vendor@example.com');
-    expect((await vendor.post(`/api/v1/tickets/${assigned}/threads`, { type: 'internal_note', body: 'x' })).status).toBe(403);
+    // the old request shape is rejected rather than silently published as a reply
+    expect((await admin.post(`/api/v1/tickets/${assigned}/threads`, { type: 'internal_note', body: 'x' })).status).toBe(400);
     expect((await vendor.patch(`/api/v1/tickets/${assigned}`, { priority: 5 })).status).toBe(403);
     expect((await vendor.patch(`/api/v1/tickets/${assigned}`, { assigneeId: ids.vendor2 })).status).toBe(403);
     // Assigned vendors may move the status.

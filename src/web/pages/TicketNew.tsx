@@ -26,8 +26,15 @@ export function TicketNewPage() {
   const [priority, setPriority] = useState(3);
   const [tags, setTags] = useState('');
   const [fields, setFields] = useState<Record<string, unknown>>({});
+  const [assigneeId, setAssigneeId] = useState<number | ''>('');
   const topic = topics.data?.find((tp) => tp.id === topicId);
   const staff = can('ticket:note');
+  const canAssign = can('ticket:assign');
+  const catalog = useLoad(
+    () => (canAssign ? get<{ users?: { id: number; displayName: string; role: string }[] }>('/catalog') : Promise.resolve({ users: [] })),
+    [canAssign],
+  );
+  const assignable = (catalog.data?.users ?? []).filter((u) => ['super_admin', 'it_manager', 'agent', 'vendor'].includes(u.role));
 
   const submit = () => {
     void run(async () => {
@@ -39,6 +46,7 @@ export function TicketNewPage() {
         helpTopicId: topicId || undefined,
         customFields,
         tags: tags.split(',').map((s) => s.trim()).filter(Boolean),
+        assigneeId: assigneeId || undefined,
       });
       navigate(`/tickets/${created.number}`);
     });
@@ -76,6 +84,21 @@ export function TicketNewPage() {
               </Field>
             </Col>
           </Row>
+          {canAssign && (
+            <Row gutter={12}>
+              <Col xs={24} sm={12}>
+                <Field label={t('ui.tickets.assignee')}>
+                  <Choice
+                    value={assigneeId}
+                    onChange={(v) => setAssigneeId(v ? Number(v) : '')}
+                    empty={t('ui.tickets.unassigned')}
+                    options={assignable.map((u) => ({ value: u.id, label: `${u.displayName} (${t(`ui.role.${u.role}`)})` }))}
+                    style={{ width: '100%' }}
+                  />
+                </Field>
+              </Col>
+            </Row>
+          )}
           <Field label={t('ui.tickets.subject')}>
             <Input required maxLength={512} value={subject} onChange={(e) => setSubject(e.target.value)} />
           </Field>

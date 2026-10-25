@@ -116,9 +116,9 @@ const zhTW: Record<string, string> = {
   'ui.source.web': '網頁', 'ui.source.api': 'API', 'ui.source.email': '電子郵件',
 
   'ui.thread.customer_message': '使用者', 'ui.thread.agent_reply': '回覆', 'ui.thread.internal_note': '內部備忘',
-  'ui.thread.system_event': '系統', 'ui.thread.reply_public': '對外回覆', 'ui.thread.canned': '插入回覆範本…',
-  'ui.thread.reply_placeholder': '輸入回覆內容（申請人會收到通知）', 'ui.thread.internal_placeholder': '僅內部人員可見，不會通知申請人',
-  'ui.thread.send': '送出回覆', 'ui.thread.add_note': '新增內部備忘',
+  'ui.thread.system_event': '系統', 'ui.thread.canned': '插入回覆範本…',
+  'ui.thread.reply_placeholder': '輸入回覆內容',
+  'ui.thread.notify_email': '寄送 Email 通知', 'ui.thread.send': '送出回覆',
   'ui.event.created': '建立工單（來源：{source}）', 'ui.event.status': '狀態：{from} → {to}', 'ui.event.priority': '優先度：{from} → {to}',
   'ui.event.assignee': '變更負責人', 'ui.event.team': '變更團隊', 'ui.event.tags': '標籤：{tags}', 'ui.event.help_topic': '變更服務類別',
   'ui.event.custom_fields': '更新自訂欄位：{keys}',

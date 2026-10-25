@@ -99,7 +99,7 @@ curl -fsS http://localhost:8080/healthz     # {"status":"ok"}
 scripts/smoke.sh http://localhost:8080 '<預設管理員密碼>'
 ```
 
-`smoke.sh` 會實際走完改密、開單、內部備忘、狀態轉換、API Token 冪等開單、3 天篩選、CSV 匯出等流程（共 24 項檢查）。
+`smoke.sh` 會實際走完改密、開單、不通知的回覆、狀態轉換、API Token 冪等開單、3 天篩選、CSV 匯出等流程（共 24 項檢查）。
 **它會變更預設管理員密碼並建立測試資料**，請只在新環境或測試環境執行。
 
 ## 3. 反向代理與 TLS
@@ -145,7 +145,7 @@ curl -X POST https://ticket.example.com/api/v1/tickets \
 | Telegram | `TELEGRAM_BOT_TOKEN`；使用者在「個人設定」填入自己的 Chat ID | 被指派者 |
 | Microsoft Teams | `TEAMS_WEBHOOK_URL`（Teams Workflows 的 webhook 網址，送出 Adaptive Card） | 頻道：新工單、SLA 逾時、每日 3 天積壓報告 |
 
-內部備忘永遠不會觸發通知，對申請人的通知只包含對外回覆內容。
+回覆者取消勾選「寄送 Email 通知」時該則回覆不會發出任何通知；通知只包含該則回覆的內容。既有的內部備忘不會觸發通知。
 
 ## 6. 日常維運
 

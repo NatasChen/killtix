@@ -1,4 +1,4 @@
-import { Button, Card, Col, Descriptions, Flex, Form, Input, Radio, Row, Space, type DescriptionsProps } from 'antd';
+import { Button, Card, Checkbox, Col, Descriptions, Flex, Form, Input, Row, Space, type DescriptionsProps } from 'antd';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { del, get, patch, post } from '../api';
@@ -102,7 +102,7 @@ export function TicketDetailPage() {
   const catalog = useLoad(() => get<Catalog>('/catalog'), []);
   const action = useAction();
   const [reply, setReply] = useState('');
-  const [replyType, setReplyType] = useState<'reply' | 'internal_note'>('reply');
+  const [notify, setNotify] = useState(true);
   const [tagDraft, setTagDraft] = useState<string | null>(null);
   const [fieldDraft, setFieldDraft] = useState<Record<string, unknown> | null>(null);
   const [watcherId, setWatcherId] = useState('');
@@ -115,8 +115,9 @@ export function TicketDetailPage() {
 
   const sendReply = () => {
     void action.run(async () => {
-      await post(`/tickets/${data.id}/threads`, { type: replyType, body: reply });
+      await post(`/tickets/${data.id}/threads`, { body: reply, notify });
       setReply('');
+      setNotify(true);
       await reload();
     });
   };
@@ -409,21 +410,15 @@ export function TicketDetailPage() {
             {data.status !== 'closed' && can('ticket:reply') && (
               <Card>
                 <Form onFinish={sendReply}>
-                  {staff && (
+                  {staff && catalog.data?.cannedResponses && catalog.data.cannedResponses.length > 0 && (
                     <Flex wrap gap={12} align="center" style={{ marginBottom: 12 }}>
-                      <Radio.Group value={replyType} onChange={(e) => setReplyType(e.target.value)}>
-                        <Radio value="reply">{t('ui.thread.reply_public')}</Radio>
-                        <Radio value="internal_note">{t('ui.thread.internal_note')}</Radio>
-                      </Radio.Group>
-                      {catalog.data?.cannedResponses && catalog.data.cannedResponses.length > 0 && (
-                        <Choice
-                          aria-label={t('ui.thread.canned')}
-                          value=""
-                          onChange={applyCanned}
-                          empty={t('ui.thread.canned')}
-                          options={catalog.data.cannedResponses.map((c) => ({ value: c.id, label: c.name }))}
-                        />
-                      )}
+                      <Choice
+                        aria-label={t('ui.thread.canned')}
+                        value=""
+                        onChange={applyCanned}
+                        empty={t('ui.thread.canned')}
+                        options={catalog.data.cannedResponses.map((c) => ({ value: c.id, label: c.name }))}
+                      />
                     </Flex>
                   )}
                   <Input.TextArea
@@ -431,12 +426,16 @@ export function TicketDetailPage() {
                     autoSize={{ minRows: 4 }}
                     value={reply}
                     onChange={(e) => setReply(e.target.value)}
-                    placeholder={replyType === 'internal_note' ? t('ui.thread.internal_placeholder') : t('ui.thread.reply_placeholder')}
-                    style={replyType === 'internal_note' ? { background: p.internal, borderColor: p.internalBorder } : undefined}
+                    placeholder={t('ui.thread.reply_placeholder')}
                   />
-                  <Button type="primary" htmlType="submit" loading={action.busy} disabled={action.busy} style={{ marginTop: 12 }}>
-                    {replyType === 'internal_note' ? t('ui.thread.add_note') : t('ui.thread.send')}
-                  </Button>
+                  <Flex wrap gap={16} align="center" style={{ marginTop: 12 }}>
+                    <Button type="primary" htmlType="submit" loading={action.busy} disabled={action.busy}>
+                      {t('ui.thread.send')}
+                    </Button>
+                    <Checkbox checked={notify} onChange={(e) => setNotify(e.target.checked)}>
+                      {t('ui.thread.notify_email')}
+                    </Checkbox>
+                  </Flex>
                 </Form>
               </Card>
             )}
@@ -445,7 +444,7 @@ export function TicketDetailPage() {
 
         <Col xs={24} lg={8}>
           <Card>
-            <Descriptions column={1} size="small" colon={false} items={props} styles={{ label: { width: 104 } }} />
+            <Descriptions className="ticket-props" column={1} size="small" colon={false} items={props} styles={{ label: { width: 104 } }} />
           </Card>
         </Col>
       </Row>

@@ -47,16 +47,18 @@ await pick(page.getByLabel('服務類別'), '一般問題');
 await page.getByLabel('主旨').fill('UI 測試：印表機無法列印');
 await page.getByLabel('問題描述').fill('三樓印表機顯示卡紙，但實際上沒有紙張卡住。');
 await pick(page.getByLabel('優先度'), 'L4 高');
+await pick(page.getByLabel('負責人'), 'Bootstrap Administrator (系統管理員)');
 await page.getByRole('button', { name: '送出工單' }).click();
 await page.getByRole('heading', { name: 'UI 測試：印表機無法列印' }).waitFor();
+await page.locator('.ant-descriptions').getByText('Bootstrap Administrator (系統管理員)').waitFor(); // assigned on creation
 
-step('internal note + public reply');
+step('replies with and without email notification');
 // antd's auto-size textarea keeps a hidden measuring copy in the page, so target the visible one
-await page.getByLabel('內部備忘').check();
-await page.locator('textarea:visible').last().fill('內部：已通知廠商');
-await page.getByRole('button', { name: '新增內部備忘' }).click();
-await page.getByText('內部：已通知廠商').waitFor();
-await page.getByLabel('對外回覆').check();
+await page.getByLabel('寄送 Email 通知').uncheck();
+await page.locator('textarea:visible').last().fill('已通知廠商，等待回覆。');
+await page.getByRole('button', { name: '送出回覆' }).click();
+await page.getByText('已通知廠商，等待回覆。').waitFor();
+if (!(await page.getByLabel('寄送 Email 通知').isChecked())) throw new Error('notify checkbox should reset to checked');
 await page.locator('textarea:visible').last().fill('您好，我們已安排工程師前往處理。');
 await page.getByRole('button', { name: '送出回覆' }).click();
 await page.getByText('您好，我們已安排工程師前往處理。').waitFor();
