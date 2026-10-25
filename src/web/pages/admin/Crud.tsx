@@ -1,6 +1,7 @@
-import { useState, type FormEvent, type ReactNode } from 'react';
+import { Button, Card, Checkbox, Col, Flex, Form, Input, Row, Table } from 'antd';
+import { useState, type ReactNode } from 'react';
 import { get, patch, post } from '../../api';
-import { Empty, ErrorBanner, Loading, useAction, useLoad } from '../../components/common';
+import { Choice, ErrorBanner, Field, PageHeader, useAction, useLoad } from '../../components/common';
 import { useI18n } from '../../i18n';
 
 export interface CrudField {
@@ -62,8 +63,7 @@ export function CrudPage<T extends Row>({
     setForm(Object.fromEntries(fields.map((f) => [f.key, toInput(f, source[f.key])])));
   };
 
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
+  const submit = () => {
     const isNew = editing === 'new';
     const body = Object.fromEntries(
       fields
@@ -81,101 +81,87 @@ export function CrudPage<T extends Row>({
 
   return (
     <>
-      <div className="topline">
-        <h1>{title}</h1>
-        <button className="primary" onClick={() => open('new')}>
-          {t('ui.common.add')}
-        </button>
-      </div>
+      <PageHeader
+        title={title}
+        extra={
+          <Button type="primary" onClick={() => open('new')}>
+            {t('ui.common.add')}
+          </Button>
+        }
+      />
       {editing && (
-        <form className="card form" onSubmit={submit}>
-          <h2>{editing === 'new' ? t('ui.common.add') : t('ui.common.edit')}</h2>
-          <ErrorBanner error={action.error} />
-          <div className="form-row">
-            {fields.map((f) => {
-              const disabled = editing !== 'new' && f.createOnly;
-              const value = form[f.key];
-              const set = (v: unknown) => setForm((s) => ({ ...s, [f.key]: v }));
-              if (f.type === 'checkbox') {
+        <Card title={<h2 style={{ fontSize: 16, margin: 0 }}>{editing === 'new' ? t('ui.common.add') : t('ui.common.edit')}</h2>} style={{ marginBottom: 16 }}>
+          <Form layout="vertical" requiredMark={false} onFinish={submit}>
+            <ErrorBanner error={action.error} />
+            <Row gutter={12}>
+              {fields.map((f) => {
+                const disabled = editing !== 'new' && f.createOnly;
+                const value = form[f.key];
+                const set = (v: unknown) => setForm((s) => ({ ...s, [f.key]: v }));
+                if (f.type === 'checkbox') {
+                  return (
+                    <Col key={f.key} xs={24} sm={12} lg={8}>
+                      <Form.Item style={{ marginBottom: 12 }}>
+                        <Checkbox checked={Boolean(value)} disabled={disabled} onChange={(e) => set(e.target.checked)}>
+                          {f.label}
+                        </Checkbox>
+                      </Form.Item>
+                    </Col>
+                  );
+                }
                 return (
-                  <label key={f.key} className="inline">
-                    <input type="checkbox" checked={Boolean(value)} disabled={disabled} onChange={(e) => set(e.target.checked)} />
-                    {f.label}
-                  </label>
+                  <Col key={f.key} xs={24} sm={12} lg={f.type === 'textarea' ? 24 : 8}>
+                    <Field label={f.label}>
+                      {f.type === 'textarea' ? (
+                        <Input.TextArea required={f.required} disabled={disabled} autoSize={{ minRows: 3 }} value={String(value ?? '')} onChange={(e) => set(e.target.value)} />
+                      ) : f.type === 'select' ? (
+                        <Choice disabled={disabled} value={String(value ?? '')} onChange={set} empty="—" options={f.options ?? []} style={{ width: '100%' }} />
+                      ) : (
+                        <Input
+                          type={f.type === 'number' ? 'number' : 'text'}
+                          required={f.required}
+                          disabled={disabled}
+                          value={String(value ?? '')}
+                          onChange={(e) => set(e.target.value)}
+                        />
+                      )}
+                    </Field>
+                  </Col>
                 );
-              }
-              return (
-                <label key={f.key}>
-                  {f.label}
-                  {f.type === 'textarea' ? (
-                    <textarea required={f.required} disabled={disabled} value={String(value ?? '')} onChange={(e) => set(e.target.value)} />
-                  ) : f.type === 'select' ? (
-                    <select required={f.required} disabled={disabled} value={String(value ?? '')} onChange={(e) => set(e.target.value)}>
-                      <option value="">—</option>
-                      {f.options?.map((o) => (
-                        <option key={o.value} value={o.value}>
-                          {o.label}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <input
-                      type={f.type === 'number' ? 'number' : 'text'}
-                      required={f.required}
-                      disabled={disabled}
-                      value={String(value ?? '')}
-                      onChange={(e) => set(e.target.value)}
-                    />
-                  )}
-                </label>
-              );
-            })}
-          </div>
-          <div className="actions">
-            <button className="primary" disabled={action.busy}>
-              {t('ui.common.save')}
-            </button>
-            <button type="button" onClick={() => setEditing(null)}>
-              {t('ui.common.cancel')}
-            </button>
-          </div>
-        </form>
+              })}
+            </Row>
+            <Flex gap={8}>
+              <Button type="primary" htmlType="submit" loading={action.busy} disabled={action.busy}>
+                {t('ui.common.save')}
+              </Button>
+              <Button onClick={() => setEditing(null)}>{t('ui.common.cancel')}</Button>
+            </Flex>
+          </Form>
+        </Card>
       )}
-      <div className="card">
+      <Card>
         <ErrorBanner error={error} />
-        {loading && !data ? (
-          <Loading />
-        ) : !data?.length ? (
-          <Empty />
-        ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  {columns.map((c) => (
-                    <th key={c.label}>{c.label}</th>
-                  ))}
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {data.map((row) => (
-                  <tr key={row.id}>
-                    {columns.map((c) => (
-                      <td key={c.label}>{c.render(row)}</td>
-                    ))}
-                    <td>
-                      <button className="link" onClick={() => open(row)}>
-                        {t('ui.common.edit')}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+        <Table<T>
+          rowKey="id"
+          dataSource={data ?? []}
+          loading={loading && !data}
+          pagination={false}
+          size="middle"
+          scroll={{ x: 'max-content' }}
+          columns={[
+            ...columns.map((c) => ({ key: c.label, title: c.label, render: (_: unknown, row: T) => c.render(row) })),
+            {
+              key: '_edit',
+              title: '',
+              render: (_: unknown, row: T) => (
+                <Button type="link" onClick={() => open(row)}>
+                  {t('ui.common.edit')}
+                </Button>
+              ),
+            },
+          ]}
+        />
+      </Card>
     </>
   );
 }

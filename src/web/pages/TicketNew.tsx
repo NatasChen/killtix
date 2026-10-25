@@ -1,9 +1,10 @@
-import { useState, type FormEvent } from 'react';
+import { Button, Card, Col, Form, Input, Row } from 'antd';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { get, post } from '../api';
 import { useAuth } from '../auth';
 import { CustomFieldInput, type FieldDef } from '../components/CustomFieldInput';
-import { ErrorBanner, useAction, useLoad } from '../components/common';
+import { Choice, ErrorBanner, Field, PageHeader, useAction, useLoad } from '../components/common';
 import { useI18n } from '../i18n';
 
 interface HelpTopic {
@@ -28,8 +29,7 @@ export function TicketNewPage() {
   const topic = topics.data?.find((tp) => tp.id === topicId);
   const staff = can('ticket:note');
 
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
+  const submit = () => {
     void run(async () => {
       const customFields = Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== '' && v != null));
       const created = await post<{ number: string }>('/tickets', {
@@ -46,69 +46,69 @@ export function TicketNewPage() {
 
   return (
     <>
-      <h1>{t('ui.nav.new_ticket')}</h1>
-      <form className="card form" onSubmit={submit} style={{ maxWidth: 760 }}>
-        <ErrorBanner error={error} />
-        <div className="form-row">
-          <label>
-            {t('ui.tickets.help_topic')}
-            <select
-              value={topicId}
-              onChange={(e) => {
-                setTopicId(e.target.value ? Number(e.target.value) : '');
-                setFields({});
-              }}
-            >
-              <option value="">—</option>
-              {topics.data?.map((tp) => (
-                <option key={tp.id} value={tp.id}>
-                  {tp.name}
-                </option>
+      <PageHeader title={t('ui.nav.new_ticket')} />
+      <Card style={{ maxWidth: 760 }}>
+        <Form layout="vertical" requiredMark={false} onFinish={submit}>
+          <ErrorBanner error={error} />
+          <Row gutter={12}>
+            <Col xs={24} sm={12}>
+              <Field label={t('ui.tickets.help_topic')} extra={topic?.description || undefined}>
+                <Choice
+                  value={topicId}
+                  onChange={(v) => {
+                    setTopicId(v ? Number(v) : '');
+                    setFields({});
+                  }}
+                  empty="—"
+                  options={topics.data?.map((tp) => ({ value: tp.id, label: tp.name })) ?? []}
+                  style={{ width: '100%' }}
+                />
+              </Field>
+            </Col>
+            <Col xs={24} sm={12}>
+              <Field label={t('ui.tickets.priority')}>
+                <Choice
+                  value={priority}
+                  onChange={(v) => setPriority(Number(v))}
+                  options={[1, 2, 3, 4, 5].map((p) => ({ value: p, label: t(`ticket.priority.${p}`) }))}
+                  style={{ width: '100%' }}
+                />
+              </Field>
+            </Col>
+          </Row>
+          <Field label={t('ui.tickets.subject')}>
+            <Input required maxLength={512} value={subject} onChange={(e) => setSubject(e.target.value)} />
+          </Field>
+          <Field label={t('ui.tickets.description')}>
+            <Input.TextArea autoSize={{ minRows: 5 }} value={description} onChange={(e) => setDescription(e.target.value)} />
+          </Field>
+          {topic && topic.fields.length > 0 && (
+            <Row gutter={12}>
+              {topic.fields.map((f) => (
+                <Col key={f.key} xs={24} sm={12}>
+                  <Field
+                    label={
+                      <>
+                        {f.label}
+                        {f.isRequired && f.visibility !== 'internal' ? ' *' : ''}
+                        {f.visibility === 'internal' && <span className="small"> ({t('ui.tickets.internal_field')})</span>}
+                      </>
+                    }
+                  >
+                    <CustomFieldInput field={f} value={fields[f.key]} onChange={(v) => setFields((s) => ({ ...s, [f.key]: v }))} />
+                  </Field>
+                </Col>
               ))}
-            </select>
-          </label>
-          <label>
-            {t('ui.tickets.priority')}
-            <select value={priority} onChange={(e) => setPriority(Number(e.target.value))}>
-              {[1, 2, 3, 4, 5].map((p) => (
-                <option key={p} value={p}>
-                  {t(`ticket.priority.${p}`)}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-        {topic?.description && <p className="muted small">{topic.description}</p>}
-        <label>
-          {t('ui.tickets.subject')}
-          <input required maxLength={512} value={subject} onChange={(e) => setSubject(e.target.value)} />
-        </label>
-        <label>
-          {t('ui.tickets.description')}
-          <textarea value={description} onChange={(e) => setDescription(e.target.value)} />
-        </label>
-        {topic && topic.fields.length > 0 && (
-          <div className="form-row">
-            {topic.fields.map((f) => (
-              <label key={f.key}>
-                {f.label}
-                {f.isRequired && f.visibility !== 'internal' ? ' *' : ''}
-                {f.visibility === 'internal' && <span className="small"> ({t('ui.tickets.internal_field')})</span>}
-                <CustomFieldInput field={f} value={fields[f.key]} onChange={(v) => setFields((s) => ({ ...s, [f.key]: v }))} />
-              </label>
-            ))}
-          </div>
-        )}
-        <label>
-          {t('ui.tickets.tags')}
-          <input value={tags} onChange={(e) => setTags(e.target.value)} placeholder={staff ? 'vpn,network' : t('ui.tickets.tags_existing_only')} />
-        </label>
-        <div className="actions">
-          <button className="primary" disabled={busy}>
+            </Row>
+          )}
+          <Field label={t('ui.tickets.tags')}>
+            <Input value={tags} onChange={(e) => setTags(e.target.value)} placeholder={staff ? 'vpn,network' : t('ui.tickets.tags_existing_only')} />
+          </Field>
+          <Button type="primary" htmlType="submit" loading={busy} disabled={busy}>
             {t('ui.tickets.submit')}
-          </button>
-        </div>
-      </form>
+          </Button>
+        </Form>
+      </Card>
     </>
   );
 }

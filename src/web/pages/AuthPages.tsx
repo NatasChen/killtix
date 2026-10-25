@@ -1,22 +1,43 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { Alert, Button, Card, Flex, Form, Input, Typography } from 'antd';
+import { useEffect, useState, type ReactNode } from 'react';
 import { post } from '../api';
 import { useAuth, type Me, type Stage } from '../auth';
-import { ErrorBanner, useAction } from '../components/common';
+import { ErrorBanner, Field, usePalette, useAction } from '../components/common';
 import { useI18n } from '../i18n';
 
 type SessionResponse = { stage: Stage; user: Me };
 
+/** ex-auth-form-card: the centred sign-in card used by login, password change and 2FA. */
 function AuthCard({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="auth-wrap">
-      <div className="card auth-card ex-auth-form-card">
+      <Card className="auth-card ex-auth-form-card">
         <div className="brand">
           <img src="/favicon.svg" width={24} height={24} alt="" /> TicketDesk
         </div>
-        <h1>{title}</h1>
+        <Typography.Title level={1} style={{ fontSize: 20, marginTop: 0 }}>
+          {title}
+        </Typography.Title>
         {children}
-      </div>
+      </Card>
     </div>
+  );
+}
+
+/** Vertical antd form for layout; values stay in component state and native `required` still applies. */
+function AuthForm({ onSubmit, children }: { onSubmit: () => void; children: ReactNode }) {
+  return (
+    <Form layout="vertical" requiredMark={false} onFinish={onSubmit}>
+      {children}
+    </Form>
+  );
+}
+
+function SubmitButton({ busy, disabled, danger, children }: { busy?: boolean; disabled?: boolean; danger?: boolean; children: ReactNode }) {
+  return (
+    <Button type="primary" danger={danger} htmlType="submit" block loading={busy} disabled={busy || disabled}>
+      {children}
+    </Button>
   );
 }
 
@@ -27,8 +48,7 @@ export function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
+  const submit = () => {
     void run(async () => {
       const res = await post<SessionResponse>('/auth/login', { email, password });
       setSession(res.stage, res.user);
@@ -38,19 +58,15 @@ export function LoginPage() {
   return (
     <AuthCard title={t('ui.auth.login_title')}>
       <ErrorBanner error={error} />
-      <form className="form" onSubmit={submit}>
-        <label>
-          {t('ui.auth.email')}
-          <input type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} autoFocus />
-        </label>
-        <label>
-          {t('ui.auth.password')}
-          <input type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
-        </label>
-        <button className="primary" disabled={busy}>
-          {t('ui.auth.login')}
-        </button>
-      </form>
+      <AuthForm onSubmit={submit}>
+        <Field label={t('ui.auth.email')}>
+          <Input type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} autoFocus />
+        </Field>
+        <Field label={t('ui.auth.password')}>
+          <Input type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
+        </Field>
+        <SubmitButton busy={busy}>{t('ui.auth.login')}</SubmitButton>
+      </AuthForm>
     </AuthCard>
   );
 }
@@ -62,8 +78,7 @@ export function PasswordForm({ onDone }: { onDone: (res: SessionResponse) => voi
   const [next, setNext] = useState('');
   const [confirm, setConfirm] = useState('');
 
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
+  const submit = () => {
     if (next !== confirm) {
       setError(new Error(t('ui.password.mismatch')));
       return;
@@ -72,25 +87,20 @@ export function PasswordForm({ onDone }: { onDone: (res: SessionResponse) => voi
   };
 
   return (
-    <form className="form" onSubmit={submit}>
+    <AuthForm onSubmit={submit}>
       <ErrorBanner error={error} />
-      <label>
-        {t('ui.password.current')}
-        <input type="password" autoComplete="current-password" required value={current} onChange={(e) => setCurrent(e.target.value)} />
-      </label>
-      <label>
-        {t('ui.password.new')}
-        <input type="password" autoComplete="new-password" required value={next} onChange={(e) => setNext(e.target.value)} />
-      </label>
-      <label>
-        {t('ui.password.confirm')}
-        <input type="password" autoComplete="new-password" required value={confirm} onChange={(e) => setConfirm(e.target.value)} />
-      </label>
+      <Field label={t('ui.password.current')}>
+        <Input type="password" autoComplete="current-password" required value={current} onChange={(e) => setCurrent(e.target.value)} />
+      </Field>
+      <Field label={t('ui.password.new')}>
+        <Input type="password" autoComplete="new-password" required value={next} onChange={(e) => setNext(e.target.value)} />
+      </Field>
+      <Field label={t('ui.password.confirm')}>
+        <Input type="password" autoComplete="new-password" required value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+      </Field>
       <p className="small muted">{t('ui.password.policy')}</p>
-      <button className="primary" disabled={busy}>
-        {t('ui.password.submit')}
-      </button>
-    </form>
+      <SubmitButton busy={busy}>{t('ui.password.submit')}</SubmitButton>
+    </AuthForm>
   );
 }
 
@@ -99,13 +109,11 @@ export function ChangePasswordPage() {
   const { user, setSession, logout } = useAuth();
   return (
     <AuthCard title={t('ui.password.title')}>
-      <div className="banner warning">{user?.isBootstrapAdmin ? t('ui.password.bootstrap_notice') : t('ui.password.must_change')}</div>
+      <Alert type="warning" showIcon title={user?.isBootstrapAdmin ? t('ui.password.bootstrap_notice') : t('ui.password.must_change')} style={{ marginBottom: 16 }} />
       <PasswordForm onDone={(res) => setSession(res.stage, res.user)} />
-      <p>
-        <button className="link" onClick={() => void logout()}>
-          {t('ui.auth.logout')}
-        </button>
-      </p>
+      <Button type="link" style={{ paddingInline: 0, marginTop: 8 }} onClick={() => void logout()}>
+        {t('ui.auth.logout')}
+      </Button>
     </AuthCard>
   );
 }
@@ -117,8 +125,7 @@ export function MfaVerifyPage() {
   const [useRecovery, setUseRecovery] = useState(false);
   const [code, setCode] = useState('');
 
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
+  const submit = () => {
     void run(async () => {
       const res = await post<SessionResponse>('/auth/2fa/verify', useRecovery ? { recoveryCode: code } : { code });
       setSession(res.stage, res.user);
@@ -128,10 +135,9 @@ export function MfaVerifyPage() {
   return (
     <AuthCard title={t('ui.mfa.verify_title')}>
       <ErrorBanner error={error} />
-      <form className="form" onSubmit={submit}>
-        <label>
-          {useRecovery ? t('ui.mfa.recovery_code') : t('ui.mfa.code')}
-          <input
+      <AuthForm onSubmit={submit}>
+        <Field label={useRecovery ? t('ui.mfa.recovery_code') : t('ui.mfa.code')}>
+          <Input
             required
             autoFocus
             autoComplete="one-time-code"
@@ -139,19 +145,17 @@ export function MfaVerifyPage() {
             value={code}
             onChange={(e) => setCode(e.target.value)}
           />
-        </label>
-        <button className="primary" disabled={busy}>
-          {t('ui.mfa.verify')}
-        </button>
-      </form>
-      <p className="actions">
-        <button className="link" onClick={() => setUseRecovery(!useRecovery)}>
+        </Field>
+        <SubmitButton busy={busy}>{t('ui.mfa.verify')}</SubmitButton>
+      </AuthForm>
+      <Flex gap={16} style={{ marginTop: 8 }}>
+        <Button type="link" style={{ paddingInline: 0 }} onClick={() => setUseRecovery(!useRecovery)}>
           {useRecovery ? t('ui.mfa.use_app') : t('ui.mfa.use_recovery')}
-        </button>
-        <button className="link" onClick={() => void logout()}>
+        </Button>
+        <Button type="link" style={{ paddingInline: 0 }} onClick={() => void logout()}>
           {t('ui.auth.logout')}
-        </button>
-      </p>
+        </Button>
+      </Flex>
     </AuthCard>
   );
 }
@@ -159,6 +163,7 @@ export function MfaVerifyPage() {
 /** TOTP enrolment, used both for enforced enrolment and from the profile page. */
 export function MfaSetup({ onDone }: { onDone: (res: SessionResponse) => void }) {
   const { t } = useI18n();
+  const p = usePalette();
   const { busy, error, run } = useAction();
   const [setup, setSetup] = useState<{ secret: string; qrDataUrl: string } | null>(null);
   const [code, setCode] = useState('');
@@ -171,23 +176,22 @@ export function MfaSetup({ onDone }: { onDone: (res: SessionResponse) => void })
 
   if (recovery) {
     return (
-      <div className="form">
-        <div className="banner success">{t('ui.mfa.enabled')}</div>
-        <p>{t('ui.mfa.recovery_hint')}</p>
+      <Flex vertical gap={12}>
+        <Alert type="success" showIcon title={t('ui.mfa.enabled')} />
+        <p style={{ margin: 0 }}>{t('ui.mfa.recovery_hint')}</p>
         <div className="codes mono">
           {recovery.codes.map((c) => (
             <span key={c}>{c}</span>
           ))}
         </div>
-        <button className="primary" onClick={() => onDone(recovery.res)}>
+        <Button type="primary" onClick={() => onDone(recovery.res)}>
           {t('ui.mfa.recovery_saved')}
-        </button>
-      </div>
+        </Button>
+      </Flex>
     );
   }
 
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
+  const submit = () => {
     void run(async () => {
       const res = await post<SessionResponse & { recoveryCodes: string[] }>('/auth/2fa/enable', { code });
       setRecovery({ codes: res.recoveryCodes, res });
@@ -195,23 +199,25 @@ export function MfaSetup({ onDone }: { onDone: (res: SessionResponse) => void })
   };
 
   return (
-    <form className="form" onSubmit={submit}>
+    <AuthForm onSubmit={submit}>
       <ErrorBanner error={error} />
       <p>{t('ui.mfa.scan')}</p>
       {setup && (
-        <>
-          <img className="qr" src={setup.qrDataUrl} alt={t('ui.mfa.qr_alt')} />
-          <div className="secret-box mono small">{setup.secret}</div>
-        </>
+        <Flex vertical gap={8} style={{ marginBottom: 12 }}>
+          {/* the QR code needs a white quiet zone to stay scannable in both themes */}
+          <img className="qr" src={setup.qrDataUrl} alt={t('ui.mfa.qr_alt')} style={{ background: p.qrCanvas }} />
+          <div className="secret-box mono small" style={{ background: p.surface2 }}>
+            {setup.secret}
+          </div>
+        </Flex>
       )}
-      <label>
-        {t('ui.mfa.code')}
-        <input required inputMode="numeric" autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value)} />
-      </label>
-      <button className="primary" disabled={busy || !setup}>
+      <Field label={t('ui.mfa.code')}>
+        <Input required inputMode="numeric" autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value)} />
+      </Field>
+      <SubmitButton busy={busy} disabled={!setup}>
         {t('ui.mfa.enable')}
-      </button>
-    </form>
+      </SubmitButton>
+    </AuthForm>
   );
 }
 
@@ -220,13 +226,11 @@ export function MfaEnrollPage() {
   const { setSession, logout } = useAuth();
   return (
     <AuthCard title={t('ui.mfa.enroll_title')}>
-      <div className="banner warning">{t('ui.mfa.enforced_notice')}</div>
+      <Alert type="warning" showIcon title={t('ui.mfa.enforced_notice')} style={{ marginBottom: 16 }} />
       <MfaSetup onDone={(res) => setSession(res.stage, res.user)} />
-      <p>
-        <button className="link" onClick={() => void logout()}>
-          {t('ui.auth.logout')}
-        </button>
-      </p>
+      <Button type="link" style={{ paddingInline: 0, marginTop: 8 }} onClick={() => void logout()}>
+        {t('ui.auth.logout')}
+      </Button>
     </AuthCard>
   );
 }

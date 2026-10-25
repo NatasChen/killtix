@@ -17,6 +17,11 @@ const onConsole = (m) => { if (m.type() === 'error' && !expected(m.text())) erro
 page.on('console', onConsole);
 page.on('pageerror', (e) => errors.push(String(e)));
 const step = (s) => console.log('step:', s);
+// Ant Design selects are not native <select>: open the one the label points at, then click the option.
+const pick = async (field, option) => {
+  await field.click();
+  await field.page().locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').getByTitle(option, { exact: true }).click();
+};
 const shot = (n) => page.screenshot({ path: `${SHOTS}/${n}.png`, fullPage: true });
 
 step('reset admin preferences');
@@ -38,23 +43,24 @@ await shot('02-dashboard');
 
 step('create ticket through the form');
 await page.getByRole('link', { name: '新增工單' }).first().click();
-await page.getByLabel('服務類別').selectOption({ label: '一般問題' });
+await pick(page.getByLabel('服務類別'), '一般問題');
 await page.getByLabel('主旨').fill('UI 測試：印表機無法列印');
 await page.getByLabel('問題描述').fill('三樓印表機顯示卡紙，但實際上沒有紙張卡住。');
-await page.getByLabel('優先度').selectOption('4');
+await pick(page.getByLabel('優先度'), 'L4 高');
 await page.getByRole('button', { name: '送出工單' }).click();
 await page.getByRole('heading', { name: 'UI 測試：印表機無法列印' }).waitFor();
 
 step('internal note + public reply');
+// antd's auto-size textarea keeps a hidden measuring copy in the page, so target the visible one
 await page.getByLabel('內部備忘').check();
-await page.locator('textarea').last().fill('內部：已通知廠商');
+await page.locator('textarea:visible').last().fill('內部：已通知廠商');
 await page.getByRole('button', { name: '新增內部備忘' }).click();
 await page.getByText('內部：已通知廠商').waitFor();
 await page.getByLabel('對外回覆').check();
-await page.locator('textarea').last().fill('您好，我們已安排工程師前往處理。');
+await page.locator('textarea:visible').last().fill('您好，我們已安排工程師前往處理。');
 await page.getByRole('button', { name: '送出回覆' }).click();
 await page.getByText('您好，我們已安排工程師前往處理。').waitFor();
-await page.getByLabel('狀態').first().selectOption('pending_user');
+await pick(page.getByLabel('狀態').first(), '→ 等待使用者回覆');
 await page.getByText('計時暫停').first().waitFor();
 await shot('03-ticket-detail');
 
@@ -71,14 +77,14 @@ step('admin: create user');
 await page.getByLabel('主選單').getByRole('link', { name: '使用者' }).click();
 await page.getByLabel('電子郵件').fill(VENDOR);
 await page.getByLabel('顯示名稱').fill('UI Vendor');
-await page.getByLabel('角色').first().selectOption('vendor');
+await pick(page.getByLabel('角色').first(), '外部廠商');
 await page.getByRole('button', { name: '新增' }).first().click();
 const temp = (await page.locator('.secret-box').first().innerText()).trim();
 await shot('05-admin-users');
 
 step('dark theme + English');
-await page.getByLabel('主題').selectOption('dark');
-await page.getByLabel('語言').selectOption('en-US');
+await pick(page.getByLabel('主題'), '深色');
+await pick(page.getByLabel('語言'), 'English');
 await page.getByLabel('Main menu').getByRole('link', { name: 'Dashboard' }).click();
 await page.getByRole('heading', { name: 'Dashboard' }).waitFor();
 if ((await page.evaluate(() => document.documentElement.dataset.theme)) !== 'dark') throw new Error('dark theme not applied');

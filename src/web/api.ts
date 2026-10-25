@@ -30,7 +30,9 @@ export async function api<T = any>(method: string, path: string, body?: unknown)
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     const err = new ApiError(res.status, data.code ?? 'error', data.title ?? res.statusText, data);
-    if (res.status === 401 || ['password_change_required', 'mfa_required', 'mfa_enrollment_required'].includes(err.code)) {
+    // /auth/me is the refresh itself: a 401 there just means "signed out" and must not trigger another refresh
+    const stageChange = res.status === 401 || ['password_change_required', 'mfa_required', 'mfa_enrollment_required'].includes(err.code);
+    if (stageChange && path !== '/auth/me') {
       onAuthError?.(err);
     }
     throw err;

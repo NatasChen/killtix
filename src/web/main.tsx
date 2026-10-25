@@ -1,4 +1,7 @@
-import { StrictMode, useEffect } from 'react';
+import { App as AntApp, ConfigProvider } from 'antd';
+import enUS from 'antd/locale/en_US';
+import zhTW from 'antd/locale/zh_TW';
+import { StrictMode, useEffect, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider, useAuth } from './auth';
@@ -11,13 +14,31 @@ import { TicketDetailPage } from './pages/TicketDetail';
 import { TicketListPage } from './pages/TicketList';
 import { TicketNewPage } from './pages/TicketNew';
 import { AdminRoutes } from './pages/admin/AdminRoutes';
-import { applyTheme, watchSystemTheme } from './theme';
+import { antdTheme, applyTheme, useThemeMode, watchSystemTheme } from './theme';
+import { Empty } from './components/common';
 // Self-hosted Google Noto fonts (bundled by Vite, same origin, so the CSP stays unchanged)
 import '@fontsource-variable/noto-sans-display';
 import '@fontsource-variable/noto-sans-tc';
 import './styles.css';
 
 watchSystemTheme();
+
+/** Ant Design theme (palette.ts tokens, light/dark algorithm) and the locale of antd's built-in labels. */
+function ThemeRoot({ children }: { children: ReactNode }) {
+  const mode = useThemeMode();
+  const { locale } = useI18n();
+  return (
+    <ConfigProvider
+      theme={antdTheme(mode)}
+      locale={locale.startsWith('zh') ? zhTW : enUS}
+      renderEmpty={() => <Empty />}
+      // keep glossary text as written: antd would otherwise turn a two-character CJK label like 登入 into 登 入
+      button={{ autoInsertSpace: false }}
+    >
+      <AntApp>{children}</AntApp>
+    </ConfigProvider>
+  );
+}
 
 function Root() {
   const { user, stage, loading } = useAuth();
@@ -55,11 +76,13 @@ function Root() {
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <I18nProvider>
-      <AuthProvider>
-        <BrowserRouter>
-          <Root />
-        </BrowserRouter>
-      </AuthProvider>
+      <ThemeRoot>
+        <AuthProvider>
+          <BrowserRouter>
+            <Root />
+          </BrowserRouter>
+        </AuthProvider>
+      </ThemeRoot>
     </I18nProvider>
   </StrictMode>,
 );

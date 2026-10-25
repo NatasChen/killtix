@@ -1,3 +1,5 @@
+import { Checkbox, Input, Select } from 'antd';
+
 export interface FieldDef {
   key: string;
   label: string;
@@ -7,51 +9,42 @@ export interface FieldDef {
   visibility?: string;
 }
 
-/** Renders the input for one custom field type. */
-export function CustomFieldInput({ field, value, onChange }: { field: FieldDef; value: unknown; onChange: (v: unknown) => void }) {
+/** Renders the input for one custom field type. `id` ties it to its <Field> label. */
+export function CustomFieldInput({ field, value, onChange, id }: { field: FieldDef; value: unknown; onChange: (v: unknown) => void; id?: string }) {
   const required = field.isRequired && field.visibility !== 'internal';
+  const text = (value as string) ?? '';
   switch (field.type) {
     case 'textarea':
-      return <textarea required={required} value={(value as string) ?? ''} onChange={(e) => onChange(e.target.value)} />;
+      return <Input.TextArea id={id} required={required} autoSize={{ minRows: 3 }} value={text} onChange={(e) => onChange(e.target.value)} />;
     case 'number':
-      return <input type="number" required={required} value={(value as string) ?? ''} onChange={(e) => onChange(e.target.value === '' ? '' : Number(e.target.value))} />;
+      return <Input id={id} type="number" required={required} value={text} onChange={(e) => onChange(e.target.value === '' ? '' : Number(e.target.value))} />;
     case 'date':
-      return <input type="date" required={required} value={(value as string) ?? ''} onChange={(e) => onChange(e.target.value)} />;
     case 'email':
-      return <input type="email" required={required} value={(value as string) ?? ''} onChange={(e) => onChange(e.target.value)} />;
     case 'url':
-      return <input type="url" required={required} value={(value as string) ?? ''} onChange={(e) => onChange(e.target.value)} />;
+      return <Input id={id} type={field.type} required={required} value={text} onChange={(e) => onChange(e.target.value)} />;
     case 'checkbox':
-      return <input type="checkbox" checked={value === true} onChange={(e) => onChange(e.target.checked)} />;
+      return <Checkbox id={id} checked={value === true} onChange={(e) => onChange(e.target.checked)} />;
     case 'select':
       return (
-        <select required={required} value={(value as string) ?? ''} onChange={(e) => onChange(e.target.value)}>
-          <option value="">—</option>
-          {field.options.map((o) => (
-            <option key={o} value={o}>
-              {o}
-            </option>
-          ))}
-        </select>
+        <Select
+          id={id}
+          value={text}
+          onChange={(v) => onChange(v)}
+          options={[{ value: '', label: '—' }, ...field.options.map((o) => ({ value: o, label: o, title: o }))]}
+        />
       );
-    case 'multiselect': {
-      const selected = Array.isArray(value) ? (value as string[]) : [];
+    case 'multiselect':
       return (
-        <select
-          multiple
-          value={selected}
-          onChange={(e) => onChange([...e.target.selectedOptions].map((o) => o.value))}
-        >
-          {field.options.map((o) => (
-            <option key={o} value={o}>
-              {o}
-            </option>
-          ))}
-        </select>
+        <Select
+          id={id}
+          mode="multiple"
+          value={Array.isArray(value) ? (value as string[]) : []}
+          onChange={(v) => onChange(v)}
+          options={field.options.map((o) => ({ value: o, label: o, title: o }))}
+        />
       );
-    }
     default:
-      return <input required={required} value={(value as string) ?? ''} onChange={(e) => onChange(e.target.value)} />;
+      return <Input id={id} required={required} value={text} onChange={(e) => onChange(e.target.value)} />;
   }
 }
 

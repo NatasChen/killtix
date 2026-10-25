@@ -1,8 +1,9 @@
-import { useState, type FormEvent } from 'react';
+import { Alert, Button, Card, Checkbox, Col, Flex, Form, Input, Row, Table, type TableColumnsType } from 'antd';
+import { useState } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { del, get, patch, post, put } from '../../api';
 import { useAuth } from '../../auth';
-import { DateTime, Empty, ErrorBanner, Loading, useAction, useLoad } from '../../components/common';
+import { Choice, DateTime, ErrorBanner, Field, PageHeader, ToneTag, useAction, useLoad, usePalette } from '../../components/common';
 import { useI18n } from '../../i18n';
 import { CrudPage } from './Crud';
 
@@ -11,21 +12,31 @@ const FIELD_TYPES = ['text', 'textarea', 'number', 'date', 'select', 'multiselec
 
 type Opt = { id: number; name: string };
 const useOptions = (path: string) => useLoad(() => get<Opt[]>(path), [path]).data?.map((o) => ({ value: o.id, label: o.name })) ?? [];
+const sectionTitle = (text: string) => <h2 style={{ fontSize: 16, margin: 0 }}>{text}</h2>;
+const tableProps = { rowKey: 'id', pagination: false, size: 'middle', scroll: { x: 'max-content' } } as const;
 
 /** Shows a secret exactly once with a copy button. */
 function OneTimeSecret({ label, value, onClose }: { label: string; value: string; onClose: () => void }) {
   const { t } = useI18n();
+  const p = usePalette();
   return (
-    <div className="banner warning">
-      <strong>{label}</strong>
-      <div className="secret-box mono" style={{ margin: '8px 0' }}>
-        {value}
-      </div>
-      <div className="actions">
-        <button onClick={() => void navigator.clipboard?.writeText(value)}>{t('ui.common.copy')}</button>
-        <button onClick={onClose}>{t('ui.common.close')}</button>
-      </div>
-    </div>
+    <Alert
+      type="warning"
+      showIcon
+      style={{ marginBottom: 16 }}
+      title={<strong>{label}</strong>}
+      description={
+        <>
+          <div className="secret-box mono" style={{ margin: '8px 0', background: p.surface }}>
+            {value}
+          </div>
+          <Flex gap={8}>
+            <Button onClick={() => void navigator.clipboard?.writeText(value)}>{t('ui.common.copy')}</Button>
+            <Button onClick={onClose}>{t('ui.common.close')}</Button>
+          </Flex>
+        </>
+      }
+    />
   );
 }
 
@@ -38,9 +49,9 @@ function UsersPage() {
   const action = useAction();
   const [secret, setSecret] = useState<{ email: string; password: string } | null>(null);
   const [form, setForm] = useState({ email: '', displayName: '', role: 'end_user', teamId: '' });
+  const roles = ROLES.map((r) => ({ value: r, label: t(`ui.role.${r}`) }));
 
-  const create = (e: FormEvent) => {
-    e.preventDefault();
+  const create = () => {
     void action.run(async () => {
       const res = await post('/admin/users', { ...form, teamId: form.teamId ? Number(form.teamId) : null });
       setSecret({ email: res.user.email, password: res.temporaryPassword });
@@ -50,151 +61,125 @@ function UsersPage() {
   };
   const update = (id: number, body: Record<string, unknown>) => action.run(async () => { await patch(`/admin/users/${id}`, body); await reload(); });
 
+  const columns: TableColumnsType<any> = [
+    {
+      key: 'email',
+      title: t('ui.auth.email'),
+      render: (_, u) => (
+        <>
+          {u.displayName}
+          <div className="small muted">{u.email}</div>
+          {u.lockedUntil && new Date(u.lockedUntil) > new Date() && <ToneTag tone="red">{t('ui.admin.locked')}</ToneTag>}
+        </>
+      ),
+    },
+    {
+      key: 'role',
+      title: t('ui.admin.role'),
+      render: (_, u) => (
+        <Choice aria-label={t('ui.admin.role')} value={u.role} disabled={u.id === me?.id} onChange={(v) => void update(u.id, { role: v })} options={roles} />
+      ),
+    },
+    {
+      key: 'team',
+      title: t('ui.tickets.team'),
+      render: (_, u) => (
+        <Choice
+          aria-label={t('ui.tickets.team')}
+          value={u.teamId ?? ''}
+          onChange={(v) => void update(u.id, { teamId: v ? Number(v) : null })}
+          empty="—"
+          options={teams}
+        />
+      ),
+    },
+    { key: '2fa', title: '2FA', render: (_, u) => (u.twoFactorEnabled ? '✓' : '—') },
+    { key: 'last_login', title: t('ui.admin.last_login'), className: 'nowrap', render: (_, u) => <DateTime value={u.lastLoginAt} /> },
+    {
+      key: 'active',
+      title: t('ui.admin.active'),
+      render: (_, u) => (
+        <Checkbox checked={u.isActive} disabled={u.id === me?.id} onChange={(e) => void update(u.id, { isActive: e.target.checked })} aria-label={t('ui.admin.active')} />
+      ),
+    },
+    {
+      key: 'actions',
+      title: '',
+      className: 'nowrap',
+      render: (_, u) => (
+        <Flex gap={4}>
+          <Button
+            type="link"
+            onClick={() =>
+              void action.run(async () => {
+                const res = await post(`/admin/users/${u.id}/reset-password`);
+                setSecret({ email: u.email, password: res.temporaryPassword });
+              })
+            }
+          >
+            {t('ui.admin.reset_password')}
+          </Button>
+          {u.twoFactorEnabled && (
+            <Button type="link" onClick={() => void action.run(async () => { await post(`/admin/users/${u.id}/reset-2fa`); await reload(); })}>
+              {t('ui.admin.reset_2fa')}
+            </Button>
+          )}
+          {u.lockedUntil && (
+            <Button type="link" onClick={() => void action.run(async () => { await post(`/admin/users/${u.id}/unlock`); await reload(); })}>
+              {t('ui.admin.unlock')}
+            </Button>
+          )}
+        </Flex>
+      ),
+    },
+  ];
+
   return (
     <>
-      <h1>{t('ui.nav.users')}</h1>
+      <PageHeader title={t('ui.nav.users')} />
       {secret && (
         <OneTimeSecret label={t('ui.admin.temp_password_for', { email: secret.email })} value={secret.password} onClose={() => setSecret(null)} />
       )}
       <ErrorBanner error={action.error} />
-      <form className="card form" onSubmit={create}>
-        <h2>{t('ui.admin.create_user')}</h2>
-        <div className="form-row">
-          <label>
-            {t('ui.auth.email')}
-            <input type="email" required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-          </label>
-          <label>
-            {t('ui.profile.display_name')}
-            <input required value={form.displayName} onChange={(e) => setForm({ ...form, displayName: e.target.value })} />
-          </label>
-          <label>
-            {t('ui.admin.role')}
-            <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
-              {ROLES.map((r) => (
-                <option key={r} value={r}>
-                  {t(`ui.role.${r}`)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            {t('ui.tickets.team')}
-            <select value={form.teamId} onChange={(e) => setForm({ ...form, teamId: e.target.value })}>
-              <option value="">—</option>
-              {teams.map((tm) => (
-                <option key={tm.value} value={tm.value}>
-                  {tm.label}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-        <p className="small muted">{t('ui.admin.create_user_hint')}</p>
-        <div className="actions">
-          <button className="primary" disabled={action.busy}>
+      <Card title={sectionTitle(t('ui.admin.create_user'))} style={{ marginBottom: 16 }}>
+        <Form layout="vertical" requiredMark={false} onFinish={create}>
+          <Row gutter={12}>
+            <Col xs={24} sm={12} lg={6}>
+              <Field label={t('ui.auth.email')}>
+                <Input type="email" required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+              </Field>
+            </Col>
+            <Col xs={24} sm={12} lg={6}>
+              <Field label={t('ui.profile.display_name')}>
+                <Input required value={form.displayName} onChange={(e) => setForm({ ...form, displayName: e.target.value })} />
+              </Field>
+            </Col>
+            <Col xs={24} sm={12} lg={6}>
+              <Field label={t('ui.admin.role')}>
+                <Choice value={form.role} onChange={(v) => setForm({ ...form, role: v })} options={roles} style={{ width: '100%' }} />
+              </Field>
+            </Col>
+            <Col xs={24} sm={12} lg={6}>
+              <Field label={t('ui.tickets.team')}>
+                <Choice value={form.teamId} onChange={(v) => setForm({ ...form, teamId: v })} empty="—" options={teams} style={{ width: '100%' }} />
+              </Field>
+            </Col>
+          </Row>
+          <p className="small muted">{t('ui.admin.create_user_hint')}</p>
+          <Button type="primary" htmlType="submit" loading={action.busy} disabled={action.busy}>
             {t('ui.common.add')}
-          </button>
-        </div>
-      </form>
-      <div className="card">
-        <div className="filters">
-          <label>
-            {t('ui.tickets.search')}
-            <input value={q} onChange={(e) => setQ(e.target.value)} />
-          </label>
-        </div>
+          </Button>
+        </Form>
+      </Card>
+      <Card>
+        <Form layout="vertical" style={{ maxWidth: 260 }}>
+          <Field label={t('ui.tickets.search')}>
+            <Input value={q} onChange={(e) => setQ(e.target.value)} />
+          </Field>
+        </Form>
         <ErrorBanner error={error} />
-        {loading && !data ? (
-          <Loading />
-        ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>{t('ui.auth.email')}</th>
-                  <th>{t('ui.admin.role')}</th>
-                  <th>{t('ui.tickets.team')}</th>
-                  <th>2FA</th>
-                  <th>{t('ui.admin.last_login')}</th>
-                  <th>{t('ui.admin.active')}</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {data?.map((u) => (
-                  <tr key={u.id}>
-                    <td>
-                      {u.displayName}
-                      <div className="small muted">{u.email}</div>
-                      {u.lockedUntil && new Date(u.lockedUntil) > new Date() && <span className="badge breached">{t('ui.admin.locked')}</span>}
-                    </td>
-                    <td>
-                      <select value={u.role} disabled={u.id === me?.id} onChange={(e) => void update(u.id, { role: e.target.value })} aria-label={t('ui.admin.role')}>
-                        {ROLES.map((r) => (
-                          <option key={r} value={r}>
-                            {t(`ui.role.${r}`)}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td>
-                      <select
-                        value={u.teamId ?? ''}
-                        onChange={(e) => void update(u.id, { teamId: e.target.value ? Number(e.target.value) : null })}
-                        aria-label={t('ui.tickets.team')}
-                      >
-                        <option value="">—</option>
-                        {teams.map((tm) => (
-                          <option key={tm.value} value={tm.value}>
-                            {tm.label}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td>{u.twoFactorEnabled ? '✓' : '—'}</td>
-                    <td>
-                      <DateTime value={u.lastLoginAt} />
-                    </td>
-                    <td>
-                      <input
-                        type="checkbox"
-                        checked={u.isActive}
-                        disabled={u.id === me?.id}
-                        onChange={(e) => void update(u.id, { isActive: e.target.checked })}
-                        aria-label={t('ui.admin.active')}
-                      />
-                    </td>
-                    <td className="actions">
-                      <button
-                        className="link"
-                        onClick={() =>
-                          void action.run(async () => {
-                            const res = await post(`/admin/users/${u.id}/reset-password`);
-                            setSecret({ email: u.email, password: res.temporaryPassword });
-                          })
-                        }
-                      >
-                        {t('ui.admin.reset_password')}
-                      </button>
-                      {u.twoFactorEnabled && (
-                        <button className="link" onClick={() => void action.run(async () => { await post(`/admin/users/${u.id}/reset-2fa`); await reload(); })}>
-                          {t('ui.admin.reset_2fa')}
-                        </button>
-                      )}
-                      {u.lockedUntil && (
-                        <button className="link" onClick={() => void action.run(async () => { await post(`/admin/users/${u.id}/unlock`); await reload(); })}>
-                          {t('ui.admin.unlock')}
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+        <Table {...tableProps} columns={columns} dataSource={data ?? []} loading={loading && !data} />
+      </Card>
     </>
   );
 }
@@ -208,153 +193,141 @@ function FormsPage() {
   const empty = { key: '', label: '', type: 'text', isRequired: false, options: '', regex: '', visibility: 'public', isFilterable: false };
   const [field, setField] = useState(empty);
   const current = data?.find((f) => f.id === selected) ?? data?.[0];
+  const toggle = (id: number, key: string) => (e: { target: { checked: boolean } }) =>
+    void action.run(async () => { await patch(`/admin/fields/${id}`, { [key]: e.target.checked }); await reload(); });
+
+  const columns: TableColumnsType<any> = [
+    { key: 'key', title: 'key', className: 'mono', render: (_, f) => f.key },
+    {
+      key: 'label',
+      title: t('ui.admin.label'),
+      render: (_, f) => (
+        <>
+          {f.label}
+          {f.options?.length > 0 && <div className="small muted">{f.options.join(', ')}</div>}
+        </>
+      ),
+    },
+    { key: 'type', title: t('ui.admin.type'), render: (_, f) => f.type },
+    { key: 'required', title: t('ui.admin.required'), render: (_, f) => <Checkbox checked={f.isRequired} onChange={toggle(f.id, 'isRequired')} aria-label={t('ui.admin.required')} /> },
+    { key: 'visibility', title: t('ui.admin.visibility'), render: (_, f) => t(`ui.visibility.${f.visibility}`) },
+    { key: 'filterable', title: t('ui.admin.filterable'), render: (_, f) => <Checkbox checked={f.isFilterable} onChange={toggle(f.id, 'isFilterable')} aria-label={t('ui.admin.filterable')} /> },
+    { key: 'active', title: t('ui.admin.active'), render: (_, f) => <Checkbox checked={f.isActive} onChange={toggle(f.id, 'isActive')} aria-label={t('ui.admin.active')} /> },
+  ];
 
   return (
     <>
-      <h1>{t('ui.nav.forms')}</h1>
+      <PageHeader title={t('ui.nav.forms')} />
       <ErrorBanner error={action.error ?? error} />
-      <form
-        className="card actions"
-        onSubmit={(e) => {
-          e.preventDefault();
-          void action.run(async () => {
-            const created = await post('/admin/forms', { name: formName });
-            setFormName('');
-            setSelected(created.id);
-            await reload();
-          });
-        }}
-      >
-        <input required placeholder={t('ui.admin.form_name')} value={formName} onChange={(e) => setFormName(e.target.value)} aria-label={t('ui.admin.form_name')} />
-        <button className="primary">{t('ui.admin.add_form')}</button>
-      </form>
-      {loading && !data ? (
-        <Loading />
-      ) : !data?.length ? (
-        <div className="card">
-          <Empty />
-        </div>
-      ) : (
-        <div className="card">
-          <div className="actions" style={{ marginBottom: 12 }}>
-            {data.map((f) => (
-              <button key={f.id} className={f.id === current?.id ? 'primary' : ''} onClick={() => setSelected(f.id)}>
-                {f.name}
-              </button>
-            ))}
-          </div>
-          <p className="small muted">{t('ui.admin.form_hint')}</p>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>key</th>
-                  <th>{t('ui.admin.label')}</th>
-                  <th>{t('ui.admin.type')}</th>
-                  <th>{t('ui.admin.required')}</th>
-                  <th>{t('ui.admin.visibility')}</th>
-                  <th>{t('ui.admin.filterable')}</th>
-                  <th>{t('ui.admin.active')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {current?.fields.map((f: any) => (
-                  <tr key={f.id}>
-                    <td className="mono">{f.key}</td>
-                    <td>
-                      {f.label}
-                      {f.options?.length > 0 && <div className="small muted">{f.options.join(', ')}</div>}
-                    </td>
-                    <td>{f.type}</td>
-                    <td>
-                      <input type="checkbox" checked={f.isRequired} onChange={(e) => void action.run(async () => { await patch(`/admin/fields/${f.id}`, { isRequired: e.target.checked }); await reload(); })} aria-label={t('ui.admin.required')} />
-                    </td>
-                    <td>{t(`ui.visibility.${f.visibility}`)}</td>
-                    <td>
-                      <input type="checkbox" checked={f.isFilterable} onChange={(e) => void action.run(async () => { await patch(`/admin/fields/${f.id}`, { isFilterable: e.target.checked }); await reload(); })} aria-label={t('ui.admin.filterable')} />
-                    </td>
-                    <td>
-                      <input type="checkbox" checked={f.isActive} onChange={(e) => void action.run(async () => { await patch(`/admin/fields/${f.id}`, { isActive: e.target.checked }); await reload(); })} aria-label={t('ui.admin.active')} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {current && (
-            <form
-              className="form"
-              style={{ marginTop: 16 }}
-              onSubmit={(e) => {
-                e.preventDefault();
-                void action.run(async () => {
-                  await post(`/admin/forms/${current.id}/fields`, {
-                    ...field,
-                    regex: field.regex || null,
-                    options: field.options.split(',').map((s) => s.trim()).filter(Boolean),
-                  });
-                  setField(empty);
-                  await reload();
+      <Card style={{ marginBottom: 16 }}>
+        <Form
+          onFinish={() =>
+            void action.run(async () => {
+              const created = await post('/admin/forms', { name: formName });
+              setFormName('');
+              setSelected(created.id);
+              await reload();
+            })
+          }
+        >
+          <Flex gap={8} wrap>
+            <Input required placeholder={t('ui.admin.form_name')} value={formName} onChange={(e) => setFormName(e.target.value)} aria-label={t('ui.admin.form_name')} style={{ maxWidth: 320 }} />
+            <Button type="primary" htmlType="submit">
+              {t('ui.admin.add_form')}
+            </Button>
+          </Flex>
+        </Form>
+      </Card>
+      <Card loading={loading && !data}>
+        {data && data.length > 0 && (
+          <>
+            <Flex gap={8} wrap style={{ marginBottom: 12 }}>
+              {data.map((f) => (
+                <Button key={f.id} type={f.id === current?.id ? 'primary' : 'default'} onClick={() => setSelected(f.id)}>
+                  {f.name}
+                </Button>
+              ))}
+            </Flex>
+            <p className="small muted">{t('ui.admin.form_hint')}</p>
+          </>
+        )}
+        <Table {...tableProps} columns={columns} dataSource={current?.fields ?? []} />
+        {current && (
+          <Form
+            layout="vertical"
+            requiredMark={false}
+            style={{ marginTop: 16 }}
+            onFinish={() =>
+              void action.run(async () => {
+                await post(`/admin/forms/${current.id}/fields`, {
+                  ...field,
+                  regex: field.regex || null,
+                  options: field.options.split(',').map((x) => x.trim()).filter(Boolean),
                 });
-              }}
-            >
-              <h3>{t('ui.admin.add_field')}</h3>
-              <div className="form-row">
-                <label>
-                  key
-                  <input required pattern="[A-Za-z0-9_\-]{1,64}" value={field.key} onChange={(e) => setField({ ...field, key: e.target.value })} />
-                </label>
-                <label>
-                  {t('ui.admin.label')}
-                  <input required value={field.label} onChange={(e) => setField({ ...field, label: e.target.value })} />
-                </label>
-                <label>
-                  {t('ui.admin.type')}
-                  <select value={field.type} onChange={(e) => setField({ ...field, type: e.target.value })}>
-                    {FIELD_TYPES.map((ft) => (
-                      <option key={ft} value={ft}>
-                        {ft}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  {t('ui.admin.visibility')}
-                  <select value={field.visibility} onChange={(e) => setField({ ...field, visibility: e.target.value })}>
-                    <option value="public">{t('ui.visibility.public')}</option>
-                    <option value="internal">{t('ui.visibility.internal')}</option>
-                  </select>
-                </label>
-                {(field.type === 'select' || field.type === 'multiselect') && (
-                  <label>
-                    {t('ui.admin.options')}
-                    <input required value={field.options} onChange={(e) => setField({ ...field, options: e.target.value })} placeholder="prod, dev" />
-                  </label>
-                )}
-                {(field.type === 'text' || field.type === 'textarea') && (
-                  <label>
-                    {t('ui.admin.regex')}
-                    <input value={field.regex} onChange={(e) => setField({ ...field, regex: e.target.value })} placeholder="^[A-Z0-9-]+$" />
-                  </label>
-                )}
-              </div>
-              <div className="actions">
-                <label className="inline">
-                  <input type="checkbox" checked={field.isRequired} onChange={(e) => setField({ ...field, isRequired: e.target.checked })} />
-                  {t('ui.admin.required')}
-                </label>
-                <label className="inline">
-                  <input type="checkbox" checked={field.isFilterable} onChange={(e) => setField({ ...field, isFilterable: e.target.checked })} />
-                  {t('ui.admin.filterable')}
-                </label>
-                <button className="primary" disabled={action.busy}>
-                  {t('ui.common.add')}
-                </button>
-              </div>
-            </form>
-          )}
-        </div>
-      )}
+                setField(empty);
+                await reload();
+              })
+            }
+          >
+            <h3>{t('ui.admin.add_field')}</h3>
+            <Row gutter={12}>
+              <Col xs={24} sm={12} lg={6}>
+                <Field label="key">
+                  <Input required pattern="[A-Za-z0-9_\-]{1,64}" value={field.key} onChange={(e) => setField({ ...field, key: e.target.value })} />
+                </Field>
+              </Col>
+              <Col xs={24} sm={12} lg={6}>
+                <Field label={t('ui.admin.label')}>
+                  <Input required value={field.label} onChange={(e) => setField({ ...field, label: e.target.value })} />
+                </Field>
+              </Col>
+              <Col xs={24} sm={12} lg={6}>
+                <Field label={t('ui.admin.type')}>
+                  <Choice value={field.type} onChange={(v) => setField({ ...field, type: v })} options={FIELD_TYPES.map((ft) => ({ value: ft, label: ft }))} style={{ width: '100%' }} />
+                </Field>
+              </Col>
+              <Col xs={24} sm={12} lg={6}>
+                <Field label={t('ui.admin.visibility')}>
+                  <Choice
+                    value={field.visibility}
+                    onChange={(v) => setField({ ...field, visibility: v })}
+                    options={[
+                      { value: 'public', label: t('ui.visibility.public') },
+                      { value: 'internal', label: t('ui.visibility.internal') },
+                    ]}
+                    style={{ width: '100%' }}
+                  />
+                </Field>
+              </Col>
+              {(field.type === 'select' || field.type === 'multiselect') && (
+                <Col xs={24} sm={12} lg={6}>
+                  <Field label={t('ui.admin.options')}>
+                    <Input required value={field.options} onChange={(e) => setField({ ...field, options: e.target.value })} placeholder="prod, dev" />
+                  </Field>
+                </Col>
+              )}
+              {(field.type === 'text' || field.type === 'textarea') && (
+                <Col xs={24} sm={12} lg={6}>
+                  <Field label={t('ui.admin.regex')}>
+                    <Input value={field.regex} onChange={(e) => setField({ ...field, regex: e.target.value })} placeholder="^[A-Z0-9-]+$" />
+                  </Field>
+                </Col>
+              )}
+            </Row>
+            <Flex gap={16} align="center" wrap>
+              <Checkbox checked={field.isRequired} onChange={(e) => setField({ ...field, isRequired: e.target.checked })}>
+                {t('ui.admin.required')}
+              </Checkbox>
+              <Checkbox checked={field.isFilterable} onChange={(e) => setField({ ...field, isFilterable: e.target.checked })}>
+                {t('ui.admin.filterable')}
+              </Checkbox>
+              <Button type="primary" htmlType="submit" loading={action.busy} disabled={action.busy}>
+                {t('ui.common.add')}
+              </Button>
+            </Flex>
+          </Form>
+        )}
+      </Card>
     </>
   );
 }
@@ -366,94 +339,73 @@ function ApiTokensPage() {
   const [form, setForm] = useState({ name: '', write: true, read: true, expiresInDays: '' });
   const [secret, setSecret] = useState<string | null>(null);
 
+  const columns: TableColumnsType<any> = [
+    { key: 'name', title: t('ui.admin.token_name'), render: (_, tok) => tok.name },
+    { key: 'prefix', title: t('ui.admin.prefix'), className: 'mono', render: (_, tok) => `td_${tok.prefix}_…` },
+    { key: 'scopes', title: t('ui.admin.scopes'), className: 'mono small', render: (_, tok) => tok.scopes.join(', ') },
+    { key: 'expires', title: t('ui.admin.expires'), render: (_, tok) => <DateTime value={tok.expiresAt} /> },
+    { key: 'last_used', title: t('ui.admin.last_used'), render: (_, tok) => <DateTime value={tok.lastUsedAt} /> },
+    {
+      key: 'revoke',
+      title: '',
+      render: (_, tok) =>
+        tok.revokedAt ? (
+          <ToneTag tone="grey">{t('ui.admin.revoked')}</ToneTag>
+        ) : (
+          <Button danger onClick={() => void action.run(async () => { await del(`/admin/api-tokens/${tok.id}`); await reload(); })}>
+            {t('ui.admin.revoke')}
+          </Button>
+        ),
+    },
+  ];
+
   return (
     <>
-      <h1>{t('ui.nav.api_tokens')}</h1>
+      <PageHeader title={t('ui.nav.api_tokens')} />
       {secret && <OneTimeSecret label={t('ui.admin.token_once')} value={secret} onClose={() => setSecret(null)} />}
       <ErrorBanner error={action.error ?? error} />
-      <form
-        className="card form"
-        onSubmit={(e) => {
-          e.preventDefault();
-          const scopes = [form.write && 'tickets:write', form.read && 'tickets:read'].filter(Boolean);
-          void action.run(async () => {
-            const res = await post('/admin/api-tokens', { name: form.name, scopes, expiresInDays: form.expiresInDays ? Number(form.expiresInDays) : null });
-            setSecret(res.token);
-            setForm({ name: '', write: true, read: true, expiresInDays: '' });
-            await reload();
-          });
-        }}
-      >
-        <div className="form-row">
-          <label>
-            {t('ui.admin.token_name')}
-            <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="SOC / SIEM" />
-          </label>
-          <label>
-            {t('ui.admin.expires_in_days')}
-            <input type="number" min={1} value={form.expiresInDays} onChange={(e) => setForm({ ...form, expiresInDays: e.target.value })} />
-          </label>
-        </div>
-        <div className="actions">
-          <label className="inline">
-            <input type="checkbox" checked={form.write} onChange={(e) => setForm({ ...form, write: e.target.checked })} />
-            tickets:write
-          </label>
-          <label className="inline">
-            <input type="checkbox" checked={form.read} onChange={(e) => setForm({ ...form, read: e.target.checked })} />
-            tickets:read
-          </label>
-          <button className="primary" disabled={action.busy || (!form.read && !form.write)}>
-            {t('ui.common.add')}
-          </button>
-        </div>
-      </form>
-      <div className="card">
-        {loading && !data ? (
-          <Loading />
-        ) : !data?.length ? (
-          <Empty />
-        ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>{t('ui.admin.token_name')}</th>
-                  <th>{t('ui.admin.prefix')}</th>
-                  <th>{t('ui.admin.scopes')}</th>
-                  <th>{t('ui.admin.expires')}</th>
-                  <th>{t('ui.admin.last_used')}</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {data.map((tok) => (
-                  <tr key={tok.id}>
-                    <td>{tok.name}</td>
-                    <td className="mono">td_{tok.prefix}_…</td>
-                    <td className="mono small">{tok.scopes.join(', ')}</td>
-                    <td>
-                      <DateTime value={tok.expiresAt} />
-                    </td>
-                    <td>
-                      <DateTime value={tok.lastUsedAt} />
-                    </td>
-                    <td>
-                      {tok.revokedAt ? (
-                        <span className="badge">{t('ui.admin.revoked')}</span>
-                      ) : (
-                        <button className="danger" onClick={() => void action.run(async () => { await del(`/admin/api-tokens/${tok.id}`); await reload(); })}>
-                          {t('ui.admin.revoke')}
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+      <Card style={{ marginBottom: 16 }}>
+        <Form
+          layout="vertical"
+          requiredMark={false}
+          onFinish={() => {
+            const scopes = [form.write && 'tickets:write', form.read && 'tickets:read'].filter(Boolean);
+            void action.run(async () => {
+              const res = await post('/admin/api-tokens', { name: form.name, scopes, expiresInDays: form.expiresInDays ? Number(form.expiresInDays) : null });
+              setSecret(res.token);
+              setForm({ name: '', write: true, read: true, expiresInDays: '' });
+              await reload();
+            });
+          }}
+        >
+          <Row gutter={12}>
+            <Col xs={24} sm={12} lg={8}>
+              <Field label={t('ui.admin.token_name')}>
+                <Input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="SOC / SIEM" />
+              </Field>
+            </Col>
+            <Col xs={24} sm={12} lg={8}>
+              <Field label={t('ui.admin.expires_in_days')}>
+                <Input type="number" min={1} value={form.expiresInDays} onChange={(e) => setForm({ ...form, expiresInDays: e.target.value })} />
+              </Field>
+            </Col>
+          </Row>
+          <Flex gap={16} align="center" wrap>
+            <Checkbox checked={form.write} onChange={(e) => setForm({ ...form, write: e.target.checked })}>
+              tickets:write
+            </Checkbox>
+            <Checkbox checked={form.read} onChange={(e) => setForm({ ...form, read: e.target.checked })}>
+              tickets:read
+            </Checkbox>
+            <Button type="primary" htmlType="submit" loading={action.busy} disabled={action.busy || (!form.read && !form.write)}>
+              {t('ui.common.add')}
+            </Button>
+          </Flex>
+        </Form>
+      </Card>
+      <Card>
+        <Table {...tableProps} columns={columns} dataSource={data ?? []} loading={loading && !data} />
+      </Card>
     </>
   );
 }
@@ -465,159 +417,149 @@ function SettingsPage() {
   const action = useAction();
   const [term, setTerm] = useState({ locale: locales[0] ?? 'zh-TW', key: '', value: '' });
 
+  const columns: TableColumnsType<any> = [
+    { key: 'locale', title: t('ui.common.language'), render: (_, g) => g.locale },
+    { key: 'key', title: 'key', className: 'mono', render: (_, g) => g.key },
+    { key: 'value', title: t('ui.settings.value'), render: (_, g) => g.value },
+    {
+      key: 'remove',
+      title: '',
+      render: (_, g) => (
+        <Button type="link" onClick={() => void action.run(async () => { await del(`/admin/glossary/${g.id}`); await glossary.reload(); })}>
+          {t('ui.common.remove')}
+        </Button>
+      ),
+    },
+  ];
+
   return (
     <>
-      <h1>{t('ui.nav.settings')}</h1>
+      <PageHeader title={t('ui.nav.settings')} />
       <ErrorBanner error={action.error ?? settings.error} />
-      <div className="card">
-        <h2>{t('ui.settings.security')}</h2>
+      <Card title={sectionTitle(t('ui.settings.security'))} style={{ marginBottom: 16 }}>
         {settings.data && (
-          <label className="inline">
-            <input
-              type="checkbox"
-              checked={settings.data['2faEnforced']}
-              onChange={(e) =>
-                void action.run(async () => {
-                  await patch('/admin/settings', { '2faEnforced': e.target.checked });
-                  await settings.reload();
-                })
-              }
-            />
+          <Checkbox
+            checked={settings.data['2faEnforced']}
+            onChange={(e) =>
+              void action.run(async () => {
+                await patch('/admin/settings', { '2faEnforced': e.target.checked });
+                await settings.reload();
+              })
+            }
+          >
             {t('ui.settings.enforce_2fa')}
-          </label>
+          </Checkbox>
         )}
         <p className="small muted">{t('ui.settings.enforce_2fa_hint')}</p>
-      </div>
-      <div className="card">
-        <h2>{t('ui.settings.glossary')}</h2>
+      </Card>
+      <Card title={sectionTitle(t('ui.settings.glossary'))}>
         <p className="small muted">{t('ui.settings.glossary_hint')}</p>
-        <form
-          className="form-row"
-          onSubmit={(e) => {
-            e.preventDefault();
+        <Form
+          layout="vertical"
+          requiredMark={false}
+          onFinish={() =>
             void action.run(async () => {
               await put('/admin/glossary', term);
               setTerm({ ...term, key: '', value: '' });
               await glossary.reload();
-            });
-          }}
+            })
+          }
         >
-          <label>
-            {t('ui.common.language')}
-            <select value={term.locale} onChange={(e) => setTerm({ ...term, locale: e.target.value })}>
-              {locales.map((l) => (
-                <option key={l} value={l}>
-                  {t(`ui.locale.${l}`)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            key
-            <input required value={term.key} onChange={(e) => setTerm({ ...term, key: e.target.value })} placeholder="ticket.status.open" />
-          </label>
-          <label>
-            {t('ui.settings.value')}
-            <input required value={term.value} onChange={(e) => setTerm({ ...term, value: e.target.value })} />
-          </label>
-          <div className="actions" style={{ alignSelf: 'end' }}>
-            <button className="primary">{t('ui.common.save')}</button>
-          </div>
-        </form>
-        {glossary.data && glossary.data.length > 0 && (
-          <table style={{ marginTop: 12 }}>
-            <tbody>
-              {glossary.data.map((g) => (
-                <tr key={g.id}>
-                  <td>{g.locale}</td>
-                  <td className="mono">{g.key}</td>
-                  <td>{g.value}</td>
-                  <td>
-                    <button className="link" onClick={() => void action.run(async () => { await del(`/admin/glossary/${g.id}`); await glossary.reload(); })}>
-                      {t('ui.common.remove')}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+          <Row gutter={12} align="bottom">
+            <Col xs={24} sm={12} lg={6}>
+              <Field label={t('ui.common.language')}>
+                <Choice
+                  value={term.locale}
+                  onChange={(v) => setTerm({ ...term, locale: v })}
+                  options={locales.map((l) => ({ value: l, label: t(`ui.locale.${l}`) }))}
+                  style={{ width: '100%' }}
+                />
+              </Field>
+            </Col>
+            <Col xs={24} sm={12} lg={6}>
+              <Field label="key">
+                <Input required value={term.key} onChange={(e) => setTerm({ ...term, key: e.target.value })} placeholder="ticket.status.open" />
+              </Field>
+            </Col>
+            <Col xs={24} sm={12} lg={8}>
+              <Field label={t('ui.settings.value')}>
+                <Input required value={term.value} onChange={(e) => setTerm({ ...term, value: e.target.value })} />
+              </Field>
+            </Col>
+            <Col xs={24} sm={12} lg={4}>
+              <Form.Item style={{ marginBottom: 12 }}>
+                <Button type="primary" htmlType="submit">
+                  {t('ui.common.save')}
+                </Button>
+              </Form.Item>
+            </Col>
+          </Row>
+        </Form>
+        {glossary.data && glossary.data.length > 0 && <Table {...tableProps} columns={columns} dataSource={glossary.data} />}
+      </Card>
     </>
   );
 }
 
 function NotificationsPage() {
   const { t } = useI18n();
+  const p = usePalette();
   const [status, setStatus] = useState('');
   const { data, error, loading, reload } = useLoad(() => get<any[]>(`/admin/notifications${status ? `?status=${status}` : ''}`), [status]);
   const action = useAction();
+  const columns: TableColumnsType<any> = [
+    { key: 'created', title: t('ui.tickets.created'), className: 'nowrap', render: (_, n) => <DateTime value={n.createdAt} /> },
+    { key: 'channel', title: t('ui.notify.channel'), render: (_, n) => n.channel },
+    { key: 'recipient', title: t('ui.notify.recipient'), className: 'small', render: (_, n) => n.recipient },
+    {
+      key: 'subject',
+      title: t('ui.tickets.subject'),
+      render: (_, n) => (
+        <>
+          {n.subject}
+          {n.lastError && (
+            <div className="small" style={{ color: p.danger }}>
+              {n.lastError}
+            </div>
+          )}
+        </>
+      ),
+    },
+    {
+      key: 'status',
+      title: t('ui.tickets.status'),
+      render: (_, n) => <ToneTag tone={n.status === 'sent' ? 'green' : n.status === 'dead' ? 'red' : 'grey'}>{t(`ui.notify.${n.status}`)}</ToneTag>,
+    },
+    { key: 'attempts', title: t('ui.notify.attempts'), className: 'num', render: (_, n) => n.attempts },
+    {
+      key: 'retry',
+      title: '',
+      render: (_, n) =>
+        (n.status === 'dead' || n.status === 'skipped') && (
+          <Button type="link" onClick={() => void action.run(async () => { await post(`/admin/notifications/${n.id}/retry`); await reload(); })}>
+            {t('ui.notify.retry')}
+          </Button>
+        ),
+    },
+  ];
   return (
     <>
-      <h1>{t('ui.nav.notifications')}</h1>
+      <PageHeader title={t('ui.nav.notifications')} />
       <ErrorBanner error={action.error ?? error} />
-      <div className="card">
-        <div className="filters">
-          <label>
-            {t('ui.tickets.status')}
-            <select value={status} onChange={(e) => setStatus(e.target.value)}>
-              <option value="">{t('ui.common.all')}</option>
-              {['pending', 'sent', 'dead', 'skipped'].map((s) => (
-                <option key={s} value={s}>
-                  {t(`ui.notify.${s}`)}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-        {loading && !data ? (
-          <Loading />
-        ) : !data?.length ? (
-          <Empty />
-        ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>{t('ui.tickets.created')}</th>
-                  <th>{t('ui.notify.channel')}</th>
-                  <th>{t('ui.notify.recipient')}</th>
-                  <th>{t('ui.tickets.subject')}</th>
-                  <th>{t('ui.tickets.status')}</th>
-                  <th>{t('ui.notify.attempts')}</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {data.map((n) => (
-                  <tr key={n.id}>
-                    <td>
-                      <DateTime value={n.createdAt} />
-                    </td>
-                    <td>{n.channel}</td>
-                    <td className="small">{n.recipient}</td>
-                    <td>
-                      {n.subject}
-                      {n.lastError && <div className="small" style={{ color: 'var(--danger)' }}>{n.lastError}</div>}
-                    </td>
-                    <td>
-                      <span className={`badge ${n.status === 'sent' ? 'met' : n.status === 'dead' ? 'breached' : ''}`}>{t(`ui.notify.${n.status}`)}</span>
-                    </td>
-                    <td className="num">{n.attempts}</td>
-                    <td>
-                      {(n.status === 'dead' || n.status === 'skipped') && (
-                        <button className="link" onClick={() => void action.run(async () => { await post(`/admin/notifications/${n.id}/retry`); await reload(); })}>
-                          {t('ui.notify.retry')}
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+      <Card>
+        <Form layout="vertical" style={{ maxWidth: 260 }}>
+          <Field label={t('ui.tickets.status')}>
+            <Choice
+              value={status}
+              onChange={setStatus}
+              empty={t('ui.common.all')}
+              options={['pending', 'sent', 'dead', 'skipped'].map((x) => ({ value: x, label: t(`ui.notify.${x}`) }))}
+              style={{ width: '100%' }}
+            />
+          </Field>
+        </Form>
+        <Table {...tableProps} columns={columns} dataSource={data ?? []} loading={loading && !data} />
+      </Card>
     </>
   );
 }
@@ -626,53 +568,31 @@ function AuditPage() {
   const { t } = useI18n();
   const [page, setPage] = useState(1);
   const { data, error, loading } = useLoad(() => get<any[]>(`/admin/audit-logs?page=${page}`), [page]);
+  const columns: TableColumnsType<any> = [
+    { key: 'created', title: t('ui.tickets.created'), className: 'nowrap', render: (_, a) => <DateTime value={a.createdAt} /> },
+    { key: 'actor', title: t('ui.audit.actor'), className: 'small', render: (_, a) => a.actorEmail ?? '—' },
+    { key: 'action', title: t('ui.audit.action'), className: 'mono small', render: (_, a) => a.action },
+    { key: 'target', title: t('ui.audit.target'), className: 'small', render: (_, a) => (a.targetType ? `${a.targetType}#${a.targetId}` : '—') },
+    { key: 'ip', title: 'IP', className: 'small', render: (_, a) => a.ip },
+    { key: 'detail', title: t('ui.audit.detail'), className: 'mono small', render: (_, a) => (a.detail ? JSON.stringify(a.detail) : '') },
+  ];
   return (
     <>
-      <h1>{t('ui.nav.audit')}</h1>
+      <PageHeader title={t('ui.nav.audit')} />
       <ErrorBanner error={error} />
-      <div className="card">
-        {loading && !data ? (
-          <Loading />
-        ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>{t('ui.tickets.created')}</th>
-                  <th>{t('ui.audit.actor')}</th>
-                  <th>{t('ui.audit.action')}</th>
-                  <th>{t('ui.audit.target')}</th>
-                  <th>IP</th>
-                  <th>{t('ui.audit.detail')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data?.map((a) => (
-                  <tr key={a.id}>
-                    <td>
-                      <DateTime value={a.createdAt} />
-                    </td>
-                    <td className="small">{a.actorEmail ?? '—'}</td>
-                    <td className="mono small">{a.action}</td>
-                    <td className="small">{a.targetType ? `${a.targetType}#${a.targetId}` : '—'}</td>
-                    <td className="small">{a.ip}</td>
-                    <td className="mono small">{a.detail ? JSON.stringify(a.detail) : ''}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        <div className="pager">
-          <button disabled={page <= 1} onClick={() => setPage(page - 1)}>
+      <Card>
+        <Table {...tableProps} columns={columns} dataSource={data ?? []} loading={loading && !data} />
+        {/* the audit API pages by 100 rows and returns no total, so the pager only steps back and forth */}
+        <Flex justify="flex-end" align="center" gap={8} style={{ marginTop: 12 }}>
+          <Button disabled={page <= 1} onClick={() => setPage(page - 1)}>
             ‹
-          </button>
+          </Button>
           <span className="small">{page}</span>
-          <button disabled={(data?.length ?? 0) < 100} onClick={() => setPage(page + 1)}>
+          <Button disabled={(data?.length ?? 0) < 100} onClick={() => setPage(page + 1)}>
             ›
-          </button>
-        </div>
-      </div>
+          </Button>
+        </Flex>
+      </Card>
     </>
   );
 }

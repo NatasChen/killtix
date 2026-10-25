@@ -5,8 +5,12 @@
 ## [Unreleased]
 
 ### Changed
+- 介面改用 Ant Design（antd 6.6.5，DECISIONS D10）：所有頁面改用 antd 的 Layout、Menu、Card、Table、Form、Select、Tag、Alert 等元件；顏色集中在 `src/web/palette.ts`，以 theme token 傳給 antd，深色主題用 `darkAlgorithm`。D9 的配色（深靛藍側邊欄、狀態色、sticker 色盤）與文字、行為、路由不變。`styles.css` 只剩版面；`tests/styles.test.ts` 改為檢查 `palette.ts` 與 antd 主題（25 項），e2e 改用 antd 下拉選單的操作方式。
 - UI 重新設計第 2 批（PRD FR-5.4）：介面加入色彩。側邊欄改為深靛藍；選單項目依功能群組加上色塊；狀態 badge 各用一種色相，不再與 L3 優先度撞色；儀表板統計卡依意義加上色帶，數字統一為內文色；長條圖依狀態、優先度上色，標籤與服務類別輪流使用 sticker 色。sticker 色盤改為可用於有意義的資料色（`specs/DECISIONS.md` D9）。
 - 版面修正：工單清單的編號、badge、負責人、已開立不再折行；表格內容垂直置中；使用者表格操作欄的框線對齊；儀表板卡片每列 4 張、圖表每列 2 張；工單詳情右欄加寬，「加入關注者」選單與按鈕在同一列。
+
+### Fixed
+- 未登入時 `/auth/me` 的 401 會觸發重新整理登入狀態，而重新整理又呼叫 `/auth/me`，登入頁因此不斷輪詢伺服器；`/auth/me` 本身的 401 不再觸發重新整理。
 
 ## [0.3.0] - 2026-10-24
 

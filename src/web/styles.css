@@ -1,417 +1,70 @@
-/* TicketDesk styles.
-   Design tokens follow DESIGN.md (style only: no brand names, logos or external assets).
-   Existing variable names are kept — tests/styles.test.ts depends on them — and new tokens are additive. */
+/* TicketDesk styles. Components come from Ant Design and get their colours from the theme
+   (src/web/palette.ts → antdTheme() in theme.ts); this file only holds page layout and the few
+   colours needed before React mounts. tests/styles.test.ts checks they match palette.ts. */
 
+/* first paint (public/theme-init.js sets data-theme): canvas and ink, so there is no white flash */
 :root,
 :root[data-theme='light'] {
-  /* surfaces: warm paper canvas, white cards, hairline borders (DESIGN.md Surface) */
-  --canvas-soft: #f6f5f4;
-  --bg: var(--canvas-soft);
-  --surface: #ffffff;
-  --surface-2: #f1efec;
-  --hairline: #e6e6e6;
-  --border: var(--hairline);
-  /* interactive controls need a 3:1 boundary against the surface (WCAG 1.4.11) */
-  --border-strong: #8f8b86;
-
-  /* text: ink hierarchy (DESIGN.md Text) */
+  --canvas: #f6f5f4;
   --ink-1: #191919;
-  --ink-2: #31302e;
   --ink-3: #615d59;
-  --text: var(--ink-1);
-  --text-muted: var(--ink-3);
-
-  /* one structural accent: primary blue for buttons, links and focus (DESIGN.md Brand & Accent) */
-  --accent: #0075de;
-  --accent-text: #ffffff;
-  --accent-soft: #e6f0fb;
-  /* --accent is only 4.2:1 on the warm canvas, so links and accent text use the pressed blue */
-  --accent-strong: #005bab;
-
-  /* semantic colours stay independent of the accent (PRD FR-5.3) */
-  --danger: #c0352b;
-  --danger-soft: #fbe9e7;
-  --warning: #a35c00;
-  --warning-soft: #fdf0dc;
-  --success: #1d7a46;
-  --success-soft: #e3f4ea;
-  --internal: #fff8e1;
-  --internal-border: #e7c86b;
-
-  /* data colours: the DESIGN.md sticker palette, used for status, dashboard and navigation colour
-     coding (specs/DECISIONS.md D9). solid = bars, bands, tiles (>= 3:1 on surface);
-     soft + ink = badge background and text (>= 4.5:1). */
-  --sticker-sky: #2f86d1;
-  --sticker-sky-soft: #e2f0fc;
-  --sticker-sky-ink: #0b5794;
-  --sticker-purple: #8b5cc7;
-  --sticker-purple-soft: #f1e8fc;
-  --sticker-purple-ink: #5b2d8e;
-  --sticker-pink: #d13c9b;
-  --sticker-pink-soft: #fde7f4;
-  --sticker-pink-ink: #9a1d6b;
-  --sticker-orange: #dd5b00;
-  --sticker-orange-soft: #fdede2;
-  --sticker-orange-ink: #8a3c00;
-  --sticker-teal: #2a9d99;
-  --sticker-teal-soft: #d9f1f4;
-  --sticker-teal-ink: #0f5f66;
-
-  /* sidebar: the DESIGN.md deep indigo "night" band, used as the one dark island of the app shell */
-  --nav-bg: #213183;
-  --nav-text: #eef0ff;
-  --nav-muted: #b9c1ec;
-  --nav-hover: #2a3b8f;
-  --nav-active: #34459c;
-  --nav-indicator: #62aef0;
-  --nav-divider: #3a4a9a;
-  --nav-field: #1a276b;
-  --nav-field-border: #7d89cf;
-  --nav-tile-sky: #62aef0;
-  --nav-tile-purple: #c7a4f2;
-  --nav-tile-orange: #f59a5c;
-  --nav-tile-teal: #4cc3be;
-
-  /* elevation: hairline plus barely-there layered shadow (DESIGN.md Elevation) */
-  --shadow-soft: 0 0.175px 1.041px rgb(0 0 0 / 1%), 0 0.8px 2.925px rgb(0 0 0 / 2%),
-    0 2.025px 7.847px rgb(0 0 0 / 2.7%), 0 4px 18px rgb(0 0 0 / 4%);
-  --shadow-elevated: 0 0.8px 2.925px rgb(0 0 0 / 2%), 0 2.025px 7.847px rgb(0 0 0 / 2.7%),
-    0 4px 18px rgb(0 0 0 / 4%), 0 23px 52px rgb(0 0 0 / 5%);
-  --shadow: var(--shadow-soft);
-
-  /* radius scale (DESIGN.md Shapes) */
-  --radius-xs: 4px;
-  --radius-sm: 5px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  --radius-xl: 16px;
-  --radius-full: 9999px;
-
-  /* spacing scale (DESIGN.md Layout) */
-  --space-xxs: 4px;
-  --space-xs: 8px;
-  --space-sm: 12px;
-  --space-md: 16px;
-  --space-lg: 24px;
-  --space-xl: 28px;
-  --space-xxl: 32px;
-
-  --overlay: rgb(0 0 0 / 45%);
-  --qr-canvas: #ffffff;
-
   color-scheme: light;
 }
 
-/* Dark theme is derived from the light one (DESIGN.md only defines light): same hues, lowered
-   luminance, warm near-black canvas and warm off-white ink instead of pure black/white. */
 :root[data-theme='dark'] {
-  --canvas-soft: #1b1a18;
-  --bg: var(--canvas-soft);
-  --surface: #232220;
-  --surface-2: #2c2b28;
-  --hairline: #3a3835;
-  --border: var(--hairline);
-  --border-strong: #75726c;
-
+  --canvas: #1b1a18;
   --ink-1: #f2f0ed;
-  --ink-2: #d6d2cc;
   --ink-3: #a8a39c;
-  --text: var(--ink-1);
-  --text-muted: var(--ink-3);
-
-  --accent: #6f9bff;
-  --accent-text: #0b1020;
-  --accent-soft: #1c2847;
-  --accent-strong: #9dc0ff;
-
-  --danger: #ff7b6e;
-  --danger-soft: #3a1d1b;
-  --warning: #f0b45a;
-  --warning-soft: #3a2b14;
-  --success: #5fd394;
-  --success-soft: #16301f;
-  --internal: #2c2614;
-  --internal-border: #7a6526;
-
-  --sticker-sky: #62aef0;
-  --sticker-sky-soft: #132a40;
-  --sticker-sky-ink: #8cc4f5;
-  --sticker-purple: #b48ae8;
-  --sticker-purple-soft: #2a1d3f;
-  --sticker-purple-ink: #cfb2f2;
-  --sticker-pink: #f27cc8;
-  --sticker-pink-soft: #3b1531;
-  --sticker-pink-ink: #f7a6da;
-  --sticker-orange: #f08a45;
-  --sticker-orange-soft: #3b2212;
-  --sticker-orange-ink: #f6ae7c;
-  --sticker-teal: #4cc3be;
-  --sticker-teal-soft: #0f2f2e;
-  --sticker-teal-ink: #7fd8d3;
-
-  --nav-bg: #161d4f;
-  --nav-text: #e6e9ff;
-  --nav-muted: #a9b2e4;
-  --nav-hover: #1f2863;
-  --nav-active: #2a367a;
-  --nav-indicator: #62aef0;
-  --nav-divider: #2a3370;
-  --nav-field: #10163d;
-  --nav-field-border: #6f7bc0;
-  --nav-tile-sky: #62aef0;
-  --nav-tile-purple: #c7a4f2;
-  --nav-tile-orange: #f59a5c;
-  --nav-tile-teal: #4cc3be;
-
-  --overlay: rgb(0 0 0 / 60%);
-  --qr-canvas: #ffffff;
-
-  --shadow-soft: 0 1px 2px rgb(0 0 0 / 40%), 0 1px 3px rgb(0 0 0 / 32%);
-  --shadow-elevated: 0 2px 6px rgb(0 0 0 / 45%), 0 12px 32px rgb(0 0 0 / 40%);
-  --shadow: var(--shadow-soft);
-
-  --radius-xs: 4px;
-  --radius-sm: 5px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  --radius-xl: 16px;
-  --radius-full: 9999px;
-
-  --space-xxs: 4px;
-  --space-xs: 8px;
-  --space-sm: 12px;
-  --space-md: 16px;
-  --space-lg: 24px;
-  --space-xl: 28px;
-  --space-xxl: 32px;
-
   color-scheme: dark;
-}
-
-/* typography scale (DESIGN.md Typography). Sizes are theme independent, so they live outside the
-   theme blocks; components reference the role tokens instead of hardcoded pixel values. */
-:root {
-  --font-display-1: 64px;
-  --font-display-2: 54px;
-  --font-heading-1: 40px;
-  --font-heading-2: 26px;
-  --font-heading-3: 22px;
-  --font-title: 20px;
-  --font-body-md: 16px;
-  --font-body-sm: 15px;
-  --font-button: 16px;
-  --font-caption: 14px;
-  --font-eyebrow: 12px;
 }
 
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; }
 body {
   margin: 0;
-  background: var(--bg);
-  color: var(--text);
+  background: var(--canvas);
+  color: var(--ink-1);
   /* Latin from Noto Sans Display, CJK falls through to Noto Sans TC (both bundled, see main.tsx) */
   font-family: 'Noto Sans Display Variable', 'Noto Sans TC Variable', system-ui, -apple-system, 'Segoe UI',
     'PingFang TC', 'Microsoft JhengHei', sans-serif;
-  font-size: var(--font-caption);
+  font-size: 14px;
   line-height: 1.5;
 }
-a { color: var(--accent-strong); text-decoration: none; }
-a:hover { text-decoration: underline; }
-/* headings use the DESIGN.md type roles; the app shell stays at the dense caption/body sizes rather
-   than the marketing display sizes (see specs/DECISIONS.md D8) */
-h1 { font-size: var(--font-title); font-weight: 700; margin: 0 0 var(--space-md); }
-h2 { font-size: var(--font-body-md); font-weight: 700; margin: 0 0 var(--space-sm); }
-h3 { font-size: var(--font-caption); font-weight: 700; margin: 0 0 var(--space-xs); }
-code, .mono { font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace; font-size: var(--font-caption); }
-
-/* layout */
-.shell { display: grid; grid-template-columns: 220px 1fr; min-height: 100%; }
-.sidebar { background: var(--nav-bg); color: var(--nav-text); border-right: 1px solid var(--nav-divider); padding: var(--space-md) var(--space-sm); display: flex; flex-direction: column; gap: var(--space-xxs); }
-.brand { font-weight: 700; font-size: var(--font-body-md); padding: var(--space-xxs) var(--space-xs) var(--space-md); display: flex; align-items: center; gap: var(--space-xs); }
-/* ex-app-shell-row: sidebar nav row; the active row is marked by the primary accent indicator.
-   .nav-link and .ex-app-shell-row share one declaration so the DESIGN.md hook and the existing
-   class name stay in sync (the sidebar keeps its position and its item list). */
-.nav-link,
-.ex-app-shell-row { display: flex; align-items: center; gap: var(--space-xs); padding: var(--space-xs) var(--space-sm); border-radius: var(--radius-md); color: var(--nav-text); }
-.nav-link:hover,
-.ex-app-shell-row:hover { background: var(--nav-hover); text-decoration: none; }
-.nav-link.active,
-.ex-app-shell-row.active { background: var(--nav-active); color: var(--nav-text); font-weight: 600; box-shadow: inset 3px 0 0 var(--nav-indicator); }
-/* icon tile: a small sticker-colour square that codes the nav group (DESIGN.md icon tiles) */
-.nav-link[class*='tile-']::before { content: ''; flex: none; width: 10px; height: 10px; border-radius: 3px; background: var(--tile); }
-.nav-link.tile-sky { --tile: var(--nav-tile-sky); }
-.nav-link.tile-purple { --tile: var(--nav-tile-purple); }
-.nav-link.tile-orange { --tile: var(--nav-tile-orange); }
-.nav-link.tile-teal { --tile: var(--nav-tile-teal); }
-.nav-section { margin: var(--space-sm) var(--space-xs) var(--space-xxs); font-size: var(--font-eyebrow); font-weight: 600; color: var(--nav-muted); text-transform: uppercase; letter-spacing: .125px; }
-.sidebar-footer { margin-top: auto; display: flex; flex-direction: column; gap: var(--space-xs); padding: var(--space-xs); border-top: 1px solid var(--nav-divider); }
-.sidebar-footer .nav-link { display: block; }
-.sidebar .muted, .sidebar label { color: var(--nav-muted); }
-.sidebar select, .sidebar button { background: var(--nav-field); color: var(--nav-text); border-color: var(--nav-field-border); }
-.sidebar button:hover:not(:disabled) { background: var(--nav-hover); }
-.sidebar :focus-visible { outline-color: var(--nav-indicator); }
-.main { padding: var(--space-lg) var(--space-xl); min-width: 0; }
-.topline { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); margin-bottom: var(--space-md); flex-wrap: wrap; }
-.topline h1 { margin: 0; }
-
-/* surfaces */
-.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: var(--space-lg); box-shadow: var(--shadow); }
-.card + .card { margin-top: var(--space-md); }
-.grid > .card + .card { margin-top: 0; }
-.grid { display: grid; gap: var(--space-md); }
-/* four KPI cards per row so 7 or 8 cards fill whole rows; two chart cards per row */
-.grid-kpi { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-.grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.detail { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: var(--space-md); align-items: start; }
-.kpi { display: flex; flex-direction: column; gap: var(--space-xxs); box-shadow: inset 0 4px 0 var(--tone, transparent), var(--shadow); }
-.kpi .label { color: var(--text-muted); font-size: var(--font-eyebrow); font-weight: 600; letter-spacing: .125px; }
-.kpi .value { font-size: 26px; font-weight: 650; font-variant-numeric: tabular-nums; }
-.kpi .value a { color: inherit; }
-.kpi.alert .value { color: var(--danger); }
-
-/* forms */
-label { display: flex; flex-direction: column; gap: var(--space-xxs); font-size: var(--font-caption); color: var(--text-muted); }
-label.inline { flex-direction: row; align-items: center; gap: var(--space-xs); color: var(--text); }
-/* text-input: tight 4px corners (DESIGN.md Inputs & Forms). The border uses --border-strong rather than
-   the hairline: DESIGN.md's rgb(221,221,221) field border is only 1.4:1 on white, below the 3:1 that
-   WCAG 1.4.11 requires for control boundaries. */
-input, select, textarea {
-  font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border-strong);
-  border-radius: var(--radius-xs); padding: 6px var(--space-sm); min-width: 0;
-}
-input[type='checkbox'] { width: 16px; height: 16px; padding: 0; }
-textarea { min-height: 110px; resize: vertical; }
-input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible, a:focus-visible {
-  outline: 2px solid var(--accent); outline-offset: 1px;
-}
-input:focus-visible, select:focus-visible, textarea:focus-visible { box-shadow: var(--shadow-soft); }
-.form { display: flex; flex-direction: column; gap: var(--space-sm); }
-.form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--space-sm); }
-.filters { display: flex; flex-wrap: wrap; gap: var(--space-xs); align-items: flex-end; margin-bottom: var(--space-sm); }
-.filters label { min-width: 130px; }
-
-/* buttons: app-shell utility buttons use the tighter 8px radius (DESIGN.md button-utility);
-   the pill marketing CTA does not apply inside the app shell. The border uses --border-strong
-   instead of the hairline so the control boundary reaches the 3:1 of WCAG 1.4.11. */
-button, .button {
-  font: inherit; cursor: pointer; border-radius: var(--radius-md); padding: var(--space-xs) var(--space-md);
-  border: 1px solid var(--border-strong); background: var(--surface); color: var(--text);
-  display: inline-flex; align-items: center; gap: var(--space-xxs); white-space: nowrap;
-}
-button:hover:not(:disabled), .button:hover { background: var(--surface-2); text-decoration: none; }
-button.primary, .button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 600; }
-button.primary:hover:not(:disabled), .button.primary:hover { background: var(--accent-strong); border-color: var(--accent-strong); }
-button.danger { color: var(--danger); border-color: var(--danger); background: var(--surface); }
-button.danger:hover:not(:disabled) { background: var(--danger-soft); }
-button.link { border: none; background: none; padding: 0; color: var(--accent-strong); }
-button:disabled { opacity: .55; cursor: not-allowed; }
-.actions { display: flex; gap: var(--space-xs); flex-wrap: wrap; align-items: center; }
-/* a flex <td> drops out of the table layout and its bottom border no longer lines up with the row */
-td.actions { display: table-cell; white-space: nowrap; }
-td.actions > * + * { margin-left: var(--space-sm); }
-
-/* tables: ex-data-table-cell chrome — eyebrow header, body rows split by hairlines */
-.table-wrap { overflow-x: auto; }
-table { width: 100%; border-collapse: collapse; }
-th, td { text-align: left; padding: var(--space-xs) 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
-/* ex-data-table-cell: header uses the eyebrow role (12px / 600 / +0.125px) on the secondary surface */
-th { font-size: 12px; color: var(--text-muted); font-weight: 600; white-space: nowrap; letter-spacing: .125px; background: var(--surface-2); }
-tr:hover td { background: var(--surface-2); }
-td.num { font-variant-numeric: tabular-nums; }
-.nowrap { white-space: nowrap; }
-/* requester names and the date/time may wrap; IDs, badges, assignee and age stay on one line (.nowrap) */
-td.grow { min-width: 140px; }
-
-/* badges: badge-pill — 12px/600, pill radius, 4px/8px padding (DESIGN.md badge-pill) */
-.badge { display: inline-block; padding: var(--space-xxs) var(--space-xs); border-radius: var(--radius-full); font-size: 12px; font-weight: 600; background: var(--surface-2); color: var(--text-muted); white-space: nowrap; }
-/* statuses use sticker hues so they never match the priority badge next to them (L3 is accent blue) */
-.badge.new { background: var(--sticker-purple-soft); color: var(--sticker-purple-ink); }
-.badge.open { background: var(--sticker-teal-soft); color: var(--sticker-teal-ink); }
-.badge.pending_user { background: var(--sticker-pink-soft); color: var(--sticker-pink-ink); }
-.badge.at_risk { background: var(--warning-soft); color: var(--warning); }
-.badge.resolved, .badge.met { background: var(--success-soft); color: var(--success); }
-.badge.breached, .badge.p5 { background: var(--danger-soft); color: var(--danger); }
-.badge.p4 { background: var(--warning-soft); color: var(--warning); }
-/* L3 (medium) gets its own accent tint so it is distinguishable from the neutral L1/L2 grey.
-   Text uses --accent-strong: --accent itself is only 4.2:1 on the warm canvas.
-   Contrast --accent-strong on --accent-soft: 5.91:1 light / 7.91:1 dark (WCAG 2.1 AA, >= 4.5:1). */
-.badge.p3 { background: var(--accent-soft); color: var(--accent-strong); }
-/* tones: one hue per meaning, shared by KPI bands, chart bars and nav tiles */
-.tone-blue { --tone: var(--accent); }
-.tone-green { --tone: var(--success); }
-.tone-amber { --tone: var(--warning); }
-.tone-red { --tone: var(--danger); }
-.tone-grey { --tone: var(--ink-3); }
-.tone-sky { --tone: var(--sticker-sky); }
-.tone-purple { --tone: var(--sticker-purple); }
-.tone-pink { --tone: var(--sticker-pink); }
-.tone-orange { --tone: var(--sticker-orange); }
-.tone-teal { --tone: var(--sticker-teal); }
-.tag { display: inline-block; padding: 0 var(--space-xs); margin: 0 var(--space-xxs) var(--space-xxs) 0; border: 1px solid var(--border); border-radius: var(--radius-xs); font-size: 12px; }
-
-/* messages */
-.banner { padding: var(--space-sm) var(--space-md); border-radius: var(--radius-md); margin-bottom: var(--space-sm); border: 1px solid; }
-.banner.error { background: var(--danger-soft); color: var(--danger); border-color: var(--danger); }
-.banner.warning { background: var(--warning-soft); color: var(--warning); border-color: var(--warning); }
-.banner.success { background: var(--success-soft); color: var(--success); border-color: var(--success); }
-.muted { color: var(--text-muted); }
+code, .mono { font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace; font-size: 14px; }
+.muted { color: var(--ink-3); }
 .small { font-size: 12px; }
 
-/* empty state (DESIGN.md ex-empty-state-card): caption typography, generous padding */
-.empty-state,
-.ex-empty-state-card { padding: var(--space-lg) var(--space-md); text-align: center; color: var(--text-muted); font-size: 14px; }
-.ex-empty-state-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); }
+/* app shell: the antd Sider holds the nav; the content column scrolls on its own */
+.main { padding: 24px 28px; min-width: 0; }
+.brand { font-weight: 700; font-size: 16px; padding: 16px 16px 12px; display: flex; align-items: center; gap: 8px; }
+.sidebar-footer { margin-top: auto; display: flex; flex-direction: column; gap: 8px; padding: 12px 16px 16px; }
 
-/* modal + toast surfaces (DESIGN.md ex-modal-card / ex-toast); shared shells for later screens */
-.modal-backdrop { position: fixed; inset: 0; background: var(--overlay); display: flex; align-items: center; justify-content: center; padding: var(--space-md); }
-.modal-card,
-.ex-modal-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: var(--space-lg); box-shadow: var(--shadow-elevated); width: 100%; max-width: 520px; }
-.toast,
-.ex-toast { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: var(--space-sm) var(--space-md); box-shadow: var(--shadow-elevated); }
+/* tables: IDs, badges, assignee and age stay on one line; names and dates may wrap */
+.nowrap { white-space: nowrap; }
+.grow { min-width: 140px; }
+.num { font-variant-numeric: tabular-nums; }
 
-/* thread */
-.thread { display: flex; flex-direction: column; gap: var(--space-sm); }
-.msg { border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--space-sm) var(--space-md); background: var(--surface); }
-.msg.internal_note { background: var(--internal); border-color: var(--internal-border); }
-.msg.system_event { border-style: dashed; background: transparent; padding: 6px var(--space-sm); font-size: 12px; color: var(--text-muted); }
-.msg-head { display: flex; justify-content: space-between; gap: var(--space-xs); font-size: 12px; color: var(--text-muted); margin-bottom: var(--space-xxs); }
+/* dashboard */
+.kpi .ant-statistic-content { font-variant-numeric: tabular-nums; }
+.bar-row { display: grid; grid-template-columns: 130px 1fr 40px; gap: 12px; align-items: center; margin-bottom: 8px; font-size: 13px; }
+.bar-row .ant-progress { margin: 0; }
+.bar-row .num { text-align: right; }
+
+/* conversation */
+.msg { border-radius: 8px; padding: 12px 16px; }
+.msg.system_event { padding: 6px 12px; font-size: 12px; }
+.msg-head { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--ink-3); margin-bottom: 4px; }
 .msg-body { white-space: pre-wrap; overflow-wrap: anywhere; }
-dl.props { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: var(--space-xs) 10px; margin: 0; }
-dl.props dt { color: var(--text-muted); font-size: 12px; padding-top: 2px; }
-dl.props dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
-dl.props select, dl.props input { width: 100%; max-width: 100%; }
-dl.props form.actions { flex-wrap: nowrap; }
-dl.props form.actions select { flex: 1 1 auto; width: auto; min-width: 0; }
-.detail aside { min-width: 0; }
 
-/* auth pages: ex-auth-form-card — feature-card chrome with text-input primitives inside.
-   .auth-card and .ex-auth-form-card share one declaration so the login / change-password / 2FA
-   screens get the DESIGN.md card whether or not the extra hook class is present in the markup. */
-.auth-wrap { min-height: 100%; display: flex; align-items: center; justify-content: center; padding: var(--space-lg); background: var(--bg); }
-.auth-card,
-.ex-auth-form-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: var(--space-lg); box-shadow: var(--shadow-soft); }
+/* auth pages: ex-auth-form-card */
+.auth-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
 .auth-card { width: 100%; max-width: 400px; }
-.secret-box { padding: var(--space-sm); background: var(--surface-2); border-radius: var(--radius-md); word-break: break-all; }
+.auth-card .brand { padding: 0 0 16px; }
+.secret-box { padding: 12px; border-radius: 8px; word-break: break-all; }
 .codes { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
-/* the QR code needs a white quiet zone to stay scannable in both themes */
-.qr { width: 180px; height: 180px; background: var(--qr-canvas); padding: var(--space-xs); border-radius: var(--radius-md); }
+.qr { width: 180px; height: 180px; padding: 8px; border-radius: 8px; }
 
-.pager { display: flex; gap: var(--space-xs); align-items: center; justify-content: flex-end; margin-top: var(--space-sm); }
-.bar-track { height: 8px; background: var(--surface-2); border-radius: var(--radius-xs); }
-.bar { height: 100%; background: var(--tone, var(--accent)); border-radius: var(--radius-xs); min-width: 2px; }
-.bar-row { display: grid; grid-template-columns: 130px 1fr 40px; gap: var(--space-sm); align-items: center; margin-bottom: var(--space-xs); font-size: 13px; }
-.bar-row .num { text-align: right; font-variant-numeric: tabular-nums; }
-
-@media (max-width: 860px) {
-  .shell { grid-template-columns: 1fr; }
-  .grid-kpi { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .grid-2 { grid-template-columns: minmax(0, 1fr); }
-  .sidebar { flex-direction: row; flex-wrap: wrap; align-items: center; border-right: none; border-bottom: 1px solid var(--nav-divider); padding: var(--space-sm) var(--space-md); }
-  .brand { width: 100%; padding: 0 0 var(--space-xs); }
-  .nav-section { display: none; }
-  .sidebar-footer { width: 100%; flex-direction: row; flex-wrap: wrap; align-items: flex-end; margin-top: var(--space-xs); padding: var(--space-xs) 0 0; }
-  .sidebar-footer label { flex: 1 1 120px; }
-  .main { padding: var(--space-md); }
-  .detail { grid-template-columns: 1fr; }
+@media (max-width: 767px) {
+  /* the top 56px stay clear for the collapsed sidebar's menu button */
+  .main { padding: 56px 16px 16px; }
 }

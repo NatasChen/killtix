@@ -1,20 +1,24 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { Button, ConfigProvider, Layout as AntLayout, Menu, Select, theme as antdThemes, type MenuProps } from 'antd';
+import { useState } from 'react';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { patch } from '../api';
 import { useAuth } from '../auth';
 import { useI18n } from '../i18n';
 import { applyTheme, currentThemePref, type ThemePref } from '../theme';
-import { useState } from 'react';
+import { usePalette } from './common';
 
-// ex-app-shell-row is the DESIGN.md hook for a sidebar row; .nav-link stays so existing styles and
-// tests keep working. The sidebar keeps its position and its item list.
-const link = ({ isActive }: { isActive: boolean }) => `nav-link ex-app-shell-row${isActive ? ' active' : ''}`;
-// A colour tile per nav group: tickets (sky), catalog (purple), system admin (orange), records (teal).
-const tile = (tone: 'sky' | 'purple' | 'orange' | 'teal') => (state: { isActive: boolean }) => `${link(state)} tile-${tone}`;
+type NavTile = 'sky' | 'purple' | 'orange' | 'teal';
+type Item = { to: string; label: string; tile: NavTile; end?: boolean };
 
 export function Layout() {
   const { user, can, logout } = useAuth();
   const { t, locale, locales, setLocale } = useI18n();
+  const { pathname } = useLocation();
+  const p = usePalette();
   const [theme, setTheme] = useState<ThemePref>(currentThemePref());
+  // Phones start with the sidebar collapsed; deciding on the first render (not after antd measures the
+  // breakpoint) avoids a frame where the expanded sidebar pushes the page wider than the screen.
+  const [collapsed, setCollapsed] = useState(() => window.matchMedia('(max-width: 767.98px)').matches);
 
   const changeTheme = (value: ThemePref) => {
     setTheme(value);
@@ -28,93 +32,116 @@ export function Layout() {
   const isAdmin = can('admin:users');
   const canCatalog = can('catalog:manage');
 
+  // A colour tile per nav group: tickets (sky), catalog (purple), system admin (orange), records (teal).
+  const work: Item[] = [
+    { to: '/', label: t('ui.nav.dashboard'), tile: 'sky', end: true },
+    { to: '/tickets', label: t('ui.nav.tickets'), tile: 'sky', end: true },
+    ...(can('ticket:create') ? [{ to: '/tickets/new', label: t('ui.nav.new_ticket'), tile: 'sky' as const }] : []),
+  ];
+  const admin: Item[] = [
+    ...(isAdmin ? [{ to: '/admin/users', label: t('ui.nav.users'), tile: 'orange' as const }] : []),
+    ...(canCatalog
+      ? [
+          { to: '/admin/teams', label: t('ui.nav.teams'), tile: 'purple' as const },
+          { to: '/admin/help-topics', label: t('ui.nav.help_topics'), tile: 'purple' as const },
+          { to: '/admin/sla-plans', label: t('ui.nav.sla_plans'), tile: 'purple' as const },
+          { to: '/admin/forms', label: t('ui.nav.forms'), tile: 'purple' as const },
+          { to: '/admin/canned-responses', label: t('ui.nav.canned'), tile: 'purple' as const },
+        ]
+      : []),
+    ...(isAdmin
+      ? [
+          { to: '/admin/api-tokens', label: t('ui.nav.api_tokens'), tile: 'orange' as const },
+          { to: '/admin/notifications', label: t('ui.nav.notifications'), tile: 'teal' as const },
+          { to: '/admin/settings', label: t('ui.nav.settings'), tile: 'orange' as const },
+          { to: '/admin/audit', label: t('ui.nav.audit'), tile: 'teal' as const },
+        ]
+      : []),
+  ];
+  const toItem = (i: Item) => ({
+    key: i.to,
+    icon: <span aria-hidden style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 3, background: p.navTile[i.tile] }} />,
+    label: (
+      <NavLink to={i.to} end={i.end}>
+        {i.label}
+      </NavLink>
+    ),
+  });
+  const items: MenuProps['items'] = [
+    ...work.map(toItem),
+    ...(admin.length ? [{ type: 'group' as const, key: 'admin', label: t('ui.nav.admin'), children: admin.map(toItem) }] : []),
+  ];
+  // The selected row is the longest nav path that prefixes the current location.
+  const selected = [...work, ...admin]
+    .filter((i) => (i.end ? pathname === i.to : pathname === i.to || pathname.startsWith(`${i.to}/`)))
+    .sort((a, b) => b.to.length - a.to.length)[0]?.to;
+
+  // Footer controls sit on the indigo sidebar, so they get the dark algorithm and the nav colours.
+  const navControls = {
+    algorithm: antdThemes.darkAlgorithm,
+    token: { colorBgContainer: p.nav.field, colorBorder: p.nav.fieldBorder, colorText: p.nav.text, colorTextSecondary: p.nav.muted, colorPrimary: p.nav.indicator },
+  };
+  const label = { display: 'block', color: p.nav.muted, fontSize: 12, marginBottom: 4 } as const;
+
   return (
-    <div className="shell">
-      <nav className="sidebar" aria-label={t('ui.nav.main')}>
-        <div className="brand">
-          <img src="/favicon.svg" width={22} height={22} alt="" /> TicketDesk
-        </div>
-        <NavLink to="/" end className={tile('sky')}>
-          {t('ui.nav.dashboard')}
-        </NavLink>
-        <NavLink to="/tickets" end className={tile('sky')}>
-          {t('ui.nav.tickets')}
-        </NavLink>
-        {can('ticket:create') && (
-          <NavLink to="/tickets/new" className={tile('sky')}>
-            {t('ui.nav.new_ticket')}
-          </NavLink>
-        )}
-        {(canCatalog || isAdmin) && <div className="nav-section">{t('ui.nav.admin')}</div>}
-        {isAdmin && (
-          <NavLink to="/admin/users" className={tile('orange')}>
-            {t('ui.nav.users')}
-          </NavLink>
-        )}
-        {canCatalog && (
-          <>
-            <NavLink to="/admin/teams" className={tile('purple')}>
-              {t('ui.nav.teams')}
-            </NavLink>
-            <NavLink to="/admin/help-topics" className={tile('purple')}>
-              {t('ui.nav.help_topics')}
-            </NavLink>
-            <NavLink to="/admin/sla-plans" className={tile('purple')}>
-              {t('ui.nav.sla_plans')}
-            </NavLink>
-            <NavLink to="/admin/forms" className={tile('purple')}>
-              {t('ui.nav.forms')}
-            </NavLink>
-            <NavLink to="/admin/canned-responses" className={tile('purple')}>
-              {t('ui.nav.canned')}
-            </NavLink>
-          </>
-        )}
-        {isAdmin && (
-          <>
-            <NavLink to="/admin/api-tokens" className={tile('orange')}>
-              {t('ui.nav.api_tokens')}
-            </NavLink>
-            <NavLink to="/admin/notifications" className={tile('teal')}>
-              {t('ui.nav.notifications')}
-            </NavLink>
-            <NavLink to="/admin/settings" className={tile('orange')}>
-              {t('ui.nav.settings')}
-            </NavLink>
-            <NavLink to="/admin/audit" className={tile('teal')}>
-              {t('ui.nav.audit')}
-            </NavLink>
-          </>
-        )}
-        <div className="sidebar-footer">
-          <NavLink to="/profile" className={link}>
-            {user?.displayName}
-            <div className="small muted">{t(`ui.role.${user?.role}`)}</div>
-          </NavLink>
-          <label>
-            {t('ui.common.theme')}
-            <select value={theme} onChange={(e) => changeTheme(e.target.value as ThemePref)}>
-              <option value="system">{t('ui.theme.system')}</option>
-              <option value="light">{t('ui.theme.light')}</option>
-              <option value="dark">{t('ui.theme.dark')}</option>
-            </select>
-          </label>
-          <label>
-            {t('ui.common.language')}
-            <select value={locale} onChange={(e) => changeLocale(e.target.value)}>
-              {locales.map((l) => (
-                <option key={l} value={l}>
-                  {t(`ui.locale.${l}`)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button onClick={() => void logout()}>{t('ui.auth.logout')}</button>
-        </div>
-      </nav>
-      <main className="main">
+    <AntLayout style={{ minHeight: '100vh' }}>
+      <AntLayout.Sider
+        width={220}
+        breakpoint="md"
+        collapsedWidth={0}
+        collapsed={collapsed}
+        onCollapse={setCollapsed}
+        zeroWidthTriggerStyle={{ top: 8 }}
+        style={{ borderRight: `1px solid ${p.nav.divider}` }}>
+        <nav aria-label={t('ui.nav.main')} style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+          <div className="brand" style={{ color: p.nav.text }}>
+            <img src="/favicon.svg" width={22} height={22} alt="" /> TicketDesk
+          </div>
+          <Menu theme="dark" mode="inline" selectedKeys={selected ? [selected] : []} items={items} style={{ borderInlineEnd: 'none' }} />
+          <ConfigProvider theme={navControls}>
+            <div className="sidebar-footer" style={{ borderTop: `1px solid ${p.nav.divider}` }}>
+              <NavLink to="/profile" style={{ color: p.nav.text, display: 'block' }}>
+                {user?.displayName}
+                <div style={{ color: p.nav.muted, fontSize: 12 }}>{t(`ui.role.${user?.role}`)}</div>
+              </NavLink>
+              <div>
+                <label htmlFor="nav-theme" style={label}>
+                  {t('ui.common.theme')}
+                </label>
+                <Select
+                  id="nav-theme"
+                  value={theme}
+                  onChange={(v) => changeTheme(v)}
+                  style={{ width: '100%' }}
+                  options={[
+                    { value: 'system', label: t('ui.theme.system') },
+                    { value: 'light', label: t('ui.theme.light') },
+                    { value: 'dark', label: t('ui.theme.dark') },
+                  ].map((o) => ({ ...o, title: o.label }))}
+                />
+              </div>
+              <div>
+                <label htmlFor="nav-locale" style={label}>
+                  {t('ui.common.language')}
+                </label>
+                <Select
+                  id="nav-locale"
+                  value={locale}
+                  onChange={(v) => changeLocale(v)}
+                  style={{ width: '100%' }}
+                  options={locales.map((l) => ({ value: l, label: t(`ui.locale.${l}`), title: t(`ui.locale.${l}`) }))}
+                />
+              </div>
+              <Button block onClick={() => void logout()}>
+                {t('ui.auth.logout')}
+              </Button>
+            </div>
+          </ConfigProvider>
+        </nav>
+      </AntLayout.Sider>
+      <AntLayout.Content className="main">
         <Outlet />
-      </main>
-    </div>
+      </AntLayout.Content>
+    </AntLayout>
   );
 }

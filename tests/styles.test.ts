@@ -1,87 +1,13 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { PALETTES, PRIORITY_TONE, SLA_TONE, STATUS_TONE, tone, type Palette } from '../src/web/palette';
+import { antdTheme } from '../src/web/theme';
 
 /**
- * Guards the design tokens and badge colours in src/web/styles.css
- * (PRD FR-5.3 / FR-5.4, AC-THEME-02). Reads the stylesheet directly: no DOM, no build step.
+ * Guards the colours of the UI (PRD FR-5.3 / FR-5.4, AC-THEME-02~05): src/web/palette.ts is the single
+ * colour source for Ant Design and the custom badges; styles.css only repeats the first-paint colours.
  */
-const raw = readFileSync(new URL('../src/web/styles.css', import.meta.url), 'utf8');
-const css = raw.replace(/\/\*[\s\S]*?\*\//g, '');
-
-/** `selector { declarations }` pairs; at-rule wrappers are skipped because their bodies contain braces. */
-const RULES = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((m) => ({
-  selectors: m[1].split(',').map((s) => s.trim().replace(/\s+/g, ' ')),
-  body: m[2],
-}));
-
-function declarations(selector: string): string | undefined {
-  return RULES.find((r) => r.selectors.includes(selector))?.body;
-}
-
-/** Every declaration block for a selector, including the ones inside @media blocks. */
-function allDeclarations(selector: string): string[] {
-  return RULES.filter((r) => r.selectors.includes(selector)).map((r) => r.body);
-}
-
-function varsOf(body: string): Record<string, string> {
-  return Object.fromEntries([...body.matchAll(/(--[a-z0-9-]+)\s*:\s*([^;]+);/g)].map((m) => [m[1], m[2].trim()]));
-}
-
-function themeVars(selector: string): Record<string, string> {
-  const body = declarations(selector);
-  if (body === undefined) throw new Error(`theme block not found: ${selector}`);
-  return varsOf(body);
-}
-
-const THEMES = [
-  ['light', themeVars(":root[data-theme='light']")],
-  ['dark', themeVars(":root[data-theme='dark']")],
-] as const;
-
-/** Theme-independent tokens (the typography scale) live in the plain :root block. */
-const BASE_VARS = varsOf(RULES.find((r) => r.selectors.length === 1 && r.selectors[0] === ':root')?.body ?? '');
-
-const BADGES = ['.badge', '.badge.new', '.badge.open', '.badge.pending_user', '.badge.at_risk', '.badge.resolved',
-  '.badge.met', '.badge.breached', '.badge.p3', '.badge.p4', '.badge.p5'];
-
-/** The variable names a badge uses for its background and text colour. */
-function badgeVars(selector: string): { background: string; color: string } {
-  const body = declarations(selector) ?? '';
-  const pick = (prop: string) => body.match(new RegExp(`(?:^|;)\\s*${prop}:\\s*var\\((--[a-z0-9-]+)\\)\\s*;`))?.[1];
-  const background = pick('background');
-  const color = pick('color');
-  if (!background || !color) throw new Error(`${selector} must set background and color with var(--…)`);
-  return { background, color };
-}
-
-/** Follows `var(--x)` chains so a token may alias another token (e.g. --bg: var(--canvas-soft)). */
-function resolve(name: string, vars: Record<string, string>): string {
-  let value = vars[name];
-  for (let i = 0; i < 10 && value !== undefined; i++) {
-    const alias = value.match(/^var\((--[a-z0-9-]+)\)$/)?.[1];
-    if (!alias) return value;
-    value = vars[alias];
-  }
-  throw new Error(`could not resolve ${name}`);
-}
-
-/** A single declaration value from a rule body ('' when the property is absent). */
-function property(body: string, prop: string): string {
-  return body.match(new RegExp(`(?:^|;)\\s*${prop}:\\s*([^;]+);`))?.[1]?.trim() ?? '';
-}
-
-/** Resolves a declaration value that may be a literal or a single var(--x) alias. */
-function resolveMaybe(value: string, vars: Record<string, string>): string {
-  const alias = value.match(/^var\((--[a-z0-9-]+)\)$/)?.[1];
-  return alias ? resolve(alias, vars) : value;
-}
-
-/** Expands the 3-digit hex shorthand so #fff and #ffffff compare equal. */
-function normaliseColour(value: string): string {
-  const short = value.match(/^#([0-9a-f])([0-9a-f])([0-9a-f])$/i);
-  if (short) return `#${short[1]}${short[1]}${short[2]}${short[2]}${short[3]}${short[3]}`.toLowerCase();
-  return value.toLowerCase();
-}
+const THEMES = Object.entries(PALETTES) as [string, Palette][];
 
 function luminance(hex: string): number {
   const m = hex.match(/^#([0-9a-f]{6})$/i);
@@ -98,218 +24,123 @@ function contrast(a: string, b: string): number {
   return (hi + 0.05) / (lo + 0.05);
 }
 
+const keysDeep = (o: object, prefix = ''): string[] =>
+  Object.entries(o).flatMap(([k, v]) => (typeof v === 'object' ? keysDeep(v, `${prefix}${k}.`) : [`${prefix}${k}`]));
+
 describe('badge colours (FR-5.3)', () => {
-  it('gives L3 its own accent rule', () => {
-    expect(RULES.filter((r) => r.selectors.includes('.badge.p3'))).toHaveLength(1);
-    expect(badgeVars('.badge.p3')).toEqual({ background: '--accent-soft', color: '--accent-strong' });
+  it('gives L3 the accent tint and keeps L1 and L2 neutral', () => {
+    expect(PRIORITY_TONE[3]).toBe('blue');
+    expect(PRIORITY_TONE[1]).toBe('grey');
+    expect(PRIORITY_TONE[2]).toBe('grey');
+    expect(STATUS_TONE.closed).toBe('grey');
   });
 
-  it('keeps L1, L2 and closed on the neutral .badge default', () => {
-    expect(declarations('.badge.p1')).toBeUndefined();
-    expect(declarations('.badge.p2')).toBeUndefined();
-    expect(declarations('.badge.closed')).toBeUndefined();
-  });
-
-  it('uses only variables that both themes define', () => {
-    for (const selector of BADGES) {
-      for (const name of Object.values(badgeVars(selector))) {
-        for (const [theme, vars] of THEMES) expect(vars[name], `${selector}: ${name} in ${theme}`).toBeDefined();
-      }
+  it.each(THEMES)('meets WCAG AA (>= 4.5:1) for every badge in the %s theme', (theme, p) => {
+    const tones = new Set([...Object.values(STATUS_TONE), ...Object.values(PRIORITY_TONE), ...Object.values(SLA_TONE)]);
+    for (const t of tones) {
+      const s = tone(p, t);
+      expect(contrast(s.ink, s.soft), `${t} in ${theme}`).toBeGreaterThanOrEqual(4.5);
     }
   });
 
-  it.each(THEMES)('meets WCAG AA (>= 4.5:1) for every badge in the %s theme', (theme, vars) => {
-    for (const selector of BADGES) {
-      const { background, color } = badgeVars(selector);
-      expect(contrast(resolve(color, vars), resolve(background, vars)), `${selector} in ${theme}`).toBeGreaterThanOrEqual(4.5);
-    }
+  it.each(THEMES)('keeps the priority levels distinguishable in the %s theme', (_, p) => {
+    const backgrounds = [1, 3, 4, 5].map((n) => tone(p, PRIORITY_TONE[n]).soft.toLowerCase());
+    expect(new Set(backgrounds).size).toBe(4);
   });
 
-  it.each(THEMES)('keeps the priority levels distinguishable in the %s theme', (_, vars) => {
-    const backgrounds = ['.badge', '.badge.p3', '.badge.p4', '.badge.p5'].map((s) => resolve(badgeVars(s).background, vars));
-    expect(new Set(backgrounds.map((c) => c.toLowerCase())).size).toBe(4);
-  });
-
-  it.each(THEMES)('gives every open status its own colour, none shared with a priority, in the %s theme', (_, vars) => {
+  it.each(THEMES)('gives every open status its own colour, none shared with a priority, in the %s theme', (_, p) => {
     // The status and priority columns sit side by side in the ticket list (the old "new" = L3 blue clash).
-    const bg = (s: string) => resolve(badgeVars(s).background, vars).toLowerCase();
-    const statuses = ['.badge.new', '.badge.open', '.badge.pending_user', '.badge.resolved'].map(bg);
+    const bg = (t: Parameters<typeof tone>[1]) => tone(p, t).soft.toLowerCase();
+    const statuses = ['new', 'open', 'pending_user', 'resolved'].map((s) => bg(STATUS_TONE[s]));
     expect(new Set(statuses).size).toBe(4);
-    for (const p of ['.badge.p3', '.badge.p4', '.badge.p5']) expect(statuses).not.toContain(bg(p));
+    for (const n of [3, 4, 5]) expect(statuses).not.toContain(bg(PRIORITY_TONE[n]));
   });
 });
 
-/** Variable names that existed before the redesign; tests and components depend on them. */
-const LEGACY_VARS = ['--bg', '--surface', '--surface-2', '--border', '--text', '--text-muted', '--accent',
-  '--accent-text', '--accent-soft', '--danger', '--danger-soft', '--warning', '--warning-soft', '--success',
-  '--success-soft', '--internal', '--internal-border', '--shadow'];
-
-/** Tokens added by the UI redesign (DESIGN.md); both themes must define every one of them. */
-const NEW_VARS = ['--canvas-soft', '--hairline', '--border-strong', '--ink-1', '--ink-2', '--ink-3', '--accent-strong',
-  '--shadow-soft', '--shadow-elevated',
-  '--radius-xs', '--radius-sm', '--radius-md', '--radius-lg', '--radius-xl', '--radius-full',
-  '--space-xxs', '--space-xs', '--space-sm', '--space-md', '--space-lg', '--space-xl', '--space-xxl'];
-
-describe('design tokens (FR-5.4)', () => {
-  it('keeps every pre-existing variable name in both themes', () => {
-    for (const [theme, vars] of THEMES) {
-      for (const name of LEGACY_VARS) expect(vars[name], `${name} in ${theme}`).toBeDefined();
-    }
+describe('palette (FR-5.4)', () => {
+  it('defines the same colour set in both themes, all as 6-digit hex', () => {
+    expect(keysDeep(PALETTES.dark).sort()).toEqual(keysDeep(PALETTES.light).sort());
+    for (const [, p] of THEMES) for (const key of keysDeep(p)) expect(key.split('.').reduce((o: any, k) => o[k], p)).toMatch(/^#[0-9a-f]{6}$/i);
   });
 
-  it('defines the new design tokens in both themes', () => {
-    for (const [theme, vars] of THEMES) {
-      for (const name of NEW_VARS) expect(vars[name], `${name} in ${theme}`).toBeDefined();
-    }
-  });
-
-  it('defines every light-theme token in dark as well', () => {
-    // Dark is derived from light (DESIGN.md only defines light), so it must never lose a token: a
-    // token defined only in light leaves the dark theme with an unresolved var() and breaks the
-    // switch. Dark-only tokens (--overlay, --qr-canvas) are additive and allowed.
-    const light = Object.keys(THEMES[0][1]);
-    const dark = Object.keys(THEMES[1][1]);
-    expect(light.filter((name) => !dark.includes(name))).toEqual([]);
-  });
-
-  it('uses the DESIGN.md radius and spacing scale in both themes', () => {
-    const expected: Record<string, string> = {
-      '--radius-xs': '4px', '--radius-md': '8px', '--radius-lg': '12px', '--radius-full': '9999px',
-      '--space-xxs': '4px', '--space-xs': '8px', '--space-sm': '12px', '--space-md': '16px',
-      '--space-lg': '24px', '--space-xxl': '32px',
-    };
-    for (const [theme, vars] of THEMES) {
-      for (const [name, value] of Object.entries(expected)) expect(vars[name], `${name} in ${theme}`).toBe(value);
-    }
-  });
-
-  it('meets WCAG AA for text on surfaces in both themes', () => {
-    const pairs: [string, string][] = [
-      ['--ink-1', '--canvas-soft'],
-      ['--ink-1', '--surface'],
-      ['--ink-2', '--canvas-soft'],
-      ['--ink-3', '--canvas-soft'],
-      ['--ink-3', '--surface'],
-      ['--accent-strong', '--canvas-soft'],
-      ['--accent-strong', '--surface'],
-      ['--accent-strong', '--accent-soft'],
-      ['--accent-text', '--accent'],
-      ['--danger', '--danger-soft'],
-      ['--warning', '--warning-soft'],
-      ['--success', '--success-soft'],
+  it.each(THEMES)('meets WCAG AA for text on surfaces in the %s theme', (theme, p) => {
+    const pairs: [keyof Palette, keyof Palette][] = [
+      ['ink1', 'canvas'],
+      ['ink1', 'surface'],
+      ['ink2', 'canvas'],
+      ['ink3', 'canvas'],
+      ['ink3', 'surface'],
+      ['accentStrong', 'canvas'],
+      ['accentStrong', 'surface'],
+      ['accentStrong', 'accentSoft'],
+      ['accentText', 'accent'],
+      ['danger', 'dangerSoft'],
+      ['danger', 'surface'],
+      ['warning', 'warningSoft'],
+      ['success', 'successSoft'],
+      ['ink1', 'internal'],
     ];
-    for (const [theme, vars] of THEMES) {
-      for (const [fg, bg] of pairs) {
-        expect(contrast(resolve(fg, vars), resolve(bg, vars)), `${fg} on ${bg} in ${theme}`).toBeGreaterThanOrEqual(4.5);
-      }
-    }
+    for (const [fg, bg] of pairs) expect(contrast(p[fg] as string, p[bg] as string), `${fg} on ${bg} in ${theme}`).toBeGreaterThanOrEqual(4.5);
   });
 
-  it('keeps control borders at >= 3:1 against surfaces in both themes', () => {
-    for (const [theme, vars] of THEMES) {
-      for (const bg of ['--surface', '--canvas-soft']) {
-        expect(contrast(resolve('--border-strong', vars), resolve(bg, vars)), `--border-strong on ${bg} in ${theme}`)
-          .toBeGreaterThanOrEqual(3);
-      }
-    }
+  it.each(THEMES)('keeps control borders at >= 3:1 against surfaces in the %s theme', (theme, p) => {
+    for (const bg of [p.surface, p.canvas]) expect(contrast(p.borderStrong, bg), theme).toBeGreaterThanOrEqual(3);
   });
 
-  it('keeps semantic colours independent of the accent in both themes', () => {
-    for (const [theme, vars] of THEMES) {
-      const accent = [resolve('--accent', vars).toLowerCase(), resolve('--accent-strong', vars).toLowerCase()];
-      for (const name of ['--danger', '--warning', '--success']) {
-        expect(accent, `${name} in ${theme}`).not.toContain(resolve(name, vars).toLowerCase());
-      }
-    }
+  it.each(THEMES)('keeps semantic colours independent of the accent in the %s theme', (theme, p) => {
+    const accent = [p.accent, p.accentStrong].map((c) => c.toLowerCase());
+    for (const c of [p.danger, p.warning, p.success]) expect(accent, theme).not.toContain(c.toLowerCase());
   });
 
-  it('styles shared components with tokens instead of hardcoded values', () => {
-    const components = ['.card', '.badge', '.banner', '.banner.error', '.modal-card', '.toast', '.ex-modal-card',
-      '.ex-toast', '.empty-state', '.ex-empty-state-card', '.ex-auth-form-card', '.ex-app-shell-row',
-      '.nav-link.active', '.msg', '.secret-box', '.tag', 'input', 'button.primary', 'button.danger'];
-    for (const selector of components) {
-      const body = declarations(selector);
-      expect(body, selector).toBeDefined();
-      expect(body, selector).toMatch(/var\(--(radius|space|shadow|accent|surface|border|ink|danger|warning|success|nav)/);
-      expect(body, selector).not.toMatch(/#[0-9a-f]{3,6}\b/i);
-    }
-  });
-
-  it.each(THEMES)('keeps the sticker data colours readable in the %s theme', (theme, vars) => {
-    for (const hue of ['sky', 'purple', 'pink', 'orange', 'teal']) {
-      const c = (fg: string, bg: string) => contrast(resolve(fg, vars), resolve(bg, vars));
+  it.each(THEMES)('keeps the sticker data colours readable in the %s theme', (theme, p) => {
+    for (const [hue, s] of Object.entries(p.sticker)) {
       // solid fills bars, bands and tiles (non-text, 3:1); ink is text on the soft tint and on cards (4.5:1)
-      expect(c(`--sticker-${hue}`, '--surface'), `${hue} solid in ${theme}`).toBeGreaterThanOrEqual(3);
-      expect(c(`--sticker-${hue}-ink`, `--sticker-${hue}-soft`), `${hue} ink in ${theme}`).toBeGreaterThanOrEqual(4.5);
-      expect(c(`--sticker-${hue}-ink`, '--surface'), `${hue} ink on surface in ${theme}`).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(s.solid, p.surface), `${hue} solid in ${theme}`).toBeGreaterThanOrEqual(3);
+      expect(contrast(s.ink, s.soft), `${hue} ink in ${theme}`).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(s.ink, p.surface), `${hue} ink on surface in ${theme}`).toBeGreaterThanOrEqual(4.5);
     }
   });
 
-  it.each(THEMES)('keeps the indigo sidebar readable in the %s theme', (theme, vars) => {
-    const c = (fg: string, bg: string) => contrast(resolve(fg, vars), resolve(bg, vars));
-    for (const bg of ['--nav-bg', '--nav-hover', '--nav-active', '--nav-field']) {
-      expect(c('--nav-text', bg), `--nav-text on ${bg} in ${theme}`).toBeGreaterThanOrEqual(4.5);
+  it.each(THEMES)('keeps the indigo sidebar readable in the %s theme', (theme, p) => {
+    for (const bg of [p.nav.bg, p.nav.hover, p.nav.active, p.nav.field]) {
+      expect(contrast(p.nav.text, bg), `nav text on ${bg} in ${theme}`).toBeGreaterThanOrEqual(4.5);
     }
-    expect(c('--nav-muted', '--nav-bg'), theme).toBeGreaterThanOrEqual(4.5);
-    for (const fg of ['--nav-indicator', '--nav-field-border', '--nav-tile-sky', '--nav-tile-purple', '--nav-tile-orange',
-      '--nav-tile-teal']) {
-      expect(c(fg, '--nav-bg'), `${fg} on --nav-bg in ${theme}`).toBeGreaterThanOrEqual(3);
+    expect(contrast(p.nav.muted, p.nav.bg), theme).toBeGreaterThanOrEqual(4.5);
+    for (const fg of [p.nav.indicator, p.nav.fieldBorder, ...Object.values(p.navTile)]) {
+      expect(contrast(fg, p.nav.bg), `${fg} on nav in ${theme}`).toBeGreaterThanOrEqual(3);
     }
+  });
+});
+
+describe('Ant Design theme (FR-5.4)', () => {
+  it.each(THEMES)('feeds the palette into the antd tokens in the %s theme', (theme, p) => {
+    const cfg = antdTheme(theme as 'light' | 'dark');
+    expect(cfg.token?.colorPrimary).toBe(p.accent);
+    expect(cfg.token?.colorBgLayout).toBe(p.canvas);
+    expect(cfg.token?.colorBgContainer).toBe(p.surface);
+    expect(cfg.token?.colorText).toBe(p.ink1);
+    expect(cfg.components?.Layout?.siderBg).toBe(p.nav.bg);
+  });
+
+  it.each(THEMES)('keeps primary button text readable in the %s theme', (theme, p) => {
+    // antd's default white text on the light dark-theme blue would be 2.6:1
+    const cfg = antdTheme(theme as 'light' | 'dark');
+    expect(contrast(cfg.components!.Button!.primaryColor as string, p.accent), theme).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+describe('styles.css', () => {
+  const css = readFileSync(new URL('../src/web/styles.css', import.meta.url), 'utf8');
+  const block = (selector: string) => css.match(new RegExp(`${selector.replace(/[[\]]/g, '\\$&')}\\s*\\{([^}]*)\\}`))?.[1] ?? '';
+  const vars = (body: string) => Object.fromEntries([...body.matchAll(/(--[a-z0-9-]+)\s*:\s*([^;]+);/g)].map((m) => [m[1], m[2].trim()]));
+
+  it.each(THEMES)('paints the first frame with the palette canvas and ink in the %s theme', (theme, p) => {
+    const v = vars(block(`:root[data-theme='${theme}']`));
+    expect(v).toEqual({ '--canvas': p.canvas, '--ink-1': p.ink1, '--ink-3': p.ink3 });
   });
 
   it('loads no external resources (CSP allows same origin only)', () => {
-    expect(raw).not.toMatch(/@import/);
-    expect(raw).not.toMatch(/url\(\s*['"]?https?:/i);
-  });
-});
-
-describe('shared components and layout (FR-5.4)', () => {
-  it('uses the DESIGN.md light values for canvas, hairline and the single accent', () => {
-    const light = THEMES[0][1];
-    expect(light['--canvas-soft']).toBe('#f6f5f4');
-    expect(light['--hairline']).toBe('#e6e6e6');
-    expect(light['--accent']).toBe('#0075de');
-    expect(light['--surface']).toBe('#ffffff');
-  });
-
-  it('keeps the stylesheet braces balanced', () => {
-    const open = (css.match(/\{/g) ?? []).length;
-    const close = (css.match(/\}/g) ?? []).length;
-    expect(close, 'unbalanced braces in src/web/styles.css').toBe(open);
-  });
-
-  it('keeps the .card + .card margin trap fix (AGENTS.md §7.9)', () => {
-    expect(declarations('.card + .card')).toMatch(/margin-top:\s*var\(--space-md\)/);
-    expect(declarations('.grid > .card + .card')).toMatch(/margin-top:\s*0/);
-  });
-
-  it('paints the QR quiet zone and the modal overlay with tokens both themes define', () => {
-    // Both surfaces must be themeable: the QR needs a white quiet zone in dark mode too, and the modal
-    // backdrop must not hardcode its alpha. A token defined in only one theme breaks the theme switch.
-    const pairs: [string, string][] = [
-      ['.qr', '--qr-canvas'],
-      ['.modal-backdrop', '--overlay'],
-    ];
-    for (const [selector, token] of pairs) {
-      expect(declarations(selector) ?? '', selector).toContain(`var(${token})`);
-      for (const [theme, vars] of THEMES) expect(vars[token], `${token} in ${theme}`).toBeDefined();
-    }
-  });
-
-  it('keeps the auth card and the sidebar row on the DESIGN.md hook classes', () => {
-    // The hook classes must exist in the stylesheet as well as in the markup, otherwise the JSX change
-    // is cosmetic only and the DESIGN.md chrome never reaches the screen.
-    expect(declarations('.ex-auth-form-card')).toBeDefined();
-    expect(declarations('.ex-app-shell-row')).toBeDefined();
-    expect(declarations('.ex-app-shell-row.active')).toBeDefined();
-  });
-
-  it('keeps the sidebar as the first column of the app shell', () => {
-    expect(declarations('.shell')).toMatch(/grid-template-columns:\s*220px 1fr/);
-    expect(declarations('.sidebar')).toMatch(/border-right:/);
-  });
-
-  it('contains no brand names from DESIGN.md', () => {
-    expect(raw).not.toMatch(/notion/i);
+    expect(css).not.toMatch(/@import/);
+    expect(css).not.toMatch(/url\(\s*['"]?https?:/i);
   });
 });

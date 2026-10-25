@@ -14,7 +14,7 @@
 | --- | --- |
 | 目前版本 | **0.3.0**（2026-10-24，git tag `v0.3.0`），見 [CHANGELOG.md](CHANGELOG.md) |
 | 支援部署 | Docker Compose（app + PostgreSQL 16 + Redis 7）。Cloudflare 為實驗性、**未實作** |
-| 測試狀態 | 72 個 Vitest 測試、`scripts/validate.sh`、`scripts/smoke.sh`（24 項）、`scripts/ui-e2e.sh` 全部通過 |
+| 測試狀態 | 68 個 Vitest 測試、`scripts/validate.sh`、`scripts/smoke.sh`（24 項）、`scripts/ui-e2e.sh` 全部通過 |
 | 未實作 | AD/LDAP、SAML、OIDC、SCIM、FIDO2、附件、SLA 營業時間、Cloudflare、多副本背景工作 |
 | 待客戶確認 | 見 [specs/DECISIONS.md](specs/DECISIONS.md) 中標示 ⏳ 的項目（預設管理員密碼、SSO 時程、Cloudflare 去留） |
 | 下一步建議 | v1.1：SSO（`users.identity_provider` 已預留）→ 附件 → SLA 營業時間 |
@@ -56,7 +56,8 @@
 | 密碼 | bcryptjs | 3.0.3 | 純 JS，內建型別 |
 | TOTP | otpauth | 9.5.2 | |
 | Email | nodemailer | 10.2.1 | |
-| 前端 | react / react-router-dom / vite | 19.3.1 / 7.18.4 / 8.3.5 | 無 UI 套件；樣式在 `src/web/styles.css`（CSS 變數做主題） |
+| 前端 | react / react-router-dom / vite | 19.3.1 / 7.18.4 / 8.3.5 | |
+| UI 元件 | antd / @ant-design/icons | 6.6.5 / 6.3.4 | **UI 一律用 Ant Design**；顏色在 `src/web/palette.ts`，經 `theme.ts` 的 `antdTheme()` 給 ConfigProvider |
 | 字型 | @fontsource-variable/noto-sans-display / noto-sans-tc | 5.3.0 / 5.3.0 | 自架 Google Noto 可變字型，見第 5 節「新增前端頁面」 |
 | 測試 | vitest | 5.0.5 | |
 
@@ -98,7 +99,10 @@ src/server/
 src/web/
   main.tsx            路由；依 session stage 切換登入/改密/2FA 頁面
   api.ts              fetch 包裝：自動帶 X-Requested-With、錯誤轉 ApiError、401/stage 錯誤觸發重新整理 auth
-  auth.tsx / i18n.tsx / theme.ts   全域狀態
+  auth.tsx / i18n.tsx / theme.ts   全域狀態；theme.ts 另有 useThemeMode() 與 antdTheme()（Ant Design 主題）
+  palette.ts          唯一的顏色來源：兩種主題的色票、tone()、狀態/優先度/SLA 對應的色相（tests/styles.test.ts 檢查對比）
+  components/common.tsx 共用元件：Field（label 綁定控制項）、Choice（下拉選單）、PageHeader、各種 badge、ErrorBanner、useLoad/useAction
+  styles.css          只放版面與首次繪製的底色，元件樣式來自 Ant Design
   pages/…             各頁面；pages/admin/Crud.tsx 是簡單資源的通用 CRUD 元件
   public/theme-init.js 首次繪製前套用主題（CSP 不允許 inline script，所以是外部檔）
 drizzle/              自動產生的 migration，不要手改
@@ -162,20 +166,25 @@ crewai_ticket_build.py CrewAI 迭代工具（PM → SAr → PG → UI 設計師 
 
 ### 新增前端頁面
 - 頁面放 `src/web/pages/`，在 `main.tsx`（一般）或 `pages/admin/AdminRoutes.tsx`（管理）註冊，導覽在 `components/Layout.tsx`。
-- 用 `useLoad()` 載入、`useAction()` 送出、`ErrorBanner` 顯示錯誤；樣式用既有 class 與 CSS 變數，深淺色都要能看。
+- **UI 一律用 Ant Design 元件**（Card、Table、Form、Input、Select、Button、Tag、Alert…），不手刻 HTML 控制項，也不另加其他 UI 套件。
+  表單欄位用 `common.tsx` 的 `<Field label>`（label 會綁定控制項，螢幕閱讀器與 e2e 的 `getByLabel()` 才找得到），下拉選單用 `<Choice>`；
+  值放在元件 state，antd `Form` 只用來排版與送出。
+- 用 `useLoad()` 載入、`useAction()` 送出、`ErrorBanner` 顯示錯誤；送出按鈕同時設 `loading` 與 `disabled`（只有 loading 時點擊會被吞掉）。
+- 顏色只從 `palette.ts` 取（`usePalette()`、`tone()`），不寫死色碼；新的顏色兩種主題都要定義並通過 `tests/styles.test.ts` 的對比檢查。
 - 視覺規範：[DESIGN.md](DESIGN.md)（色彩、字級、間距、圓角、陰影、元件樣式）。由維護者提供，agent 只讀不改；
   它與本文件衝突時以本文件為準。DESIGN.md 是以行銷網站分析出的風格參考，套用到 TicketDesk 時：
   - 只取風格，不取品牌：不可在介面、字典或程式碼中出現原品牌的名稱、標誌、字型名稱或文案。
-  - 必須同時有深色主題：DESIGN.md 只定義淺色，深色值由設計者在 `styles.css` 的 CSS 變數中推導，對比達 WCAG AA。
+  - 必須同時有深色主題：DESIGN.md 只定義淺色，深色值由設計者在 `palette.ts` 中推導，對比達 WCAG AA；Ant Design 深色用 `darkAlgorithm` 加上這組色票。
   - 字型依 DESIGN.md 的 Typography：英文 Noto Sans Display、中文 Noto Sans TC（Google Noto，OFL）。用 Fontsource 套件自架
     （`main.tsx` 匯入，Vite 打包成同源檔案），**不要改成 Google Fonts CDN**：CSP 只允許同源，而且內網部署連不到外部。
     CSS 的 family 名稱是 `'Noto Sans Display Variable', 'Noto Sans TC Variable'`（英文在前，中文字自動落到 TC）。
-  - 工單系統需要語意色（錯誤、成功、警告、SLA 逾時、優先度）：定義為獨立的 CSS 變數，不受「裝飾色不能用在結構」的限制。
-  - sticker 色盤可用於有意義的資料色（`--sticker-*`：狀態 badge、儀表板色帶與長條圖、選單群組色塊），側邊欄用深靛藍（`--nav-*`），
+  - 工單系統需要語意色（錯誤、成功、警告、SLA 逾時、優先度）：在 `palette.ts` 獨立定義，不受「裝飾色不能用在結構」的限制。
+  - sticker 色盤可用於有意義的資料色（`palette.sticker`：狀態 badge、儀表板色帶與長條圖、選單群組色塊），側邊欄用深靛藍（`palette.nav`），
     見 [specs/DECISIONS.md](specs/DECISIONS.md) D9。主要動作、連結與焦點仍只用主色藍；顏色一定要搭配文字，不單靠顏色傳達。
-  - 用到的是應用程式元件（`ex-app-shell-row`、`ex-data-table-cell`、`ex-auth-form-card`、`ex-modal-card`、`ex-toast`、
-    `ex-empty-state-card`、`text-input`、`button-*`、`badge-pill`）；hero、pricing 等行銷區塊不適用。
-- 不可以用 inline `<script>`（CSP 禁止）；CSP 只允許同源資源，不可引入外部字型、CDN 或 UI 套件。
+  - DESIGN.md 的應用程式元件（app shell、data table、auth form card、modal、toast、empty state、text input、button、badge-pill）
+    對應到 Ant Design 的 Layout/Menu、Table、Card、Modal、message、Empty、Input、Button、Tag；hero、pricing 等行銷區塊不適用。
+- 不可以用 inline `<script>`（CSP 禁止）；CSP 只允許同源資源，不可引入外部字型或 CDN。Ant Design 的 CSS-in-JS 靠 CSP 既有的
+  `style-src 'unsafe-inline'` 運作，不需要也不可以再放寬 CSP。
 
 ### 新增語系
 1. 新增 `src/server/i18n/locales/<locale>.ts`（複製 `en-US.ts`，key 要完全一致）。
@@ -195,7 +204,7 @@ crewai_ticket_build.py CrewAI 迭代工具（PM → SAr → PG → UI 設計師 
 
 | 指令 | 內容 | 需要 |
 | --- | --- | --- |
-| `npm test` | 72 個單元/整合測試（PGlite） | Node |
+| `npm test` | 68 個單元/整合測試（PGlite） | Node |
 | `TEST_DATABASE_URL=postgres://… npm test` | 同上，改用真實 PostgreSQL + 正式驅動 | 一個 Postgres（見下） |
 | `npm run validate` | 型別、schema/migration 一致、測試、建置、OpenAPI JSON、Markdown 連結、compose 設定 | Node（Docker 可選） |
 | `scripts/smoke.sh <url> <預設管理員密碼>` | 部署後 API 端到端 24 項（會改管理員密碼為 `Smoke-Test-Passw0rd!`） | 執行中的系統 |
@@ -242,10 +251,16 @@ docker compose --env-file /tmp/td.env -p tdtest down -v
 6. **專案根目錄的 `.env` 同時給 CrewAI 本機工具（`OPENROUTER_API_KEY`）與 docker compose 使用**。測試部署請用 `--env-file` 指定其他檔案，不要覆寫它。`.dockerignore` 已排除 `.env`。
 7. **加密欄位長度**：AES-GCM 加密後的 TOTP 金鑰約 90 字元，`varchar(64)` 放不下（曾因此出錯，已改為 255）。新增加密欄位要預留長度。
 8. **瀏覽器 console 的 4xx**：未登入時 `/auth/me` 回 401 是正常的，瀏覽器會記為 console error；`tests/e2e/ui.mjs` 只忽略 4xx 資源錯誤，JS 例外、CSP 違規與 5xx 仍會失敗。
-9. **`.card + .card` 的 margin** 會套用到 grid 內的卡片造成錯位，已用 `.grid > .card + .card { margin-top: 0 }` 修正；改版面時要看截圖確認（`scripts/ui-e2e.sh`）。
+9. **改版面一定要看截圖**（`scripts/ui-e2e.sh`）：型別與單元測試抓不到錯位與溢出（例如舊版 `.card + .card` 的 margin 曾讓 grid 卡片錯位，已隨 Ant Design 改版移除）。
 10. **Vite 會把小於 4KB 的資源內嵌成 `data:` URI**：字型被內嵌後 CSP（`default-src 'self'`）會擋下，`scripts/ui-e2e.sh` 會報 `Refused to load the font 'data:…'`。
     `vite.config.ts` 的 `assetsInlineLimit` 已排除 `.woff/.woff2`；新增其他資源類型時注意同樣的問題，不要用放寬 CSP 來解決。
 11. **背景工作在程序內執行**：開兩個 app 副本會重複發送通知與重複掃描 SLA。要水平擴充得先把 `index.ts` 的計時器拆成獨立 worker 並加分散式鎖。
+12. **Ant Design 的行為差異**（改版時都踩過）：
+    - 兩個中文字的按鈕會被自動插入空格（「登入」變「登 入」），文字就和字典不一致；`main.tsx` 的 ConfigProvider 已設 `button={{ autoInsertSpace: false }}`。
+    - `Button` 只有 `loading` 時點擊會被吞掉，但不是 disabled，Playwright 不會等它；送出按鈕要同時設 `disabled`。
+    - `Select` 不是原生 `<select>`：e2e 用 `tests/e2e/ui.mjs` 的 `pick()`（點開後依 title 點選項），選項要帶 `title`（`<Choice>` 已處理）。
+    - `Input.TextArea` 的 `autoSize` 會在頁面放一個隱藏的量測用 textarea，e2e 要用 `textarea:visible`。
+    - `Layout.Sider` 的 `breakpoint` 要等第一次量測後才收合，手機上第一個畫面會被撐寬；`Layout.tsx` 用 `matchMedia` 決定初始的 `collapsed`。
 
 ---
 

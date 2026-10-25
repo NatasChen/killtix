@@ -1,18 +1,23 @@
-import { useState, type FormEvent } from 'react';
+import { Button, Card, Col, Descriptions, Flex, Form, Input, Radio, Row, Space, type DescriptionsProps } from 'antd';
+import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { del, get, patch, post } from '../api';
 import { useAuth } from '../auth';
 import { CustomFieldInput, formatFieldValue } from '../components/CustomFieldInput';
 import {
+  Choice,
   DateTime,
   ErrorBanner,
+  Field,
   Loading,
+  PageHeader,
   PriorityBadge,
   SlaBadge,
   StatusBadge,
   Tags,
   useAction,
   useLoad,
+  usePalette,
 } from '../components/common';
 import { useI18n } from '../i18n';
 
@@ -91,6 +96,7 @@ export function TicketDetailPage() {
   const { id } = useParams();
   const { t } = useI18n();
   const { can } = useAuth();
+  const p = usePalette();
   const staff = can('ticket:note');
   const { data, error, loading, reload, setData } = useLoad(() => get<TicketDetail>(`/tickets/${encodeURIComponent(id!)}`), [id]);
   const catalog = useLoad(() => get<Catalog>('/catalog'), []);
@@ -107,8 +113,7 @@ export function TicketDetailPage() {
   const update = (body: Record<string, unknown>) =>
     action.run(async () => setData(await patch<TicketDetail>(`/tickets/${data.id}`, body)));
 
-  const sendReply = (e: FormEvent) => {
-    e.preventDefault();
+  const sendReply = () => {
     void action.run(async () => {
       await post(`/tickets/${data.id}/threads`, { type: replyType, body: reply });
       setReply('');
@@ -121,319 +126,329 @@ export function TicketDetailPage() {
   const canTriage = can('ticket:triage');
   const canAssign = can('ticket:assign');
 
+  const applyCanned = (id: string) => {
+    const c = catalog.data?.cannedResponses?.find((x) => x.id === Number(id));
+    if (!c) return;
+    const body = c.body
+      .replaceAll('%{ticket.number}', data.number)
+      .replaceAll('%{ticket.subject}', data.subject)
+      .replaceAll('%{requester.name}', data.requester?.displayName ?? '');
+    setReply((r) => (r ? `${r}\n${body}` : body));
+  };
+  // Message surfaces: internal notes keep their own tint in both themes so they never pass for a reply.
+  const msgStyle = (type: Thread['type']) =>
+    type === 'internal_note'
+      ? { background: p.internal, border: `1px solid ${p.internalBorder}` }
+      : { background: p.surface, border: `1px solid ${p.hairline}` };
+  const full = { style: { width: '100%' } };
+
+  const props: DescriptionsProps['items'] = [
+    {
+      key: 'status',
+      label: t('ui.tickets.status'),
+      children:
+        canUpdate && data.allowedTransitions.length ? (
+          <Choice
+            {...full}
+            aria-label={t('ui.tickets.status')}
+            value={data.status}
+            onChange={(v) => void update({ status: v })}
+            options={[
+              { value: data.status, label: t(`ticket.status.${data.status}`) },
+              ...data.allowedTransitions.map((st) => ({ value: st, label: `→ ${t(`ticket.status.${st}`)}` })),
+            ]}
+          />
+        ) : (
+          <StatusBadge status={data.status} />
+        ),
+    },
+    {
+      key: 'priority',
+      label: t('ui.tickets.priority'),
+      children: canTriage ? (
+        <Choice
+          {...full}
+          aria-label={t('ui.tickets.priority')}
+          value={data.priority}
+          onChange={(v) => void update({ priority: Number(v) })}
+          options={[1, 2, 3, 4, 5].map((n) => ({ value: n, label: t(`ticket.priority.${n}`) }))}
+        />
+      ) : (
+        <PriorityBadge priority={data.priority} />
+      ),
+    },
+    {
+      key: 'assignee',
+      label: t('ui.tickets.assignee'),
+      children: canAssign ? (
+        <Choice
+          {...full}
+          aria-label={t('ui.tickets.assignee')}
+          value={data.assignee?.id ?? ''}
+          onChange={(v) => void update({ assigneeId: v ? Number(v) : null })}
+          empty={t('ui.tickets.unassigned')}
+          options={assignable.map((u) => ({ value: u.id, label: `${u.displayName} (${t(`ui.role.${u.role}`)})` }))}
+        />
+      ) : (
+        (data.assignee?.displayName ?? t('ui.tickets.unassigned'))
+      ),
+    },
+    {
+      key: 'team',
+      label: t('ui.tickets.team'),
+      children: canAssign ? (
+        <Choice
+          {...full}
+          aria-label={t('ui.tickets.team')}
+          value={data.team?.id ?? ''}
+          onChange={(v) => void update({ teamId: v ? Number(v) : null })}
+          empty="—"
+          options={catalog.data?.teams?.map((tm) => ({ value: tm.id, label: tm.name })) ?? []}
+        />
+      ) : (
+        (data.team?.name ?? '—')
+      ),
+    },
+    { key: 'topic', label: t('ui.tickets.help_topic'), children: data.helpTopic?.name ?? '—' },
+    {
+      key: 'requester',
+      label: t('ui.tickets.requester'),
+      children: (
+        <div>
+          {data.requester?.displayName ?? '—'}
+          {data.requester?.email && <div className="small muted">{data.requester.email}</div>}
+        </div>
+      ),
+    },
+    {
+      key: 'tags',
+      label: t('ui.tickets.tags'),
+      children:
+        canTriage && tagDraft !== null ? (
+          <Form onFinish={() => void update({ tags: tagDraft.split(',').map((x) => x.trim()).filter(Boolean) }).then(() => setTagDraft(null))} style={{ width: '100%' }}>
+            <Input value={tagDraft} onChange={(e) => setTagDraft(e.target.value)} autoFocus aria-label={t('ui.tickets.tags')} />
+          </Form>
+        ) : (
+          <div>
+            <Tags tags={data.tags} />
+            {canTriage && (
+              <Button type="link" size="small" style={{ paddingInline: 0 }} onClick={() => setTagDraft(data.tags.join(', '))}>
+                {t('ui.common.edit')}
+              </Button>
+            )}
+          </div>
+        ),
+    },
+    { key: 'sla_plan', label: t('ui.tickets.sla_plan'), children: data.slaPlan?.name ?? '—' },
+    {
+      key: 'first_response',
+      label: t('ui.tickets.first_response_due'),
+      children: (
+        <div>
+          <DateTime value={data.sla.firstResponseDueAt} />
+          {data.sla.firstRespondedAt && (
+            <div className="small muted">
+              ✓ <DateTime value={data.sla.firstRespondedAt} />
+            </div>
+          )}
+        </div>
+      ),
+    },
+    { key: 'resolution', label: t('ui.tickets.resolution_due'), children: <DateTime value={data.sla.resolutionDueAt} /> },
+    ...(data.reopenCount > 0 ? [{ key: 'reopened', label: t('ui.tickets.reopened'), children: data.reopenCount }] : []),
+    {
+      key: 'watchers',
+      label: t('ui.tickets.watchers'),
+      children: (
+        <Flex vertical gap={6} style={{ width: '100%' }}>
+          {data.watchers.length === 0 && <span className="muted">—</span>}
+          {data.watchers.map((w) => (
+            <Flex key={w.id} align="center" gap={4}>
+              {w.displayName}
+              {canAssign && (
+                <Button
+                  type="text"
+                  size="small"
+                  aria-label={t('ui.common.remove')}
+                  onClick={() => void action.run(async () => { await del(`/tickets/${data.id}/watchers/${w.id}`); await reload(); })}
+                >
+                  ✕
+                </Button>
+              )}
+            </Flex>
+          ))}
+          {canAssign && (
+            <Space.Compact style={{ width: '100%' }}>
+              <Choice
+                aria-label={t('ui.tickets.add_watcher')}
+                value={watcherId}
+                onChange={setWatcherId}
+                empty={t('ui.tickets.add_watcher')}
+                options={
+                  catalog.data?.users?.filter((u) => !data.watchers.some((w) => w.id === u.id)).map((u) => ({ value: u.id, label: u.displayName })) ?? []
+                }
+                style={{ flex: 1, minWidth: 0 }}
+              />
+              <Button
+                disabled={!watcherId}
+                onClick={() =>
+                  void action.run(async () => {
+                    await post(`/tickets/${data.id}/watchers`, { userId: Number(watcherId) });
+                    setWatcherId('');
+                    await reload();
+                  })
+                }
+              >
+                +
+              </Button>
+            </Space.Compact>
+          )}
+        </Flex>
+      ),
+    },
+  ];
+
   return (
     <>
-      <div className="topline">
-        <div>
-          <div className="mono muted">
-            <Link to="/tickets">{t('ui.nav.tickets')}</Link> / {data.number}
-          </div>
-          <h1>{data.subject}</h1>
-          <div className="actions">
-            <StatusBadge status={data.status} />
-            <PriorityBadge priority={data.priority} />
-            <SlaBadge status={data.sla.status} paused={data.sla.paused} />
-            <Tags tags={data.tags} />
-          </div>
+      <PageHeader title={data.subject}>
+        <div className="mono muted">
+          <Link to="/tickets">{t('ui.nav.tickets')}</Link> / {data.number}
         </div>
-      </div>
+      </PageHeader>
+      <Flex wrap gap={6} style={{ marginTop: -8, marginBottom: 16 }}>
+        <StatusBadge status={data.status} />
+        <PriorityBadge priority={data.priority} />
+        <SlaBadge status={data.sla.status} paused={data.sla.paused} />
+        <Tags tags={data.tags} />
+      </Flex>
       <ErrorBanner error={action.error} />
 
-      <div className="detail">
-        <div>
-          <div className="card">
-            <div className="msg-head">
-              <span>
-                {data.requester?.displayName ?? '—'} · {t(`ui.source.${data.source}`)}
-              </span>
-              <DateTime value={data.createdAt} />
-            </div>
-            <div className="msg-body">{data.description || <span className="muted">{t('ui.tickets.no_description')}</span>}</div>
-          </div>
-
-          {data.customFields.length > 0 && (
-            <div className="card">
-              <div className="topline">
-                <h2>{t('ui.tickets.custom_fields')}</h2>
-                {canTriage && fieldDraft === null && (
-                  <button onClick={() => setFieldDraft(Object.fromEntries(data.customFields.map((f) => [f.key, f.value])))}>{t('ui.common.edit')}</button>
-                )}
+      <Row gutter={[16, 16]} align="top">
+        <Col xs={24} lg={16}>
+          <Flex vertical gap={16}>
+            <Card>
+              <div className="msg-head">
+                <span>
+                  {data.requester?.displayName ?? '—'} · {t(`ui.source.${data.source}`)}
+                </span>
+                <DateTime value={data.createdAt} />
               </div>
-              {fieldDraft === null ? (
-                <dl className="props">
-                  {data.customFields.map((f) => (
-                    <div key={f.key} style={{ display: 'contents' }}>
-                      <dt>
-                        {f.label}
-                        {f.visibility === 'internal' && <span className="small"> 🔒</span>}
-                      </dt>
-                      <dd>{formatFieldValue(f.value)}</dd>
-                    </div>
-                  ))}
-                </dl>
-              ) : (
-                <form
-                  className="form"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    void update({ customFields: fieldDraft }).then(() => setFieldDraft(null));
-                  }}
-                >
-                  <div className="form-row">
-                    {data.customFields.map((f) => (
-                      <label key={f.key}>
-                        {f.label}
-                        <CustomFieldInput field={f} value={fieldDraft[f.key]} onChange={(v) => setFieldDraft((s) => ({ ...s!, [f.key]: v }))} />
-                      </label>
-                    ))}
-                  </div>
-                  <div className="actions">
-                    <button className="primary" disabled={action.busy}>
-                      {t('ui.common.save')}
-                    </button>
-                    <button type="button" onClick={() => setFieldDraft(null)}>
-                      {t('ui.common.cancel')}
-                    </button>
-                  </div>
-                </form>
-              )}
-            </div>
-          )}
+              <div className="msg-body">{data.description || <span className="muted">{t('ui.tickets.no_description')}</span>}</div>
+            </Card>
 
-          <div className="card">
-            <h2>{t('ui.tickets.conversation')}</h2>
-            <div className="thread">
-              {data.threads.map((th) =>
-                th.type === 'system_event' ? (
-                  <div key={th.id} className="msg system_event">
-                    <DateTime value={th.createdAt} /> · {th.author?.displayName ?? t('ui.common.system')} · <SystemEvent body={th.body} />
-                  </div>
+            {data.customFields.length > 0 && (
+              <Card
+                title={<h2 style={{ fontSize: 16, margin: 0 }}>{t('ui.tickets.custom_fields')}</h2>}
+                extra={
+                  canTriage &&
+                  fieldDraft === null && (
+                    <Button onClick={() => setFieldDraft(Object.fromEntries(data.customFields.map((f) => [f.key, f.value])))}>{t('ui.common.edit')}</Button>
+                  )
+                }
+              >
+                {fieldDraft === null ? (
+                  <Descriptions
+                    column={1}
+                    size="small"
+                    colon={false}
+                    items={data.customFields.map((f) => ({
+                      key: f.key,
+                      label: (
+                        <>
+                          {f.label}
+                          {f.visibility === 'internal' && <span className="small"> 🔒</span>}
+                        </>
+                      ),
+                      children: formatFieldValue(f.value),
+                    }))}
+                  />
                 ) : (
-                  <div key={th.id} className={`msg ${th.type}`}>
-                    <div className="msg-head">
-                      <span>
-                        <strong>{th.author?.displayName ?? '—'}</strong> · {t(`ui.thread.${th.type}`)}
-                      </span>
-                      <DateTime value={th.createdAt} />
-                    </div>
-                    <div className="msg-body">{th.body}</div>
-                  </div>
-                ),
-              )}
-            </div>
-          </div>
-
-          {data.status !== 'closed' && can('ticket:reply') && (
-            <form className="card form" onSubmit={sendReply}>
-              {staff && (
-                <div className="actions">
-                  <label className="inline">
-                    <input type="radio" name="replyType" checked={replyType === 'reply'} onChange={() => setReplyType('reply')} />
-                    {t('ui.thread.reply_public')}
-                  </label>
-                  <label className="inline">
-                    <input type="radio" name="replyType" checked={replyType === 'internal_note'} onChange={() => setReplyType('internal_note')} />
-                    {t('ui.thread.internal_note')}
-                  </label>
-                  {catalog.data?.cannedResponses && catalog.data.cannedResponses.length > 0 && (
-                    <select
-                      aria-label={t('ui.thread.canned')}
-                      value=""
-                      onChange={(e) => {
-                        const c = catalog.data?.cannedResponses?.find((x) => x.id === Number(e.target.value));
-                        if (c) {
-                          const body = c.body
-                            .replaceAll('%{ticket.number}', data.number)
-                            .replaceAll('%{ticket.subject}', data.subject)
-                            .replaceAll('%{requester.name}', data.requester?.displayName ?? '');
-                          setReply((r) => (r ? `${r}\n${body}` : body));
-                        }
-                      }}
-                    >
-                      <option value="">{t('ui.thread.canned')}</option>
-                      {catalog.data.cannedResponses.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name}
-                        </option>
+                  <Form layout="vertical" onFinish={() => void update({ customFields: fieldDraft }).then(() => setFieldDraft(null))}>
+                    <Row gutter={12}>
+                      {data.customFields.map((f) => (
+                        <Col key={f.key} xs={24} sm={12}>
+                          <Field label={f.label}>
+                            <CustomFieldInput field={f} value={fieldDraft[f.key]} onChange={(v) => setFieldDraft((st) => ({ ...st!, [f.key]: v }))} />
+                          </Field>
+                        </Col>
                       ))}
-                    </select>
-                  )}
-                </div>
-              )}
-              <textarea
-                required
-                value={reply}
-                onChange={(e) => setReply(e.target.value)}
-                placeholder={replyType === 'internal_note' ? t('ui.thread.internal_placeholder') : t('ui.thread.reply_placeholder')}
-              />
-              <div className="actions">
-                <button className="primary" disabled={action.busy}>
-                  {replyType === 'internal_note' ? t('ui.thread.add_note') : t('ui.thread.send')}
-                </button>
-              </div>
-            </form>
-          )}
-        </div>
-
-        <aside className="card">
-          <dl className="props">
-            <dt>{t('ui.tickets.status')}</dt>
-            <dd>
-              {canUpdate && data.allowedTransitions.length ? (
-                <select value={data.status} onChange={(e) => void update({ status: e.target.value })} aria-label={t('ui.tickets.status')}>
-                  <option value={data.status}>{t(`ticket.status.${data.status}`)}</option>
-                  {data.allowedTransitions.map((s) => (
-                    <option key={s} value={s}>
-                      → {t(`ticket.status.${s}`)}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <StatusBadge status={data.status} />
-              )}
-            </dd>
-            <dt>{t('ui.tickets.priority')}</dt>
-            <dd>
-              {canTriage ? (
-                <select value={data.priority} onChange={(e) => void update({ priority: Number(e.target.value) })} aria-label={t('ui.tickets.priority')}>
-                  {[1, 2, 3, 4, 5].map((p) => (
-                    <option key={p} value={p}>
-                      {t(`ticket.priority.${p}`)}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <PriorityBadge priority={data.priority} />
-              )}
-            </dd>
-            <dt>{t('ui.tickets.assignee')}</dt>
-            <dd>
-              {canAssign ? (
-                <select
-                  value={data.assignee?.id ?? ''}
-                  onChange={(e) => void update({ assigneeId: e.target.value ? Number(e.target.value) : null })}
-                  aria-label={t('ui.tickets.assignee')}
-                >
-                  <option value="">{t('ui.tickets.unassigned')}</option>
-                  {assignable.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.displayName} ({t(`ui.role.${u.role}`)})
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                (data.assignee?.displayName ?? t('ui.tickets.unassigned'))
-              )}
-            </dd>
-            <dt>{t('ui.tickets.team')}</dt>
-            <dd>
-              {canAssign ? (
-                <select value={data.team?.id ?? ''} onChange={(e) => void update({ teamId: e.target.value ? Number(e.target.value) : null })} aria-label={t('ui.tickets.team')}>
-                  <option value="">—</option>
-                  {catalog.data?.teams?.map((tm) => (
-                    <option key={tm.id} value={tm.id}>
-                      {tm.name}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                (data.team?.name ?? '—')
-              )}
-            </dd>
-            <dt>{t('ui.tickets.help_topic')}</dt>
-            <dd>{data.helpTopic?.name ?? '—'}</dd>
-            <dt>{t('ui.tickets.requester')}</dt>
-            <dd>
-              {data.requester?.displayName ?? '—'}
-              {data.requester?.email && <div className="small muted">{data.requester.email}</div>}
-            </dd>
-            <dt>{t('ui.tickets.tags')}</dt>
-            <dd>
-              {canTriage && tagDraft !== null ? (
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    void update({ tags: tagDraft.split(',').map((s) => s.trim()).filter(Boolean) }).then(() => setTagDraft(null));
-                  }}
-                >
-                  <input value={tagDraft} onChange={(e) => setTagDraft(e.target.value)} autoFocus aria-label={t('ui.tickets.tags')} />
-                </form>
-              ) : (
-                <>
-                  <Tags tags={data.tags} />
-                  {canTriage && (
-                    <button className="link small" onClick={() => setTagDraft(data.tags.join(', '))}>
-                      {t('ui.common.edit')}
-                    </button>
-                  )}
-                </>
-              )}
-            </dd>
-            <dt>{t('ui.tickets.sla_plan')}</dt>
-            <dd>{data.slaPlan?.name ?? '—'}</dd>
-            <dt>{t('ui.tickets.first_response_due')}</dt>
-            <dd>
-              <DateTime value={data.sla.firstResponseDueAt} />
-              {data.sla.firstRespondedAt && <div className="small muted">✓ <DateTime value={data.sla.firstRespondedAt} /></div>}
-            </dd>
-            <dt>{t('ui.tickets.resolution_due')}</dt>
-            <dd>
-              <DateTime value={data.sla.resolutionDueAt} />
-            </dd>
-            {data.reopenCount > 0 && (
-              <>
-                <dt>{t('ui.tickets.reopened')}</dt>
-                <dd>{data.reopenCount}</dd>
-              </>
+                    </Row>
+                    <Flex gap={8}>
+                      <Button type="primary" htmlType="submit" loading={action.busy} disabled={action.busy}>
+                        {t('ui.common.save')}
+                      </Button>
+                      <Button onClick={() => setFieldDraft(null)}>{t('ui.common.cancel')}</Button>
+                    </Flex>
+                  </Form>
+                )}
+              </Card>
             )}
-            <dt>{t('ui.tickets.watchers')}</dt>
-            <dd>
-              {data.watchers.length === 0 && <span className="muted">—</span>}
-              {data.watchers.map((w) => (
-                <div key={w.id} className="actions">
-                  {w.displayName}
-                  {canAssign && (
-                    <button
-                      className="link small"
-                      aria-label={t('ui.common.remove')}
-                      onClick={() => void action.run(async () => { await del(`/tickets/${data.id}/watchers/${w.id}`); await reload(); })}
-                    >
-                      ✕
-                    </button>
+
+            <Card title={<h2 style={{ fontSize: 16, margin: 0 }}>{t('ui.tickets.conversation')}</h2>}>
+              <Flex vertical gap={12}>
+                {data.threads.map((th) =>
+                  th.type === 'system_event' ? (
+                    <div key={th.id} className="msg system_event" style={{ border: `1px dashed ${p.hairline}`, color: p.ink3 }}>
+                      <DateTime value={th.createdAt} /> · {th.author?.displayName ?? t('ui.common.system')} · <SystemEvent body={th.body} />
+                    </div>
+                  ) : (
+                    <div key={th.id} className={`msg ${th.type}`} style={msgStyle(th.type)}>
+                      <div className="msg-head">
+                        <span>
+                          <strong>{th.author?.displayName ?? '—'}</strong> · {t(`ui.thread.${th.type}`)}
+                        </span>
+                        <DateTime value={th.createdAt} />
+                      </div>
+                      <div className="msg-body">{th.body}</div>
+                    </div>
+                  ),
+                )}
+              </Flex>
+            </Card>
+
+            {data.status !== 'closed' && can('ticket:reply') && (
+              <Card>
+                <Form onFinish={sendReply}>
+                  {staff && (
+                    <Flex wrap gap={12} align="center" style={{ marginBottom: 12 }}>
+                      <Radio.Group value={replyType} onChange={(e) => setReplyType(e.target.value)}>
+                        <Radio value="reply">{t('ui.thread.reply_public')}</Radio>
+                        <Radio value="internal_note">{t('ui.thread.internal_note')}</Radio>
+                      </Radio.Group>
+                      {catalog.data?.cannedResponses && catalog.data.cannedResponses.length > 0 && (
+                        <Choice
+                          aria-label={t('ui.thread.canned')}
+                          value=""
+                          onChange={applyCanned}
+                          empty={t('ui.thread.canned')}
+                          options={catalog.data.cannedResponses.map((c) => ({ value: c.id, label: c.name }))}
+                        />
+                      )}
+                    </Flex>
                   )}
-                </div>
-              ))}
-              {canAssign && (
-                <form
-                  className="actions"
-                  style={{ marginTop: 6 }}
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    if (!watcherId) return;
-                    void action.run(async () => {
-                      await post(`/tickets/${data.id}/watchers`, { userId: Number(watcherId) });
-                      setWatcherId('');
-                      await reload();
-                    });
-                  }}
-                >
-                  <select value={watcherId} onChange={(e) => setWatcherId(e.target.value)} aria-label={t('ui.tickets.add_watcher')}>
-                    <option value="">{t('ui.tickets.add_watcher')}</option>
-                    {catalog.data?.users
-                      ?.filter((u) => !data.watchers.some((w) => w.id === u.id))
-                      .map((u) => (
-                        <option key={u.id} value={u.id}>
-                          {u.displayName}
-                        </option>
-                      ))}
-                  </select>
-                  <button disabled={!watcherId}>+</button>
-                </form>
-              )}
-            </dd>
-          </dl>
-        </aside>
-      </div>
+                  <Input.TextArea
+                    required
+                    autoSize={{ minRows: 4 }}
+                    value={reply}
+                    onChange={(e) => setReply(e.target.value)}
+                    placeholder={replyType === 'internal_note' ? t('ui.thread.internal_placeholder') : t('ui.thread.reply_placeholder')}
+                    style={replyType === 'internal_note' ? { background: p.internal, borderColor: p.internalBorder } : undefined}
+                  />
+                  <Button type="primary" htmlType="submit" loading={action.busy} disabled={action.busy} style={{ marginTop: 12 }}>
+                    {replyType === 'internal_note' ? t('ui.thread.add_note') : t('ui.thread.send')}
+                  </Button>
+                </Form>
+              </Card>
+            )}
+          </Flex>
+        </Col>
+
+        <Col xs={24} lg={8}>
+          <Card>
+            <Descriptions column={1} size="small" colon={false} items={props} styles={{ label: { width: 104 } }} />
+          </Card>
+        </Col>
+      </Row>
     </>
   );
 }

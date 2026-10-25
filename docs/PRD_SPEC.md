@@ -424,7 +424,7 @@ ORDER BY t.created_at ASC;
 
 #### FR-5.3 優先度標籤色彩區分（P2，v0.2.0 之後）
 - L3（中）的優先度 badge 使用 accent 系列 CSS 變數（`--accent-soft` 背景、`--accent` 文字），與 L1／L2 的中性灰區分；L4 警告色、L5 危險色不變。
-- 只使用 CSS 變數、不寫死色碼；淺色與深色主題的文字／背景對比皆 ≥ 4.5:1（WCAG 2.1 AA）。
+- 顏色只取自色票（Ant Design 改版後為 `src/web/palette.ts`），不寫死色碼；淺色與深色主題的文字／背景對比皆 ≥ 4.5:1（WCAG 2.1 AA）。
 
 #### FR-5.4 UI 重新設計（P1；第 1 批 v0.3.0，第 2 批在 `[Unreleased]`）
 依根目錄 `DESIGN.md` 把視覺規範套用到 `src/web/styles.css`，分兩批進行；第 1 批只做設計 token、共用元件、登入頁與 sidebar，第 2 批再處理各頁面版面細節。
@@ -432,7 +432,8 @@ ORDER BY t.created_at ASC;
 - **深色主題**：由淺色值推導（`DESIGN.md` 只定義淺色），文字與背景對比 ≥ 4.5:1。
 - **語意色**：danger / warning / success、SLA、優先度 badge 維持獨立的 CSS 變數，兩種主題對比皆達 AA。
 - **共用元件**：按鈕（主要、次要、危險）、輸入框與下拉選單、卡片、表格、badge、modal、toast、空狀態、錯誤訊息，圓角／間距／陰影使用 `DESIGN.md` 的尺度；登入、改密、2FA 頁面用 `ex-auth-form-card` 風格；左側 sidebar 保留，改用新色彩與間距。
-- **限制**：既有 CSS 變數名稱保留（可新增，不可改名或刪除，`tests/styles.test.ts` 依賴 `--accent`、`--accent-soft`、`--surface-2` 等）；不改元件行為、API 呼叫、路由或文字，不新增字典 key；不引入外部資源（CSP 只允許同源）；不出現原品牌名稱；sidebar 不改成頂部導覽列；字型維持 Noto。
+- **限制**：既有 CSS 變數名稱保留（第 1、2 批適用；Ant Design 改版後色票移到 `palette.ts`，見 DECISIONS D10）；不改元件行為、API 呼叫、路由或文字，不新增字典 key；不引入外部資源（CSP 只允許同源）；不出現原品牌名稱；sidebar 不改成頂部導覽列；字型維持 Noto。
+- **UI 元件庫**：介面一律使用 Ant Design；顏色集中在 `src/web/palette.ts`，以 theme token 傳給 antd（DECISIONS D10）。
 - **第 2 批：色彩與版面**：sticker 色盤用於資料色（狀態 badge、儀表板色帶與長條圖、選單群組色塊），側邊欄改為深靛藍（DECISIONS D9）；狀態 badge 彼此可分辨，也不與優先度 badge 同色；工單清單短欄位不折行；表格框線對齊、內容垂直置中。
 
 ---
@@ -653,7 +654,7 @@ curl -X POST https://ticket.example.com/api/v1/tickets \
 | AC-I18N-01 | Glossary | 切換 `zh-TW`/`en-US` 全站生效；缺字回退 `en-US` 且不顯示原始 key |
 | AC-I18N-02 | 擴充語系 | 新增 `ja-JP` 僅需匯入字典檔，無需重新編譯 |
 | AC-THEME-01 | Light/Dark | 切換即時生效、無 FOUC、偏好持久化；對比度符合 WCAG AA |
-| AC-THEME-02 | 優先度 badge 色彩 | L3 與 L1／L2 可分辨；所有 badge 在兩種主題下對比 ≥ 4.5:1；只使用 CSS 變數 |
+| AC-THEME-02 | 優先度 badge 色彩 | L3 與 L1／L2 可分辨；所有 badge 在兩種主題下對比 ≥ 4.5:1；顏色只取自色票 |
 | AC-THEME-03 | 設計 token 與共用元件（FR-5.4） | 淺色變數符合 `DESIGN.md`（暖白 canvas-soft、白卡片、hairline、ink 層級、單一 primary）；深色由淺色推導且文字／背景 ≥ 4.5:1；語意色與 badge 兩種主題皆 ≥ 4.5:1；既有變數名稱全數保留（只增不改不刪）；登入／改密／2FA 使用 `ex-auth-form-card` 風格、sidebar 保留左側 |
 | AC-THEME-05 | 資料色與側邊欄（FR-5.4 第 2 批） | 未結案的各狀態 badge 背景互不相同，也不同於 L3～L5；sticker 實色對卡片 ≥ 3:1、文字 ≥ 4.5:1；側邊欄文字 ≥ 4.5:1、色塊與焦點框 ≥ 3:1 |
 | AC-THEME-04 | 版面與範圍控制（FR-5.4） | 淺色與深色主題主要畫面可讀；375px 寬度無水平捲軸；無新增字典 key、無外部資源、無原品牌名稱；元件行為、API 呼叫、路由與文字不變；`npm run validate` 通過 |
