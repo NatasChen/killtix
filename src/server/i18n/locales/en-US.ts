@@ -23,7 +23,7 @@ const enUS: Record<string, string> = {
   'error.invalid_logo': 'The logo must be a PNG file of 512 KB or less',
   'error.last_super_admin': 'At least one active super admin is required',
   'error.cannot_modify_self': 'You cannot deactivate yourself or change your own role',
-  'error.mail_test_failed': 'Test e-mail failed',
+  'error.mail_not_configured': 'E-mail is not configured, or the password / API key must be entered again',
   'error.internal_error': 'Internal error',
 
   // ticket vocabulary
@@ -43,6 +43,8 @@ const enUS: Record<string, string> = {
   'ticket.sla.met': 'Met',
 
   // notifications
+  'notify.mail_test.subject': 'TicketDesk test e-mail',
+  'notify.mail_test.body': 'This is a test e-mail from TicketDesk. If you received it, the mail settings work.',
   'notify.created.subject': '[#{number}] New ticket: {subject}',
   'notify.created.teams': 'Priority: {priority}\n{link}',
   'notify.assigned.subject': '[#{number}] Assigned to you: {subject}',
@@ -164,6 +166,7 @@ const enUS: Record<string, string> = {
   'ui.settings.mail.host': 'SMTP host',
   'ui.settings.mail.port': 'Port',
   'ui.settings.mail.secure': 'Use TLS',
+  'ui.settings.mail.secure_on': 'TLS from the start (usually port 465)',
   'ui.settings.mail.user': 'Username',
   'ui.settings.mail.password': 'Password',
   'ui.settings.mail.password_set': 'Set (leave blank to keep unchanged)',
@@ -171,6 +174,8 @@ const enUS: Record<string, string> = {
   'ui.settings.mail.api_key': 'Resend API key',
   'ui.settings.mail.api_key_set': 'Set (leave blank to keep unchanged)',
   'ui.settings.mail.effective': 'Currently effective source',
+  'ui.settings.mail.secret_invalid': 'The saved password / API key can no longer be decrypted (APP_SECRET may have changed). Enter it again and save.',
+  'ui.settings.mail.effective_none': 'Not configured (e-mail notifications are not sent)',
   'ui.settings.mail.test_title': 'Send a test e-mail',
   'ui.settings.mail.test_to': 'Recipient',
   'ui.settings.mail.test_send': 'Send test e-mail',

@@ -27,7 +27,7 @@ import { SUPPORTED_LOCALES } from '../i18n/index.js';
 import { audit } from '../services/audit.js';
 import { deleteLogo, LOGO_MAX_BYTES, logoUrls, setLogo } from '../services/branding.js';
 import { sendTestEmail } from '../services/notify.js';
-import { getMailSettings, getSetting, saveMailSettings, setSetting } from '../services/settings.js';
+import { getMailSettings, getSetting, hasResendKey, MAIL_PROVIDERS, saveMailSettings, setSetting } from '../services/settings.js';
 import { idParam, parseJson, parseWith, publicUser, rateLimit } from './util.js';
 
 const ROLE_KEYS = ['super_admin', 'it_manager', 'agent', 'vendor', 'end_user'] as const;
@@ -37,12 +37,35 @@ const id = z.number().int().positive();
 const name = z.string().trim().min(1).max(128);
 const slug = z.string().trim().regex(/^[a-z0-9][a-z0-9-]{0,63}$/);
 const tagList = z.array(z.string().trim().min(1).max(64)).max(20);
+/** Sender address: `a@b.co` or `Name <a@b.co>`. */
 const emailFrom = z
   .string()
   .trim()
-  .min(1)
   .max(255)
-  .refine((v) => /^[^<>@\s]+@[^<>\s@]+$/.test(v) || /^[^<>@\s]+ <[^<>@\s]+@[^<>\s@]+>$/.test(v), { message: 'must be an e-mail or "Name <email>"' });
+  .regex(/^(?:[^<>@\s]+@[^<>@\s]+|[^<>]+ <[^<>@\s]+@[^<>@\s]+>)$/, 'must be an e-mail or "Name <email>"');
+const mailSettingsSchema = z
+  .object({
+    provider: z.enum(MAIL_PROVIDERS),
+    smtp: z
+      .object({
+        host: z.string().trim().max(255).optional(),
+        port: z.number().int().min(1).max(65535).optional(),
+        secure: z.boolean().optional(),
+        user: z.string().trim().max(255).optional(),
+        password: z.string().max(512).optional(),
+        from: emailFrom.optional(),
+      })
+      .strict()
+      .optional(),
+    resend: z.object({ apiKey: z.string().trim().max(512).optional(), from: emailFrom.optional() }).strict().optional(),
+  })
+  .strict()
+  .superRefine((v, ctx) => {
+    const required = (path: string[]) => ctx.addIssue({ code: 'custom', path, message: 'required' });
+    if (v.provider === 'smtp' && !v.smtp?.host) required(['smtp', 'host']);
+    if (v.provider === 'smtp' && !v.smtp?.from) required(['smtp', 'from']);
+    if (v.provider === 'resend' && !v.resend?.from) required(['resend', 'from']);
+  });
 
 /** Postgres unique violations become 409 instead of 500. */
 async function unique<T>(work: () => Promise<T>): Promise<T> {
@@ -472,7 +495,8 @@ export const adminRoutes = new Hono<AppEnv>()
     return c.json(body);
   })
 
-  // ------------------------------------------------------------------ mail settings
+  // ------------------------------------------------------------------ mail settings (DECISIONS D13)
+  // Secrets are write-only: responses and audit entries only say whether one is set.
   .get('/settings/email', manageSystem, async (c) => {
     const { db, secretBox, config } = c.var.deps;
     return c.json(await getMailSettings(db, secretBox, config));
@@ -480,60 +504,22 @@ export const adminRoutes = new Hono<AppEnv>()
   .put('/settings/email', manageSystem, async (c) => {
     const { db, secretBox, config } = c.var.deps;
     const auth = authOf(c);
-    const current = await getMailSettings(db, secretBox, config);
-    const body = await parseJson(
-      c,
-      z
-        .object({
-          provider: z.enum(['env', 'smtp', 'resend']),
-          smtp: z
-            .object({
-              host: z.string().trim().min(1).max(255).optional(),
-              port: z.number().int().min(1).max(65535).optional(),
-              secure: z.boolean().optional(),
-              user: z.string().trim().max(255).optional(),
-              password: z.string().max(512).optional(),
-              from: emailFrom.optional(),
-            })
-            .optional(),
-          resend: z
-            .object({
-              apiKey: z.string().max(512).optional(),
-              from: emailFrom.optional(),
-            })
-            .optional(),
-        })
-        .strict()
-        .superRefine((v, ctx) => {
-          if (v.provider === 'smtp' && !v.smtp?.host) {
-            ctx.addIssue({ code: 'custom', path: ['smtp', 'host'], message: 'required for smtp' });
-          }
-          if (v.provider === 'resend' && !v.resend?.from) {
-            ctx.addIssue({ code: 'custom', path: ['resend', 'from'], message: 'required for resend' });
-          }
-          if (v.provider === 'resend' && !v.resend?.apiKey && !current.resend.hasApiKey) {
-            ctx.addIssue({ code: 'custom', path: ['resend', 'apiKey'], message: 'required for resend' });
-          }
-        }),
-    );
+    const body = await parseJson(c, mailSettingsSchema);
+    if (body.provider === 'resend' && !body.resend?.apiKey && !(await hasResendKey(db, secretBox))) {
+      throw badRequest('resend.apiKey: required');
+    }
     const view = await saveMailSettings(db, secretBox, config, body, auth.user.id);
     await audit(c, 'admin.mail_settings_updated', undefined, { provider: body.provider });
     return c.json(view);
   })
   .post('/settings/email/test', manageSystem, async (c) => {
-    const { db, secretBox, config } = c.var.deps;
     const auth = authOf(c);
     await rateLimit(c, `mail-test:${auth.user.id}`, 5);
     const { to } = await parseJson(c, z.object({ to: z.email().max(255) }));
-    try {
-      await sendTestEmail(c.var.deps, to);
-    } catch (err) {
-      const message = String((err as Error).message ?? err).slice(0, 300);
-      await audit(c, 'admin.mail_test_failed', undefined, { to });
-      throw new ApiError(502, 'mail_test_failed', message);
-    }
-    await audit(c, 'admin.mail_test_sent', undefined, { to });
-    return c.json({ ok: true, to });
+    const error = await sendTestEmail(c.var.deps, to, c.var.locale);
+    await audit(c, error ? 'admin.mail_test_failed' : 'admin.mail_test_sent', undefined, { to });
+    // A delivery failure is a result to show on the page, not a server error.
+    return c.json(error ? { ok: false, error } : { ok: true });
   })
 
   // Logo upload as base64 JSON (see services/branding.ts for the PNG checks); the read side is routes/branding.ts.

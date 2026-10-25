@@ -2,7 +2,7 @@ import { and, asc, eq, inArray, lte } from 'drizzle-orm';
 import nodemailer from 'nodemailer';
 import type { Deps } from '../context.js';
 import { notificationLogs, users, type Ticket } from '../db/schema.js';
-import { getMailSettings, resolveMailSecrets } from './settings.js';
+import { mailTransport, type MailTransport } from './settings.js';
 
 export type Channel = 'email' | 'telegram' | 'teams';
 
@@ -29,14 +29,9 @@ interface Message {
 
 const PRIORITY_KEYS = ['', 'ticket.priority.1', 'ticket.priority.2', 'ticket.priority.3', 'ticket.priority.4', 'ticket.priority.5'];
 
-async function channelConfigured(deps: Deps, channel: Channel) {
+function channelConfigured(deps: Deps, channel: Channel, email: MailTransport | null) {
   const { config } = deps;
-  if (channel === 'email') {
-    const mail = await getMailSettings(deps.db, deps.secretBox, config);
-    if (mail.provider === 'env') return Boolean(config.smtp.host);
-    if (mail.provider === 'smtp') return Boolean(mail.smtp.host && mail.smtp.from && !mail.smtp.passwordInvalid);
-    return Boolean(mail.resend.hasApiKey && mail.resend.from && !mail.resend.apiKeyInvalid);
-  }
+  if (channel === 'email') return Boolean(email);
   if (channel === 'telegram') return Boolean(config.telegramBotToken);
   return Boolean(config.teamsWebhookUrl);
 }
@@ -44,13 +39,14 @@ async function channelConfigured(deps: Deps, channel: Channel) {
 /** Inserts messages into the outbox. Duplicate (event, channel, recipient) rows are ignored. */
 export async function enqueue(deps: Deps, messages: Message[]) {
   if (!messages.length) return;
-  const statuses = await Promise.all(messages.map(async (m) => ({ ...m, status: (await channelConfigured(deps, m.channel)) ? 'pending' : 'skipped' })));
+  const email = await mailTransport(deps.db, deps.secretBox, deps.config);
   await deps.db
     .insert(notificationLogs)
     .values(
-      statuses.map((m) => ({
+      messages.map((m) => ({
         ...m,
         // Unconfigured channels are logged as skipped so the outbox shows what would have been sent.
+        status: channelConfigured(deps, m.channel, email) ? 'pending' : 'skipped',
         nextAttemptAt: deps.clock(),
       })),
     )
@@ -124,49 +120,36 @@ export async function notifyTicketEvent(deps: Deps, event: TicketEvent) {
   await enqueue(deps, messages);
 }
 
+/** E-mail over SMTP (environment variables or the settings page) or the Resend HTTP API. */
+function emailSender(mail: MailTransport): NonNullable<Senders['email']> {
+  if (mail.kind === 'smtp') {
+    const transport = nodemailer.createTransport({
+      host: mail.host,
+      port: mail.port,
+      secure: mail.secure,
+      auth: mail.user ? { user: mail.user, pass: mail.password } : undefined,
+    });
+    return async (to, subject, body) => {
+      await transport.sendMail({ from: mail.from, to, subject, text: body });
+    };
+  }
+  return async (to, subject, body) => {
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${mail.apiKey}` },
+      body: JSON.stringify({ from: mail.from, to, subject, text: body }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!res.ok) throw new Error(`Resend HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  };
+}
+
+/** Built on every dispatch run: e-mail follows the current mail settings (DECISIONS D13). */
 export async function defaultSenders(deps: Deps): Promise<Senders> {
   const { config } = deps;
   const senders: Senders = {};
-  const mail = await resolveMailSecrets(deps.db, deps.secretBox);
-  if (mail.provider === 'env') {
-    if (config.smtp.host) {
-      const transport = nodemailer.createTransport({
-        host: config.smtp.host,
-        port: config.smtp.port,
-        secure: config.smtp.secure,
-        auth: config.smtp.user ? { user: config.smtp.user, pass: config.smtp.password } : undefined,
-      });
-      senders.email = async (to, subject, body) => {
-        await transport.sendMail({ from: config.smtp.from, to, subject, text: body });
-      };
-    }
-  } else if (mail.provider === 'smtp') {
-    if (mail.smtp.host && mail.smtp.from && !mail.smtp.passwordInvalid) {
-      const transport = nodemailer.createTransport({
-        host: mail.smtp.host,
-        port: mail.smtp.port,
-        secure: mail.smtp.secure,
-        auth: mail.smtp.user ? { user: mail.smtp.user, pass: mail.smtp.password } : undefined,
-      });
-      senders.email = async (to, subject, body) => {
-        await transport.sendMail({ from: mail.smtp.from, to, subject, text: body });
-      };
-    }
-  } else if (mail.provider === 'resend') {
-    if (mail.resend.apiKey && mail.resend.from) {
-      const apiKey = mail.resend.apiKey;
-      const from = mail.resend.from;
-      senders.email = async (to, subject, body) => {
-        const res = await fetch('https://api.resend.com/emails', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
-          body: JSON.stringify({ from, to, subject, text: body }),
-          signal: AbortSignal.timeout(10_000),
-        });
-        if (!res.ok) throw new Error(`Resend HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
-      };
-    }
-  }
+  const mail = await mailTransport(deps.db, deps.secretBox, config);
+  if (mail) senders.email = emailSender(mail);
   if (config.telegramBotToken) {
     const token = config.telegramBotToken;
     senders.telegram = async (chatId, text) => {
@@ -210,42 +193,21 @@ export async function defaultSenders(deps: Deps): Promise<Senders> {
   return senders;
 }
 
-/** Sends a test e-mail synchronously with the currently stored settings (never via the outbox). */
-export async function sendTestEmail(deps: Deps, to: string): Promise<void> {
-  const { config } = deps;
-  const mail = await resolveMailSecrets(deps.db, deps.secretBox);
-  const subject = 'TicketDesk test e-mail';
-  const body = 'This is a test e-mail from TicketDesk.';
-  if (mail.provider === 'env') {
-    if (!config.smtp.host) throw new Error('email channel not configured');
-    const transport = nodemailer.createTransport({
-      host: config.smtp.host,
-      port: config.smtp.port,
-      secure: config.smtp.secure,
-      auth: config.smtp.user ? { user: config.smtp.user, pass: config.smtp.password } : undefined,
-    });
-    await transport.sendMail({ from: config.smtp.from, to, subject, text: body });
-    return;
+/**
+ * Sends a test e-mail right away with the saved settings (not through the outbox). Returns the error message
+ * on failure, with any secret masked in case a provider echoes it back.
+ */
+export async function sendTestEmail(deps: Deps, to: string, locale: string): Promise<string | null> {
+  const mail = await mailTransport(deps.db, deps.secretBox, deps.config);
+  if (!mail) return deps.glossary.t(locale, 'error.mail_not_configured');
+  try {
+    await emailSender(mail)(to, deps.glossary.t(locale, 'notify.mail_test.subject'), deps.glossary.t(locale, 'notify.mail_test.body'));
+    return null;
+  } catch (err) {
+    const secret = mail.kind === 'smtp' ? mail.password : mail.apiKey;
+    const message = String((err as Error).message ?? err).slice(0, 300);
+    return secret ? message.split(secret).join('***') : message;
   }
-  if (mail.provider === 'smtp') {
-    if (!mail.smtp.host || !mail.smtp.from || mail.smtp.passwordInvalid) throw new Error('email channel not configured');
-    const transport = nodemailer.createTransport({
-      host: mail.smtp.host,
-      port: mail.smtp.port,
-      secure: mail.smtp.secure,
-      auth: mail.smtp.user ? { user: mail.smtp.user, pass: mail.smtp.password } : undefined,
-    });
-    await transport.sendMail({ from: mail.smtp.from, to, subject, text: body });
-    return;
-  }
-  if (!mail.resend.apiKey || !mail.resend.from) throw new Error('email channel not configured');
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${mail.resend.apiKey}` },
-    body: JSON.stringify({ from: mail.resend.from, to, subject, text: body }),
-    signal: AbortSignal.timeout(10_000),
-  });
-  if (!res.ok) throw new Error(`Resend HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
 }
 
 /** Sends due outbox messages with exponential backoff; gives up after notifyMaxAttempts. */

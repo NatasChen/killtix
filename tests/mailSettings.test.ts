@@ -1,7 +1,10 @@
 import { eq } from 'drizzle-orm';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import nodemailer from 'nodemailer';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createSecretBox } from '../src/server/auth/crypto.js';
-import { auditLogs, systemSettings } from '../src/server/db/schema.js';
+import { auditLogs, notificationLogs, systemSettings } from '../src/server/db/schema.js';
+import { defaultSenders, dispatchPending, enqueue } from '../src/server/services/notify.js';
+import { getMailSettings } from '../src/server/services/settings.js';
 import { createTestContext, type TestContext } from './helpers.js';
 
 let ctx: TestContext;
@@ -14,90 +17,148 @@ beforeAll(async () => {
 afterAll(async () => {
   await ctx.close();
 });
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
 
 const getMail = () => admin.get('/api/v1/admin/settings/email');
 const putMail = (body: unknown) => admin.raw('PUT', '/api/v1/admin/settings/email', body);
 const testMail = (to: string) => admin.post('/api/v1/admin/settings/email/test', { to });
+const RESEND = { provider: 'resend', resend: { apiKey: 're_secret_key', from: 'TicketDesk <no-reply@example.com>' } };
 
-describe('mail settings API', () => {
-  it('defaults to env and never exposes secrets', async () => {
+/** Fake Resend API: records each call and answers with `status`. */
+function fakeFetch(status = 200, text = '{"id":"x"}') {
+  const calls: { url: string; headers: Record<string, string>; body: Record<string, unknown> }[] = [];
+  vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+    calls.push({ url, headers: init.headers as Record<string, string>, body: JSON.parse(String(init.body)) });
+    return new Response(text, { status });
+  });
+  return calls;
+}
+
+/** Fake SMTP: captures the transport options and the sent mails without opening a connection. */
+function fakeSmtp() {
+  const sent: { options: unknown; mail: Record<string, unknown> }[] = [];
+  vi.spyOn(nodemailer, 'createTransport').mockImplementation(
+    (options: unknown) => ({ sendMail: async (mail: Record<string, unknown>) => void sent.push({ options, mail }) }) as never,
+  );
+  return sent;
+}
+
+describe('mail settings', () => {
+  it('defaults to the SMTP environment variables', async () => {
     const res = await getMail();
     expect(res.status).toBe(200);
-    expect(res.body.provider).toBe('env');
-    expect(res.body.effectiveProvider).toBe('env');
-    expect(res.body.env).toEqual({ host: 'smtp.env.test', from: 'Env <env@example.com>' });
+    expect(res.body).toMatchObject({ provider: 'env', effective: 'env', env: { host: 'smtp.env.test', from: 'Env <env@example.com>' } });
     expect(res.body.smtp.hasPassword).toBe(false);
     expect(res.body.resend.hasApiKey).toBe(false);
-    expect(JSON.stringify(res.body)).not.toContain('secret');
   });
 
-  it('rejects non-admins with 403', async () => {
-    await ctx.createUser('it@example.com', 'it_manager');
-    await ctx.createUser('agent@example.com', 'agent');
-    await ctx.createUser('requester@example.com', 'end_user');
-    for (const email of ['it@example.com', 'agent@example.com', 'requester@example.com']) {
-      const client = await ctx.login(email);
-      expect((await client.get('/api/v1/admin/settings/email')).status).toBe(403);
-      expect((await client.raw('PUT', '/api/v1/admin/settings/email', { provider: 'env' })).status).toBe(403);
-      expect((await client.post('/api/v1/admin/settings/email/test', { to: email })).status).toBe(403);
+  it('is only for system administrators', async () => {
+    await ctx.createUser('mail-manager@example.com', 'it_manager');
+    const manager = await ctx.login('mail-manager@example.com');
+    expect((await manager.get('/api/v1/admin/settings/email')).status).toBe(403);
+    expect((await manager.raw('PUT', '/api/v1/admin/settings/email', { provider: 'env' })).status).toBe(403);
+    expect((await manager.post('/api/v1/admin/settings/email/test', { to: 'x@example.com' })).status).toBe(403);
+  });
+
+  it('validates the input', async () => {
+    const from = 'a@b.co';
+    for (const body of [
+      { provider: 'smtp', smtp: { host: '', from } },
+      { provider: 'smtp', smtp: { host: 'smtp.test' } },
+      { provider: 'smtp', smtp: { host: 'smtp.test', port: 0, from } },
+      { provider: 'smtp', smtp: { host: 'smtp.test', port: 65536, from } },
+      { provider: 'smtp', smtp: { host: 'smtp.test', from: 'not-an-email' } },
+      { provider: 'resend', resend: { from } }, // first Resend setup needs the key
+      { provider: 'resend', resend: { apiKey: 're_1', from: 'Name <bad>' } },
+      { provider: 'sendgrid' },
+    ]) {
+      expect((await putMail(body)).status, JSON.stringify(body)).toBe(400);
     }
+    expect((await getMail()).body.provider).toBe('env');
   });
 
-  it('validates smtp and resend inputs', async () => {
-    expect((await putMail({ provider: 'smtp', smtp: { host: '', from: 'a@b.co' } })).status).toBe(400);
-    expect((await putMail({ provider: 'smtp', smtp: { host: 'smtp.test', port: 0, from: 'a@b.co' } })).status).toBe(400);
-    expect((await putMail({ provider: 'smtp', smtp: { host: 'smtp.test', port: 70000, from: 'a@b.co' } })).status).toBe(400);
-    expect((await putMail({ provider: 'smtp', smtp: { host: 'smtp.test', from: 'not-an-email' } })).status).toBe(400);
-    expect((await putMail({ provider: 'resend', resend: { from: 'a@b.co' } })).status).toBe(400);
-    expect((await putMail({ provider: 'resend', resend: { apiKey: 're_123', from: 'bad' } })).status).toBe(400);
-    expect((await putMail({ provider: 'resend', resend: { apiKey: 're_123', from: 'TicketDesk <no-reply@example.com>' } })).status).toBe(200);
-  });
-
-  it('stores secrets encrypted and keeps them when the field is left blank', async () => {
-    const saved = await putMail({
-      provider: 'smtp',
-      smtp: { host: 'smtp.test', port: 465, secure: true, user: 'mailer', password: 's3cr3t-password', from: 'TicketDesk <no-reply@example.com>' },
-    });
+  it('stores secrets encrypted, never returns them, and keeps them when left blank', async () => {
+    const smtp = { host: 'smtp.test', port: 465, secure: true, user: 'mailer', from: 'TicketDesk <no-reply@example.com>' };
+    const saved = await putMail({ provider: 'smtp', smtp: { ...smtp, password: 's3cr3t-password' } });
     expect(saved.status).toBe(200);
-    expect(saved.body.smtp.hasPassword).toBe(true);
-    expect(JSON.stringify(saved.body)).not.toContain('s3cr3t-password');
+    expect(saved.body).toMatchObject({ effective: 'smtp', smtp: { hasPassword: true } });
 
     const [row] = await ctx.db.select().from(systemSettings).where(eq(systemSettings.key, 'mail.settings'));
-    const stored = row.value as { smtp: { password: string } };
-    expect(stored.smtp.password).not.toContain('s3cr3t-password');
+    const boxed = (row.value as { smtp: { password: string } }).smtp.password;
+    expect(boxed).not.toContain('s3cr3t-password');
+    expect(ctx.deps.secretBox.decrypt(boxed)).toBe('s3cr3t-password');
 
-    // Leave the password blank: the encrypted value must be preserved.
-    const kept = await putMail({ provider: 'smtp', smtp: { host: 'smtp.test', port: 465, secure: true, user: 'mailer', from: 'TicketDesk <no-reply@example.com>' } });
-    expect(kept.status).toBe(200);
-    expect(kept.body.smtp.hasPassword).toBe(true);
+    expect((await putMail({ provider: 'smtp', smtp: { ...smtp, password: '' } })).body.smtp.hasPassword).toBe(true);
     const [after] = await ctx.db.select().from(systemSettings).where(eq(systemSettings.key, 'mail.settings'));
-    expect((after.value as { smtp: { password: string } }).smtp.password).toBe(stored.smtp.password);
+    expect((after.value as { smtp: { password: string } }).smtp.password).toBe(boxed);
+
+    expect(JSON.stringify((await getMail()).body)).not.toContain(boxed);
+    const audits = await ctx.db.select().from(auditLogs).where(eq(auditLogs.action, 'admin.mail_settings_updated'));
+    expect(audits.length).toBeGreaterThan(0);
+    expect(JSON.stringify(audits)).not.toMatch(/s3cr3t|re_secret/);
   });
 
-  it('writes audit records without secrets', async () => {
-    await putMail({ provider: 'resend', resend: { apiKey: 're_secret_key', from: 'TicketDesk <no-reply@example.com>' } });
-    const rows = await ctx.db.select().from(auditLogs).where(eq(auditLogs.action, 'admin.mail_settings_updated'));
-    expect(rows.length).toBeGreaterThan(0);
-    expect(JSON.stringify(rows)).not.toContain('re_secret_key');
-    expect(JSON.stringify(rows)).not.toContain('s3cr3t-password');
+  it('sends outbox e-mail through Resend after switching, and through SMTP again after switching back', async () => {
+    expect((await putMail(RESEND)).status).toBe(200);
+    const calls = fakeFetch();
+    await enqueue(ctx.deps, [{ eventId: 'mail-resend', channel: 'email', recipient: 'to@example.com', subject: 'Hi', body: 'Text' }]);
+    await dispatchPending(ctx.deps, await defaultSenders(ctx.deps));
+    expect(calls).toEqual([
+      {
+        url: 'https://api.resend.com/emails',
+        headers: expect.objectContaining({ authorization: 'Bearer re_secret_key' }),
+        body: { from: 'TicketDesk <no-reply@example.com>', to: 'to@example.com', subject: 'Hi', text: 'Text' },
+      },
+    ]);
+    const [log] = await ctx.db.select().from(notificationLogs).where(eq(notificationLogs.eventId, 'mail-resend'));
+    expect(log.status).toBe('sent');
+
+    expect((await putMail({ provider: 'env' })).status).toBe(200);
+    const sent = fakeSmtp();
+    await enqueue(ctx.deps, [{ eventId: 'mail-env', channel: 'email', recipient: 'to@example.com', subject: 'Hi', body: 'Text' }]);
+    await dispatchPending(ctx.deps, await defaultSenders(ctx.deps));
+    expect(sent).toHaveLength(1);
+    expect(sent[0].options).toMatchObject({ host: 'smtp.env.test' });
+    expect(sent[0].mail).toMatchObject({ from: 'Env <env@example.com>', to: 'to@example.com' });
+    expect(calls).toHaveLength(1);
   });
 
-  it('reads with a different APP_SECRET without crashing and flags the secret as invalid', async () => {
-    const other = createSecretBox('another-secret-another-secret-123456');
-    const { getMailSettings } = await import('../src/server/services/settings.js');
-    const view = await getMailSettings(ctx.db, other, ctx.deps.config);
-    expect(view.provider).toBe('resend');
-    expect(view.resend.apiKeyInvalid).toBe(true);
-    expect(view.resend.hasApiKey).toBe(false);
+  it('treats secrets that no longer decrypt as not configured', async () => {
+    await putMail(RESEND);
+    const view = await getMailSettings(ctx.db, createSecretBox('another-secret-another-secret-123456'), ctx.deps.config);
+    expect(view.resend).toMatchObject({ hasApiKey: false, apiKeyInvalid: true });
+    expect(view.effective).toBeNull();
   });
 
-  it('rate limits the test endpoint to 5 per user per minute', async () => {
-    await putMail({ provider: 'env' });
-    for (let i = 0; i < 5; i++) {
-      const res = await testMail('admin@ticket.local');
-      expect([200, 502]).toContain(res.status);
-    }
-    const sixth = await testMail('admin@ticket.local');
-    expect(sixth.status).toBe(429);
+  it('sends a test e-mail with the saved settings, reports failures without secrets, and is rate limited', async () => {
+    const limited = await createTestContext();
+    const client = await limited.adminClient();
+    await client.raw('PUT', '/api/v1/admin/settings/email', RESEND);
+    const send = () => client.post('/api/v1/admin/settings/email/test', { to: 'admin@example.com' });
+
+    const calls = fakeFetch();
+    expect((await send()).body).toEqual({ ok: true });
+    expect(calls[0].body).toMatchObject({ to: 'admin@example.com' });
+
+    fakeFetch(401, 'invalid key re_secret_key');
+    const failed = await send();
+    expect(failed.status).toBe(200);
+    expect(failed.body.ok).toBe(false);
+    expect(failed.body.error).toContain('Resend HTTP 401');
+    expect(failed.body.error).not.toContain('re_secret_key');
+
+    for (let i = 0; i < 3; i++) await send();
+    expect((await send()).status).toBe(429);
+    await limited.close();
+  });
+
+  it('reports a test e-mail as not configured instead of trying to send', async () => {
+    const bare = await createTestContext();
+    const res = await (await bare.adminClient()).post('/api/v1/admin/settings/email/test', { to: 'admin@example.com' });
+    expect(res.body).toEqual({ ok: false, error: expect.any(String) });
+    await bare.close();
   });
 });

@@ -14,7 +14,7 @@
 | --- | --- |
 | 目前版本 | **0.3.0**（2026-10-24，git tag `v0.3.0`），見 [CHANGELOG.md](CHANGELOG.md) |
 | 支援部署 | Docker Compose（app + PostgreSQL 16 + Redis 7）。Cloudflare 為實驗性、**未實作** |
-| 測試狀態 | 75 個 Vitest 測試、`scripts/validate.sh`、`scripts/smoke.sh`（24 項）、`scripts/ui-e2e.sh` 全部通過 |
+| 測試狀態 | 83 個 Vitest 測試、`scripts/validate.sh`、`scripts/smoke.sh`（24 項）、`scripts/ui-e2e.sh` 全部通過 |
 | 未實作 | AD/LDAP、SAML、OIDC、SCIM、FIDO2、附件、SLA 營業時間、Cloudflare、多副本背景工作 |
 | 待客戶確認 | 見 [specs/DECISIONS.md](specs/DECISIONS.md) 中標示 ⏳ 的項目（預設管理員密碼、SSO 時程、Cloudflare 去留） |
 | 下一步建議 | v1.1：SSO（`users.identity_provider` 已預留）→ 附件 → SLA 營業時間 |
@@ -94,7 +94,7 @@ src/server/
   services/tickets.ts 工單核心：建立（冪等）、篩選條件、詳情、狀態機、SLA 暫停、自訂欄位驗證、對話、關注者
   services/notify.ts  outbox：notifyTicketEvent（決定誰收到什麼）、enqueue、dispatchPending（重試/退避）、各管道發送
   services/jobs.ts    scanSla（逾時/即將逾時）、agingDigest（每日 3 天積壓報告）
-  services/settings.ts system_settings 讀寫（目前只有 2FA 全域開關與 digest 執行日）
+  services/settings.ts system_settings 讀寫：2FA 全域開關、digest 執行日、郵件設定（秘密以 secretBox 加密、只寫不讀，DECISIONS D13）
   services/branding.ts 企業標誌：PNG 檢查（檔頭、512 KB）、brand_logos 讀寫、帶版本的公開網址
   services/audit.ts   稽核日誌
   services/rateLimit.ts 記憶體 / Redis 固定視窗計數
@@ -166,6 +166,7 @@ crewai_ticket_build.py CrewAI 迭代工具（PM → SAr → PG → UI 設計師 
 ### 新增通知事件或管道
 - 事件：在 `services/notify.ts` 的 `TicketEvent` 加型別，在 `notifyTicketEvent()` 決定收件者，字典加 `notify.<event>.subject/body/teams`。
 - 管道：`Channel` 型別、`channelConfigured()`、`defaultSenders()`、`dispatchPending()` 的分派；設定加到 `config.ts`。
+  Email 例外：寄信方式由系統設定決定（`settings.ts` 的 `mailTransport()`，每次寄信時讀取），`config.smtp` 只是 `env` 方式的值。
 - 測試用 `dispatchPending(deps, fakeSenders)`，不要打真實外部服務。
 
 ### 新增前端頁面
@@ -208,7 +209,7 @@ crewai_ticket_build.py CrewAI 迭代工具（PM → SAr → PG → UI 設計師 
 
 | 指令 | 內容 | 需要 |
 | --- | --- | --- |
-| `npm test` | 75 個單元/整合測試（PGlite） | Node |
+| `npm test` | 83 個單元/整合測試（PGlite） | Node |
 | `TEST_DATABASE_URL=postgres://… npm test` | 同上，改用真實 PostgreSQL + 正式驅動 | 一個 Postgres（見下） |
 | `npm run validate` | 型別、schema/migration 一致、測試、建置、OpenAPI JSON、Markdown 連結、compose 設定 | Node（Docker 可選） |
 | `scripts/smoke.sh <url> <預設管理員密碼>` | 部署後 API 端到端 24 項（會改管理員密碼為 `Smoke-Test-Passw0rd!`） | 執行中的系統 |

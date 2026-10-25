@@ -104,6 +104,23 @@ await page.locator('section[aria-label="淺色背景用"] input[type=file]').set
 await page.getByLabel('主選單').getByRole('img', { name: '公司標誌' }).waitFor();
 await shot('05b-settings-logo');
 
+step('admin: mail settings');
+// No SMTP in this deployment: the test e-mail reports "not configured" without leaving the server.
+const mail = page.locator('.ant-card').filter({ has: page.getByRole('heading', { name: '郵件設定' }) });
+await mail.getByRole('button', { name: '寄送測試信' }).click();
+await mail.getByRole('status').getByText('測試信寄送失敗').waitFor();
+await pick(page.getByLabel('寄信方式'), 'Resend');
+await page.getByLabel('Resend API Key').fill('re_e2e_not_a_real_key');
+await page.getByLabel('寄件者').fill('TicketDesk <no-reply@example.com>');
+await mail.getByRole('button', { name: '儲存' }).click();
+await page.getByText('已設定（留空表示不變更）').waitFor();
+if ((await page.getByLabel('Resend API Key').inputValue()) !== '') throw new Error('API key was echoed back');
+await shot('05c-settings-mail');
+// back to the environment variables so later steps never call the real Resend API
+await pick(page.getByLabel('寄信方式'), '環境變數（SMTP）');
+await mail.getByRole('button', { name: '儲存' }).click();
+await page.getByText('目前使用環境變數設定，以下為唯讀資訊（不顯示密碼）。').waitFor();
+
 step('dark theme + English');
 await pick(page.getByLabel('主選單').getByLabel('主題'), '深色');
 await pick(page.getByLabel('主選單').getByLabel('語言'), 'English');
@@ -114,6 +131,9 @@ await shot('06-dashboard-dark-en');
 await page.reload();
 await page.getByRole('heading', { name: 'Dashboard' }).waitFor();
 if ((await page.evaluate(() => document.documentElement.dataset.theme)) !== 'dark') throw new Error('theme not persisted');
+await page.getByLabel('Main menu').getByRole('link', { name: 'Settings' }).click();
+await page.getByRole('heading', { name: 'E-mail settings' }).waitFor();
+await shot('06b-settings-dark-en');
 await page.getByRole('button', { name: 'Sign out' }).click();
 
 step('new user forced password change');

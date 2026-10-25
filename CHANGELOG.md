@@ -7,10 +7,10 @@
 ### Added
 - 新增工單時可直接指派負責人（有 `ticket:assign` 權限的系統管理員、IT 主管、工程師才看得到這個欄位）；指派後工單直接為「處理中」，並通知負責人，與事後指派相同。
 - 企業標誌（PRD FR-5.5，DECISIONS D11）：系統管理員可在「系統設定」上傳 PNG 標誌（512 KB 以內，伺服器檢查 PNG 檔頭），顯示在登入頁與側邊欄頂端並依比例縮放；可另外上傳深色背景用的標誌，側邊欄與深色主題的登入頁使用，沒有時改用淺色的。標誌存在新的 `brand_logos` 資料表（migration `0001_brand_logos`），由公開的 `GET /api/v1/branding` 與 `/api/v1/branding/logo/{light|dark}` 提供；新增 `tests/branding.test.ts`（5 項）與 e2e 的上傳步驟。
-- 郵件設定（PRD FR-4.3，DECISIONS D13）：系統管理員可在「系統設定」的「郵件設定」卡片選擇寄信方式——`env`（沿用 `SMTP_*` 環境變數，預設，既有部署升級後不需設定）、`smtp`（介面填寫 host／port／secure／帳號／密碼／寄件者）、`resend`（Resend API Key 與寄件者，以 `fetch` 呼叫 `POST https://api.resend.com/emails`，不新增套件）。設定存在 `system_settings`；SMTP 密碼與 API Key 以 `deps.secretBox` 加密，讀取只回傳「是否已設定」，留空儲存表示不變更，解密失敗視為未設定並提示重新輸入。設定頁另有「寄送測試信」（收件者預設為登入者，每位使用者每分鐘 5 次），同步寄出並在頁面顯示結果。讀取／儲存／測試寄信都需 `admin:settings`，儲存與測試寫稽核紀錄（不含秘密）。
+- 郵件設定（PRD FR-4.3，DECISIONS D13）：系統管理員可在「系統設定 → 郵件設定」選擇寄信方式：`env`（沿用 `SMTP_*` 環境變數，預設，升級後行為不變）、`smtp`（介面填寫）或 `resend`（以 `fetch` 呼叫 Resend API，不新增套件）。設定存在 `system_settings`，SMTP 密碼與 API Key 以 `secretBox` 加密、只寫不讀，留空表示不變更，無法解密時視為未設定並提示重新輸入；頁面顯示目前實際使用的寄信方式。可寄送測試信（每人每分鐘 5 次，結果直接顯示）。新增 `tests/mailSettings.test.ts`（8 項）與 e2e 步驟。
 
 ### Changed
-- Email 寄送方式改為寄信時依目前設定決定（PRD FR-4.3）：`index.ts` 不再於啟動時建立一次 `defaultSenders()`，`notify.ts` 的 `channelConfigured('email')` 也依目前設定判斷，儲存郵件設定後下一次寄信即生效、不需重新啟動。Telegram、Teams 仍只由環境變數設定。沒有部署變更（不新增環境變數、不改 `docker-compose.yml`）。
+- Email 的寄送方式改為每次寄信時讀取目前設定，儲存後立即生效、不需重新啟動；Telegram、Teams 仍由環境變數設定。沒有部署變更。
 - 回覆不再區分對外回覆與內部備忘（DECISIONS D12）：所有新回覆都對能看到工單的人公開，回覆時用「寄送 Email 通知」勾選框（預設勾選）決定是否通知對方（工程師回覆通知申請人，申請人回覆通知負責人）。API 的 `POST /tickets/{id}/threads` 改為 `{ body, notify }`，舊的 `type: "internal_note"` 回 400；已存在的內部備忘仍只有內部人員看得到。
 - 介面改用 Ant Design（antd 6.6.5，DECISIONS D10）：所有頁面改用 antd 的 Layout、Menu、Card、Table、Form、Select、Tag、Alert 等元件；顏色集中在 `src/web/palette.ts`，以 theme token 傳給 antd，深色主題用 `darkAlgorithm`。D9 的配色（深靛藍側邊欄、狀態色、sticker 色盤）與文字、行為、路由不變。`styles.css` 只剩版面；`tests/styles.test.ts` 改為檢查 `palette.ts` 與 antd 主題（25 項），e2e 改用 antd 下拉選單的操作方式。
 - UI 重新設計第 2 批（PRD FR-5.4）：介面加入色彩。側邊欄改為深靛藍；選單項目依功能群組加上色塊；狀態 badge 各用一種色相，不再與 L3 優先度撞色；儀表板統計卡依意義加上色帶，數字統一為內文色；長條圖依狀態、優先度上色，標籤與服務類別輪流使用 sticker 色。sticker 色盤改為可用於有意義的資料色（`specs/DECISIONS.md` D9）。

@@ -23,7 +23,7 @@ const zhTW: Record<string, string> = {
   'error.invalid_logo': '標誌必須是 512 KB 以內的 PNG 圖檔',
   'error.last_super_admin': '至少需保留一位啟用中的系統管理員',
   'error.cannot_modify_self': '不能停用或變更自己的角色',
-  'error.mail_test_failed': '測試信寄送失敗',
+  'error.mail_not_configured': '尚未設定寄信方式，或密碼／API Key 需要重新輸入',
   'error.internal_error': '系統發生錯誤',
 
   // ticket vocabulary
@@ -43,6 +43,8 @@ const zhTW: Record<string, string> = {
   'ticket.sla.met': '達標',
 
   // notifications ({number} {subject} {priority} {link} {reply} {count} {date})
+  'notify.mail_test.subject': 'TicketDesk 測試信',
+  'notify.mail_test.body': '這是 TicketDesk 的測試信，收到表示郵件設定正確。',
   'notify.created.subject': '[#{number}] 新工單：{subject}',
   'notify.created.teams': '優先度：{priority}\n{link}',
   'notify.assigned.subject': '[#{number}] 已指派給您：{subject}',
@@ -164,6 +166,7 @@ const zhTW: Record<string, string> = {
   'ui.settings.mail.host': 'SMTP 主機',
   'ui.settings.mail.port': '連接埠',
   'ui.settings.mail.secure': '使用 TLS',
+  'ui.settings.mail.secure_on': '一開始就用 TLS 連線（通常是 465 埠）',
   'ui.settings.mail.user': '帳號',
   'ui.settings.mail.password': '密碼',
   'ui.settings.mail.password_set': '已設定（留空表示不變更）',
@@ -171,6 +174,8 @@ const zhTW: Record<string, string> = {
   'ui.settings.mail.api_key': 'Resend API Key',
   'ui.settings.mail.api_key_set': '已設定（留空表示不變更）',
   'ui.settings.mail.effective': '目前實際使用的來源',
+  'ui.settings.mail.secret_invalid': '已儲存的密碼／API Key 無法解密（可能更換了 APP_SECRET），請重新輸入後儲存。',
+  'ui.settings.mail.effective_none': '未設定（Email 通知不會寄出）',
   'ui.settings.mail.test_title': '寄送測試信',
   'ui.settings.mail.test_to': '收件者',
   'ui.settings.mail.test_send': '寄送測試信',

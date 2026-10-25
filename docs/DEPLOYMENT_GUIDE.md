@@ -54,7 +54,7 @@ scripts/init-env.sh
 | `BOOTSTRAP_ADMIN_EMAIL` | | 預設 `admin@ticket.local` |
 | `BOOTSTRAP_ADMIN_PASSWORD` | | 留空：首次啟動隨機產生並印在 log 一次。填入：使用指定密碼（例如客戶規格的 `Admin@InitTemp2026!`）。兩種情況首次登入都必須改密 |
 | `TZ` / `DEFAULT_LOCALE` | | 預設 `Asia/Taipei` / `zh-TW` |
-| `SMTP_*`、`TELEGRAM_BOT_TOKEN`、`TEAMS_WEBHOOK_URL` | | 通知管道，留空即停用（通知紀錄會標示「未設定管道」） |
+| `SMTP_*`、`TELEGRAM_BOT_TOKEN`、`TEAMS_WEBHOOK_URL` | | 通知管道，留空即停用（通知紀錄會標示「未設定管道」）。Email 也可以在「系統設定 → 郵件設定」改用介面填寫的 SMTP 或 Resend，不需重新部署；`SMTP_*` 只在選「環境變數」時使用 |
 | `AGING_DIGEST_HOUR` | | 每天幾點（app 時區）之後發送「超過 3 天未結案」報告到 Teams，預設 9 |
 
 其他可調整項目（皆有預設值）：`BCRYPT_COST`（12）、`SESSION_TTL_HOURS`（12）、`LOGIN_MAX_FAILED_ATTEMPTS`（5）、
