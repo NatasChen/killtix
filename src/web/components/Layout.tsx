@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { patch } from '../api';
 import { useAuth } from '../auth';
+import { Brand } from '../branding';
 import { useI18n } from '../i18n';
 import { applyTheme, currentThemePref, type ThemePref } from '../theme';
 import { usePalette } from './common';
@@ -94,9 +95,7 @@ export function Layout() {
         zeroWidthTriggerStyle={{ top: 8 }}
         style={{ borderRight: `1px solid ${p.nav.divider}` }}>
         <nav aria-label={t('ui.nav.main')} style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-          <div className="brand" style={{ color: p.nav.text }}>
-            <img src="/favicon.svg" width={22} height={22} alt="" /> TicketDesk
-          </div>
+          <Brand on="dark" color={p.nav.text} />
           <Menu theme="dark" mode="inline" selectedKeys={selected ? [selected] : []} items={items} style={{ borderInlineEnd: 'none' }} />
           <ConfigProvider theme={navControls}>
             <div className="sidebar-footer" style={{ borderTop: `1px solid ${p.nav.divider}` }}>

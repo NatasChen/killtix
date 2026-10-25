@@ -176,8 +176,8 @@
 | 外部廠商 IDOR 越權 | §4 | 26 | 20 | 5 | 1 | 22 ✅ / 3 ⚠️ / 1 ❌ |
 | SOC API Rate Limiting | §5.1 | 18 | 12 | 5 | 1 | 16 ✅ / 2 ⚠️ |
 | SOC API 資料過濾（>3 天） | §5.2 | 22 | 16 | 5 | 1 | 20 ✅ / 2 ⚠️ |
-| 系統回歸 | §6 | 52 | 30 | 18 | 4 | 43 ✅ / 7 ⚠️ / 2 ❌ |
-| **合計** | — | **152** | **104** | **40** | **8** | **129 ✅ / 18 ⚠️ / 5 ❌** |
+| 系統回歸 | §6 | 54 | 31 | 19 | 4 | 45 ✅ / 7 ⚠️ / 2 ❌ |
+| **合計** | — | **154** | **105** | **41** | **8** | **131 ✅ / 18 ⚠️ / 5 ❌** |
 
 > 自動化比例約 **85%**；手動案例集中於 UI 視覺、瀏覽器相容性與需人工判讀的資安探索。
 
@@ -611,6 +611,8 @@
 | REG-THEME-005 | 優先度 badge 目視確認 | AC-THEME-02 | `scripts/ui-e2e.sh` 截圖 | L1~L5 在兩種主題下可分辨、文字可讀 | ⚠️ | P2 |
 | REG-THEME-006 | 資料色與側邊欄對比 | AC-THEME-05 | 檢查 `palette.ts`（`tests/styles.test.ts`） | 狀態 badge 互不同色且不同於 L3～L5；sticker 與 `--nav-*` 變數在兩種主題達 AA（非文字 3:1） | ✅ | P1 |
 | REG-THEME-007 | Ant Design 主題 | AC-THEME-05 | 檢查 `antdTheme()` 的 token（`tests/styles.test.ts`）；`scripts/ui-e2e.sh` 走完主要流程 | antd 的主色、底色、文字、側邊欄色取自 `palette.ts`；兩種主題的主要按鈕文字 ≥ 4.5:1 | ✅ | P1 |
+| REG-BRAND-001 | 企業標誌權限與檔案檢查 | AC-BRAND-01 | `tests/branding.test.ts`：IT 主管上傳／移除；上傳 SVG、超過 512 KB、截斷的 PNG、非 base64 | 非系統管理員 403；其餘皆 400 `invalid_logo`，資料表不變 | ✅ | P0 |
+| REG-BRAND-002 | 企業標誌顯示 | AC-BRAND-01 | 系統設定上傳淺色標誌（`scripts/ui-e2e.sh`），檢查側邊欄與未登入的登入頁；`tests/branding.test.ts` 讀取圖檔 | 側邊欄與登入頁顯示「公司標誌」圖片；未登入可讀取 `image/png`，帶版本的網址可長期快取、ETag 相符回 304 | ✅ | P1 |
 
 ### 6.8 雙軌佈署回歸（REG-DEPLOY）
 
@@ -846,6 +848,7 @@ $PSQL -f scripts/qa/fixtures.sql
 | FR-5.2 Light/Dark | AC-THEME-01 | REG-THEME-001~003 | §6.7 |
 | FR-5.3 優先度 badge 色彩 | AC-THEME-02 | REG-THEME-004~005 | §6.7 |
 | FR-5.4 第 2 批 資料色與側邊欄、Ant Design | AC-THEME-05 | REG-THEME-006~007 | §6.7 |
+| FR-5.5 企業標誌 | AC-BRAND-01 | REG-BRAND-001~002 | §6.7 |
 | FR-6.1~6.3 雙軌佈署 | AC-DEPLOY-01~02 | REG-DEPLOY-001~008 | §6.8 |
 | FR-7 GitHub 門面 | AC-GH-01 | 文件審查（SEC-BA-055） | §3.8 |
 

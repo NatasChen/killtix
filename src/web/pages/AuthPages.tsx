@@ -3,18 +3,19 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { post } from '../api';
 import { useAuth, type Me, type Stage } from '../auth';
 import { ErrorBanner, Field, usePalette, useAction } from '../components/common';
+import { Brand } from '../branding';
 import { useI18n } from '../i18n';
+import { useThemeMode } from '../theme';
 
 type SessionResponse = { stage: Stage; user: Me };
 
 /** ex-auth-form-card: the centred sign-in card used by login, password change and 2FA. */
 function AuthCard({ title, children }: { title: string; children: ReactNode }) {
+  const mode = useThemeMode();
   return (
     <div className="auth-wrap">
       <Card className="auth-card ex-auth-form-card">
-        <div className="brand">
-          <img src="/favicon.svg" width={24} height={24} alt="" /> TicketDesk
-        </div>
+        <Brand on={mode} />
         <Typography.Title level={1} style={{ fontSize: 20, marginTop: 0 }}>
           {title}
         </Typography.Title>

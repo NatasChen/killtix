@@ -148,6 +148,22 @@ export const systemSettings = pgTable('system_settings', {
   updatedAt: updatedAt(),
 });
 
+export const LOGO_VARIANTS = ['light', 'dark'] as const;
+export type LogoVariant = (typeof LOGO_VARIANTS)[number];
+
+// Company logo (PNG), one per theme; base64 so both DB drivers return the same type.
+export const brandLogos = pgTable(
+  'brand_logos',
+  {
+    variant: varchar('variant', { length: 8 }).$type<LogoVariant>().primaryKey(),
+    data: text('data').notNull(),
+    sha256: varchar('sha256', { length: 64 }).notNull(),
+    updatedBy: integer('updated_by').references(() => users.id, { onDelete: 'set null' }),
+    updatedAt: updatedAt(),
+  },
+  (t) => [check('chk_brand_logos_variant', sql`${t.variant} in ('light','dark')`)],
+);
+
 // ---------------------------------------------------------------------------
 // Catalog: SLA plans, forms, custom fields, help topics, tags, canned responses
 // ---------------------------------------------------------------------------

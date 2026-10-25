@@ -436,6 +436,12 @@ ORDER BY t.created_at ASC;
 - **UI 元件庫**：介面一律使用 Ant Design；顏色集中在 `src/web/palette.ts`，以 theme token 傳給 antd（DECISIONS D10）。
 - **第 2 批：色彩與版面**：sticker 色盤用於資料色（狀態 badge、儀表板色帶與長條圖、選單群組色塊），側邊欄改為深靛藍（DECISIONS D9）；狀態 badge 彼此可分辨，也不與優先度 badge 同色；工單清單短欄位不折行；表格框線對齊、內容垂直置中。
 
+#### FR-5.5 企業標誌（P2，`[Unreleased]`）
+- 系統管理員（`admin:settings`）可在系統設定上傳與移除企業標誌；只接受 512 KB 以內的 PNG（不支援 SVG）。
+- 標誌顯示在登入頁與側邊欄頂端，依比例縮放、不裁切；未上傳時顯示 TicketDesk 名稱。
+- 可另外上傳深色背景用的標誌（選填）：側邊欄（兩種主題都是深靛藍）與深色主題的登入頁使用，未上傳時改用淺色背景用的標誌。
+- 標誌的讀取不需登入（登入頁要顯示），見 DECISIONS D11。
+
 ---
 
 ### FR-6 雙軌佈署方案
@@ -658,6 +664,7 @@ curl -X POST https://ticket.example.com/api/v1/tickets \
 | AC-THEME-03 | 設計 token 與共用元件（FR-5.4） | 淺色變數符合 `DESIGN.md`（暖白 canvas-soft、白卡片、hairline、ink 層級、單一 primary）；深色由淺色推導且文字／背景 ≥ 4.5:1；語意色與 badge 兩種主題皆 ≥ 4.5:1；既有變數名稱全數保留（只增不改不刪）；登入／改密／2FA 使用 `ex-auth-form-card` 風格、sidebar 保留左側 |
 | AC-THEME-05 | 資料色與側邊欄（FR-5.4 第 2 批） | 未結案的各狀態 badge 背景互不相同，也不同於 L3～L5；sticker 實色對卡片 ≥ 3:1、文字 ≥ 4.5:1；側邊欄文字 ≥ 4.5:1、色塊與焦點框 ≥ 3:1 |
 | AC-THEME-04 | 版面與範圍控制（FR-5.4） | 淺色與深色主題主要畫面可讀；375px 寬度無水平捲軸；無新增字典 key、無外部資源、無原品牌名稱；元件行為、API 呼叫、路由與文字不變；`npm run validate` 通過 |
+| AC-BRAND-01 | 企業標誌（FR-5.5） | 只有系統管理員能上傳／移除；非 PNG 或超過 512 KB 回 400 `invalid_logo`；上傳後登入頁與側邊欄顯示標誌、未登入也能讀取；深色版未上傳時側邊欄使用淺色版 |
 | AC-DEPLOY-01 | Docker | `docker-compose up -d` 後 3 分鐘內可登入；健康檢查通過 |
 | AC-DEPLOY-02 | Cloudflare | `wrangler deploy` 後 API 可用；D1 migration 成功；Queues 通知可送達 |
 | AC-GH-01 | GitHub 門面 | `README.md`、`CHANGELOG.md`、`.gitignore` 齊備且內容正確 |
@@ -751,6 +758,7 @@ curl -X POST https://ticket.example.com/api/v1/tickets \
 | FR-5.2 | 需求 5（Light/Dark） | AC-THEME-01 | §UI |
 | FR-5.3 | 需求變更（v0.2.0 之後） | AC-THEME-02 | §UI |
 | FR-5.4 | 需求變更（UI 重新設計第 1、2 批） | AC-THEME-03~05 | §UI |
+| FR-5.5 | 需求變更（企業標誌） | AC-BRAND-01 | §UI |
 | FR-6.1~6.3 | 需求 6（雙軌佈署） | AC-DEPLOY-01~02 | §Deployment |
 | FR-7 | 需求 7（GitHub 規範） | AC-GH-01 | §Docs Review |
 

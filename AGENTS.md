@@ -14,7 +14,7 @@
 | --- | --- |
 | 目前版本 | **0.3.0**（2026-10-24，git tag `v0.3.0`），見 [CHANGELOG.md](CHANGELOG.md) |
 | 支援部署 | Docker Compose（app + PostgreSQL 16 + Redis 7）。Cloudflare 為實驗性、**未實作** |
-| 測試狀態 | 68 個 Vitest 測試、`scripts/validate.sh`、`scripts/smoke.sh`（24 項）、`scripts/ui-e2e.sh` 全部通過 |
+| 測試狀態 | 73 個 Vitest 測試、`scripts/validate.sh`、`scripts/smoke.sh`（24 項）、`scripts/ui-e2e.sh` 全部通過 |
 | 未實作 | AD/LDAP、SAML、OIDC、SCIM、FIDO2、附件、SLA 營業時間、Cloudflare、多副本背景工作 |
 | 待客戶確認 | 見 [specs/DECISIONS.md](specs/DECISIONS.md) 中標示 ⏳ 的項目（預設管理員密碼、SSO 時程、Cloudflare 去留） |
 | 下一步建議 | v1.1：SSO（`users.identity_provider` 已預留）→ 附件 → SLA 營業時間 |
@@ -85,6 +85,7 @@ src/server/
   i18n/index.ts       Glossary：內建字典 + DB 覆寫，缺字回退 en-US
   i18n/locales/*.ts   zh-TW / en-US 字典（伺服器錯誤、通知、整個前端介面）
   routes/auth.ts      登入、登出、me、改密、2FA
+  routes/branding.ts  企業標誌的公開讀取（唯一不掛 guard() 的業務路由，DECISIONS D11）；上傳在 routes/admin.ts
   routes/tickets.ts   工單 CRUD、對話、關注者（API Token 可用的路由在這裡）
   routes/reports.ts   儀表板、CSV 匯出
   routes/catalog.ts   下拉選單資料（服務類別＋欄位、團隊、使用者、範本）
@@ -94,12 +95,14 @@ src/server/
   services/notify.ts  outbox：notifyTicketEvent（決定誰收到什麼）、enqueue、dispatchPending（重試/退避）、各管道發送
   services/jobs.ts    scanSla（逾時/即將逾時）、agingDigest（每日 3 天積壓報告）
   services/settings.ts system_settings 讀寫（目前只有 2FA 全域開關與 digest 執行日）
+  services/branding.ts 企業標誌：PNG 檢查（檔頭、512 KB）、brand_logos 讀寫、帶版本的公開網址
   services/audit.ts   稽核日誌
   services/rateLimit.ts 記憶體 / Redis 固定視窗計數
 src/web/
   main.tsx            路由；依 session stage 切換登入/改密/2FA 頁面
   api.ts              fetch 包裝：自動帶 X-Requested-With、錯誤轉 ApiError、401/stage 錯誤觸發重新整理 auth
   auth.tsx / i18n.tsx / theme.ts   全域狀態；theme.ts 另有 useThemeMode() 與 antdTheme()（Ant Design 主題）
+  branding.tsx        企業標誌網址（BrandingProvider）與 <Brand>：側邊欄用深色背景版，登入頁依主題選擇
   palette.ts          唯一的顏色來源：兩種主題的色票、tone()、狀態/優先度/SLA 對應的色相（tests/styles.test.ts 檢查對比）
   components/common.tsx 共用元件：Field（label 綁定控制項）、Choice（下拉選單）、PageHeader、各種 badge、ErrorBanner、useLoad/useAction
   styles.css          只放版面與首次繪製的底色，元件樣式來自 Ant Design
@@ -130,7 +133,7 @@ crewai_ticket_build.py CrewAI 迭代工具（PM → SAr → PG → UI 設計師 
 1. **授權在 SQL 查詢層套用**：讀取工單一律透過 `loadVisibleTicket()` 或 `buildTicketConditions()`，兩者都使用 `ticketScope()`。不可以先查全部再在程式中過濾。
 2. **看不到的工單回 404**，不是 403（不洩漏存在性）。
 3. **內部備忘與 `visibility='internal'` 的自訂欄位**永遠不回傳給非 staff（`isStaff()` = 有 `ticket:note` 權限），也**永遠不觸發通知**。
-4. **改密前、2FA 前不能使用任何業務 API**：由 `guard()` 的 stage 檢查保證。新增路由一定要加 `guard()`。
+4. **改密前、2FA 前不能使用任何業務 API**：由 `guard()` 的 stage 檢查保證。新增路由一定要加 `guard()`。唯一例外是 `routes/branding.ts` 的企業標誌讀取（登入前就要顯示，DECISIONS D11），不可再加其他資料到這裡。
 5. **所有使用者可見文字走 glossary**：前端 `t('ui.…')`、後端錯誤 `ApiError` code → `error.<code>`、通知 `notify.*`。新 key 必須**同時**加到 `zh-TW.ts` 與 `en-US.ts`（`tests/i18n.test.ts` 會檢查）。動態 key（`` t(`ui.role.${x}`) ``）要把前綴與可能值登記到該測試的 `DYNAMIC` 表。
 6. **資料表只在 `src/server/db/schema.ts` 定義**，改完執行 `npm run db:generate`，連同 `drizzle/` 一起提交。不要手寫或修改已發布的 migration。
 7. **「超過 N 天未結案」只有一個定義**：`services/tickets.ts` 的 `agingCondition()`（嚴格小於，剛好 72 小時不算）。清單、儀表板、CSV、每日報告都必須用它。
@@ -204,7 +207,7 @@ crewai_ticket_build.py CrewAI 迭代工具（PM → SAr → PG → UI 設計師 
 
 | 指令 | 內容 | 需要 |
 | --- | --- | --- |
-| `npm test` | 68 個單元/整合測試（PGlite） | Node |
+| `npm test` | 73 個單元/整合測試（PGlite） | Node |
 | `TEST_DATABASE_URL=postgres://… npm test` | 同上，改用真實 PostgreSQL + 正式驅動 | 一個 Postgres（見下） |
 | `npm run validate` | 型別、schema/migration 一致、測試、建置、OpenAPI JSON、Markdown 連結、compose 設定 | Node（Docker 可選） |
 | `scripts/smoke.sh <url> <預設管理員密碼>` | 部署後 API 端到端 24 項（會改管理員密碼為 `Smoke-Test-Passw0rd!`） | 執行中的系統 |

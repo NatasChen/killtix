@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Added
+- 企業標誌（PRD FR-5.5，DECISIONS D11）：系統管理員可在「系統設定」上傳 PNG 標誌（512 KB 以內，伺服器檢查 PNG 檔頭），顯示在登入頁與側邊欄頂端並依比例縮放；可另外上傳深色背景用的標誌，側邊欄與深色主題的登入頁使用，沒有時改用淺色的。標誌存在新的 `brand_logos` 資料表（migration `0001_brand_logos`），由公開的 `GET /api/v1/branding` 與 `/api/v1/branding/logo/{light|dark}` 提供；新增 `tests/branding.test.ts`（5 項）與 e2e 的上傳步驟。
+
 ### Changed
 - 介面改用 Ant Design（antd 6.6.5，DECISIONS D10）：所有頁面改用 antd 的 Layout、Menu、Card、Table、Form、Select、Tag、Alert 等元件；顏色集中在 `src/web/palette.ts`，以 theme token 傳給 antd，深色主題用 `darkAlgorithm`。D9 的配色（深靛藍側邊欄、狀態色、sticker 色盤）與文字、行為、路由不變。`styles.css` 只剩版面；`tests/styles.test.ts` 改為檢查 `palette.ts` 與 antd 主題（25 項），e2e 改用 antd 下拉選單的操作方式。
 - UI 重新設計第 2 批（PRD FR-5.4）：介面加入色彩。側邊欄改為深靛藍；選單項目依功能群組加上色塊；狀態 badge 各用一種色相，不再與 L3 優先度撞色；儀表板統計卡依意義加上色帶，數字統一為內文色；長條圖依狀態、優先度上色，標籤與服務類別輪流使用 sticker 色。sticker 色盤改為可用於有意義的資料色（`specs/DECISIONS.md` D9）。

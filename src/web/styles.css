@@ -37,6 +37,9 @@ code, .mono { font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, mono
 /* app shell: the antd Sider holds the nav; the content column scrolls on its own */
 .main { padding: 24px 28px; min-width: 0; }
 .brand { font-weight: 700; font-size: 16px; padding: 16px 16px 12px; display: flex; align-items: center; gap: 8px; }
+/* company logo: scaled to fit, never cropped or stretched */
+.brand-logo { display: block; max-width: 100%; max-height: 48px; width: auto; height: auto; }
+.logo-preview { height: 80px; padding: 16px; border: 1px solid; border-radius: 8px; display: flex; align-items: center; }
 .sidebar-footer { margin-top: auto; display: flex; flex-direction: column; gap: 8px; padding: 12px 16px 16px; }
 
 /* tables: IDs, badges, assignee and age stay on one line; names and dates may wrap */

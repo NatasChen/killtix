@@ -7,6 +7,7 @@ import { ApiError } from './errors.js';
 import { SUPPORTED_LOCALES } from './i18n/index.js';
 import { adminRoutes } from './routes/admin.js';
 import { authRoutes } from './routes/auth.js';
+import { brandingRoutes } from './routes/branding.js';
 import { catalogRoutes } from './routes/catalog.js';
 import { reportRoutes } from './routes/reports.js';
 import { ticketRoutes } from './routes/tickets.js';
@@ -78,6 +79,7 @@ export function createApp(deps: Deps) {
     return c.json({ locale, locales: SUPPORTED_LOCALES, messages: deps.glossary.messages(locale) });
   });
   api.route('/auth', authRoutes);
+  api.route('/branding', brandingRoutes);
   api.route('/tickets', ticketRoutes);
   api.route('/admin', adminRoutes);
   api.route('/', catalogRoutes);

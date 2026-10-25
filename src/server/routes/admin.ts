@@ -12,6 +12,7 @@ import {
   FIELD_TYPES,
   glossaryTerms,
   helpTopics,
+  LOGO_VARIANTS,
   notificationLogs,
   roles,
   sessions,
@@ -24,8 +25,9 @@ import {
 import { ApiError, badRequest, notFound } from '../errors.js';
 import { SUPPORTED_LOCALES } from '../i18n/index.js';
 import { audit } from '../services/audit.js';
+import { deleteLogo, LOGO_MAX_BYTES, logoUrls, setLogo } from '../services/branding.js';
 import { getSetting, setSetting } from '../services/settings.js';
-import { idParam, parseJson, publicUser } from './util.js';
+import { idParam, parseJson, parseWith, publicUser } from './util.js';
 
 const ROLE_KEYS = ['super_admin', 'it_manager', 'agent', 'vendor', 'end_user'] as const;
 const TOKEN_SCOPES = ['tickets:read', 'tickets:write'] as const;
@@ -461,6 +463,24 @@ export const adminRoutes = new Hono<AppEnv>()
     await setSetting(c.var.deps.db, 'security.2fa_enforced', body['2faEnforced'], auth.user.id);
     await audit(c, 'admin.settings_updated', undefined, body);
     return c.json(body);
+  })
+
+  // Logo upload as base64 JSON (see services/branding.ts for the PNG checks); the read side is routes/branding.ts.
+  .put('/branding/logo/:variant', manageSystem, async (c) => {
+    const auth = authOf(c);
+    const variant = parseWith(z.enum(LOGO_VARIANTS), c.req.param('variant'));
+    const { data } = await parseJson(c, z.object({ data: z.string() }).strict());
+    // Oversized or non-base64 uploads get the same friendly error as a non-PNG file.
+    if (data.length > Math.ceil(LOGO_MAX_BYTES / 3) * 4 || !/^[A-Za-z0-9+/]*={0,2}$/.test(data)) throw new ApiError(400, 'invalid_logo');
+    await setLogo(c.var.deps.db, variant, Buffer.from(data, 'base64'), auth.user.id);
+    await audit(c, 'admin.logo_updated', undefined, { variant });
+    return c.json({ logo: await logoUrls(c.var.deps.db) });
+  })
+  .delete('/branding/logo/:variant', manageSystem, async (c) => {
+    const variant = parseWith(z.enum(LOGO_VARIANTS), c.req.param('variant'));
+    await deleteLogo(c.var.deps.db, variant);
+    await audit(c, 'admin.logo_removed', undefined, { variant });
+    return c.json({ logo: await logoUrls(c.var.deps.db) });
   })
 
   .get('/glossary', manageSystem, async (c) =>

@@ -82,9 +82,29 @@ await page.getByRole('button', { name: '新增' }).first().click();
 const temp = (await page.locator('.secret-box').first().innerText()).trim();
 await shot('05-admin-users');
 
+step('admin: company logo');
+await page.getByLabel('主選單').getByRole('link', { name: '設定' }).click();
+// draw a test logo in the page so the run needs no fixture file
+const logo = Buffer.from(
+  await page.evaluate(() => {
+    const c = Object.assign(document.createElement('canvas'), { width: 360, height: 90 });
+    const g = c.getContext('2d');
+    g.fillStyle = '#e8590c';
+    g.fillRect(0, 10, 70, 70);
+    g.fillStyle = '#888';
+    g.font = 'bold 44px sans-serif';
+    g.fillText('ACME 測試', 86, 62);
+    return c.toDataURL('image/png').split(',')[1];
+  }),
+  'base64',
+);
+await page.locator('section[aria-label="淺色背景用"] input[type=file]').setInputFiles({ name: 'logo.png', mimeType: 'image/png', buffer: logo });
+await page.getByLabel('主選單').getByRole('img', { name: '公司標誌' }).waitFor();
+await shot('05b-settings-logo');
+
 step('dark theme + English');
-await pick(page.getByLabel('主題'), '深色');
-await pick(page.getByLabel('語言'), 'English');
+await pick(page.getByLabel('主選單').getByLabel('主題'), '深色');
+await pick(page.getByLabel('主選單').getByLabel('語言'), 'English');
 await page.getByLabel('Main menu').getByRole('link', { name: 'Dashboard' }).click();
 await page.getByRole('heading', { name: 'Dashboard' }).waitFor();
 if ((await page.evaluate(() => document.documentElement.dataset.theme)) !== 'dark') throw new Error('dark theme not applied');
@@ -133,6 +153,7 @@ p3.on('console', onConsole);
 p3.on('pageerror', (e) => errors.push(String(e)));
 await p3.goto(BASE);
 await p3.getByLabel('電子郵件').waitFor();
+await p3.getByRole('img', { name: '公司標誌' }).waitFor(); // uploaded in the logo step
 await noOverflow(p3, 'login page (light)');
 await p3.screenshot({ path: `${SHOTS}/09-login-375-light.png`, fullPage: true });
 await p3.evaluate(() => { document.documentElement.dataset.theme = 'dark'; });

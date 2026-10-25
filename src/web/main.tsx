@@ -5,6 +5,7 @@ import { StrictMode, useEffect, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider, useAuth } from './auth';
+import { BrandingProvider } from './branding';
 import { Layout } from './components/Layout';
 import { I18nProvider, useI18n } from './i18n';
 import { ChangePasswordPage, LoginPage, MfaEnrollPage, MfaVerifyPage } from './pages/AuthPages';
@@ -77,11 +78,13 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <I18nProvider>
       <ThemeRoot>
-        <AuthProvider>
-          <BrowserRouter>
-            <Root />
-          </BrowserRouter>
-        </AuthProvider>
+        <BrandingProvider>
+          <AuthProvider>
+            <BrowserRouter>
+              <Root />
+            </BrowserRouter>
+          </AuthProvider>
+        </BrandingProvider>
       </ThemeRoot>
     </I18nProvider>
   </StrictMode>,
