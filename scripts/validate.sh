@@ -21,7 +21,22 @@ if ! grep -q "No schema changes" <<<"$drift"; then
 fi
 
 step "unit + integration tests"
-npm test --silent
+test_log=$(mktemp)
+npm test --silent 2>&1 | tee "$test_log"
+[ "${PIPESTATUS[0]}" -eq 0 ] || exit 1
+
+step "documented test count matches (AGENTS.md sections 1 and 6, README.md)"
+total=$(sed 's/\x1b\[[0-9;]*m//g' "$test_log" | grep -oP '^\s*Tests\s+\K\d+(?= passed)' | tail -1)
+rm -f "$test_log"
+for doc in "AGENTS.md:個 Vitest 測試" "AGENTS.md:個單元/整合測試" "README.md:個自動化測試"; do
+  file=${doc%%:*} phrase=${doc#*:}
+  documented=$(grep -oP "\d+(?= ${phrase})" "$file" | head -1)
+  if [ "$documented" != "$total" ]; then
+    echo "$file says ${documented:-?} ${phrase}, but $total tests ran. Update the test counts (AGENTS.md section 1)." >&2
+    exit 1
+  fi
+done
+echo "$total tests, documented correctly"
 
 step "production build"
 npm run --silent build >/dev/null

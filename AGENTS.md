@@ -35,7 +35,7 @@
 - 只改需求涉及的檔案；不重寫、重新排版或「順手整理」無關的程式碼與文件。
 - 既有功能與測試要保留，不可為了新功能刪除或弱化；`[Unreleased]` 中標示「進行中」的項目要先接續，至少不能與它衝突。
 - 文件與測試的篇幅要和變更大小成比例：小變更（樣式、文字、單一欄位）在 CHANGELOG 寫一行，PRD、QA 計畫各加一列或幾行即可，不寫長篇驗證明細，也不改文件本身的版本號；測試只驗證這次的行為與真正可能退化的地方，不比對原始碼字串。
-- 測試數量有變時，同步更新本文件第 1、6 節與 README 的測試數。
+- 測試數量有變時，同步更新本文件第 1、6 節與 README 的測試數（`scripts/validate.sh` 會比對，數字不符就失敗）。
 
 需求來源：[specs/customer_spec.md](specs/customer_spec.md)（客戶原文）→ [docs/PRD_SPEC.md](docs/PRD_SPEC.md)（細化後的需求基線，部分內容尚未實作，以檔案開頭的實作狀態說明為準）。
 
@@ -212,7 +212,7 @@ crewai_ticket_build.py CrewAI 迭代工具（PM → SAr → PG → UI 設計師 
 | --- | --- | --- |
 | `npm test` | 83 個單元/整合測試（PGlite） | Node |
 | `TEST_DATABASE_URL=postgres://… npm test` | 同上，改用真實 PostgreSQL + 正式驅動 | 一個 Postgres（見下） |
-| `npm run validate` | 型別、schema/migration 一致、測試、建置、OpenAPI JSON、Markdown 連結、compose 設定 | Node（Docker 可選） |
+| `npm run validate` | 型別、schema/migration 一致、測試、文件中的測試數、建置、OpenAPI JSON、Markdown 連結、compose 設定 | Node（Docker 可選） |
 | `scripts/smoke.sh <url> <預設管理員密碼>` | 部署後 API 端到端 24 項（會改管理員密碼為 `Smoke-Test-Passw0rd!`） | 執行中的系統 |
 | `scripts/ui-e2e.sh <url> <管理員密碼>` | 瀏覽器操作主要流程、截圖到 `tests/e2e/shots/` | Docker |
 
@@ -243,6 +243,8 @@ docker compose --env-file /tmp/td.env -p tdtest down -v
 ### 測試寫法
 - `createTestContext(env?)` 建立獨立的 DB 與 app；`ctx.clock.advance(ms)` 控制時間；`ctx.createUser(email, role)` 建立已可登入的使用者（密碼 `STRONG_PASSWORD`）。
 - 測試共用一個 context 時（`beforeAll`），資料會累積，斷言不要假設表是空的；需要乾淨狀態就另開 context。
+- **測試不可連到外部服務**：`tests/setup.ts` 會擋下真正的 `fetch`、對外的 DNS 查詢與 socket 連線（loopback 除外，真實 PostgreSQL 測試用得到），即使程式自己吞掉錯誤，該測試仍會失敗。
+  通知用 `dispatchPending(deps, fakeSenders)`；要測 `defaultSenders()` 就用 `vi.stubGlobal('fetch', …)` 或 `vi.spyOn(nodemailer, 'createTransport')`。
 - 測試環境的登入速率限制已調高為 1000/分；要測速率限制請自己開一個 `createTestContext({ LOGIN_RATE_LIMIT_PER_MIN: '3' })`。
 
 ---

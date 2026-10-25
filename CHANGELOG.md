@@ -11,6 +11,7 @@
 - 郵件設定（PRD FR-4.3，DECISIONS D13）：系統管理員可在「系統設定 → 郵件設定」選擇寄信方式：`env`（沿用 `SMTP_*` 環境變數，預設，升級後行為不變）、`smtp`（介面填寫）或 `resend`（以 `fetch` 呼叫 Resend API，不新增套件）。設定存在 `system_settings`，SMTP 密碼與 API Key 以 `secretBox` 加密、只寫不讀，留空表示不變更，無法解密時視為未設定並提示重新輸入；頁面顯示目前實際使用的寄信方式。可寄送測試信（每人每分鐘 5 次，結果直接顯示）。新增 `tests/mailSettings.test.ts`（8 項）與 e2e 步驟。
 
 ### Changed
+- 測試防護：`tests/setup.ts` 擋下測試中的對外連線（`fetch`、DNS、非 loopback socket），即使錯誤被程式吞掉也會讓測試失敗；`scripts/validate.sh` 比對 AGENTS.md 與 README 記載的測試數與實際執行數。
 - Email 的寄送方式改為每次寄信時讀取目前設定，儲存後立即生效、不需重新啟動；Telegram、Teams 仍由環境變數設定。沒有部署變更。
 - 回覆不再區分對外回覆與內部備忘（DECISIONS D12）：所有新回覆都對能看到工單的人公開，回覆時用「寄送 Email 通知」勾選框（預設勾選）決定是否通知對方（工程師回覆通知申請人，申請人回覆通知負責人）。API 的 `POST /tickets/{id}/threads` 改為 `{ body, notify }`，舊的 `type: "internal_note"` 回 400；已存在的內部備忘仍只有內部人員看得到。
 - 介面改用 Ant Design（antd 6.6.5，DECISIONS D10）：所有頁面改用 antd 的 Layout、Menu、Card、Table、Form、Select、Tag、Alert 等元件；顏色集中在 `src/web/palette.ts`，以 theme token 傳給 antd，深色主題用 `darkAlgorithm`。D9 的配色（深靛藍側邊欄、狀態色、sticker 色盤）與文字、行為、路由不變。`styles.css` 只剩版面；`tests/styles.test.ts` 改為檢查 `palette.ts` 與 antd 主題（25 項），e2e 改用 antd 下拉選單的操作方式。
