@@ -14,7 +14,7 @@
 | --- | --- |
 | 目前版本 | **0.4.0**（2026-10-25，git tag `v0.4.0`），見 [CHANGELOG.md](CHANGELOG.md) |
 | 支援部署 | Docker Compose（app + PostgreSQL 16 + Redis 7）。Cloudflare 為實驗性、**未實作** |
-| 測試狀態 | 91 個 Vitest 測試、`scripts/validate.sh`、`scripts/smoke.sh`（24 項）、`scripts/ui-e2e.sh` 全部通過 |
+| 測試狀態 | 96 個 Vitest 測試、`scripts/validate.sh`、`scripts/smoke.sh`（24 項）、`scripts/ui-e2e.sh` 全部通過 |
 | 未實作 | AD/LDAP、SAML、OIDC、SCIM、FIDO2、附件、SLA 營業時間、Cloudflare、多副本背景工作 |
 | 待客戶確認 | 見 [specs/DECISIONS.md](specs/DECISIONS.md) 中標示 ⏳ 的項目（預設管理員密碼、SSO 時程、Cloudflare 去留） |
 | 下一步建議 | v1.1：SSO（`users.identity_provider` 已預留）→ 附件 → SLA 營業時間 |
@@ -105,11 +105,12 @@ src/web/
   branding.tsx        企業標誌網址（BrandingProvider）與 <Brand>：側邊欄用深色背景版，登入頁依主題選擇
   palette.ts          唯一的顏色來源：兩種主題的色票、tone()、狀態/優先度/SLA 對應的色相（tests/styles.test.ts 檢查對比）
   components/common.tsx 共用元件：Field（label 綁定控制項）、Choice（下拉選單）、PageHeader、各種 badge、ErrorBanner、useLoad/useAction
+  components/charts.tsx 儀表板圖表（Donut、LineChart、Columns、TagCloud、Bars）：SVG 自繪、顏色只取自 palette.ts、viewBox 縮放、role="img" + aria-label
   styles.css          只放版面與首次繪製的底色，元件樣式來自 Ant Design
   pages/…             各頁面；pages/admin/Crud.tsx 是簡單資源的通用 CRUD 元件
   public/theme-init.js 首次繪製前套用主題（CSP 不允許 inline script，所以是外部檔）
 drizzle/              自動產生的 migration，不要手改
-tests/                Vitest：helpers.ts（測試環境工廠）、auth / tickets / teams / notify / i18n 測試；e2e/ui.mjs（瀏覽器）
+tests/                Vitest：helpers.ts（測試環境工廠）、auth / tickets / teams / dashboard / notify / i18n 測試；e2e/ui.mjs（瀏覽器）
 scripts/              init-env.sh（建立 .env、只填空白密鑰）、validate.sh、smoke.sh、ui-e2e.sh、check-links.mjs、
                       seed-sample-tickets.py（經 API 建立 30 張範例工單，只用 Python 標準函式庫）
 specs/                客戶需求、決策紀錄、CrewAI 需求變更單
@@ -211,7 +212,7 @@ crewai_ticket_build.py CrewAI 迭代工具（PM → SAr → PG → UI 設計師 
 
 | 指令 | 內容 | 需要 |
 | --- | --- | --- |
-| `npm test` | 91 個單元/整合測試（PGlite） | Node |
+| `npm test` | 96 個單元/整合測試（PGlite） | Node |
 | `TEST_DATABASE_URL=postgres://… npm test` | 同上，改用真實 PostgreSQL + 正式驅動 | 一個 Postgres（見下） |
 | `npm run validate` | 型別、schema/migration 一致、測試、文件中的測試數、建置、OpenAPI JSON、Markdown 連結、compose 設定 | Node（Docker 可選） |
 | `scripts/smoke.sh <url> <預設管理員密碼>` | 部署後 API 端到端 24 項（會改管理員密碼為 `Smoke-Test-Passw0rd!`） | 執行中的系統 |

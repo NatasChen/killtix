@@ -126,6 +126,34 @@ const vendorRow = page.getByRole('row').filter({ hasText: VENDOR });
 await vendorRow.getByText(NET).waitFor();
 await vendorRow.getByText(DESK).waitFor();
 
+step('dashboard charts: render, drill down by status and by tag');
+const TAG = `e2etag${RUN}`;
+{
+  const res = await page.request.post(`${BASE}/api/v1/tickets`, {
+    data: { subject: 'UI 測試：標籤統計', tags: [TAG] },
+    headers: { 'X-Requested-With': 'XMLHttpRequest' },
+  });
+  if (!res.ok()) throw new Error(`create tagged ticket: ${res.status()}`);
+}
+await page.getByLabel('主選單').getByRole('link', { name: '儀表板' }).click();
+await page.getByRole('heading', { name: '儀表板' }).waitFor();
+await page.getByRole('img', { name: /近 30 天新增與解決/ }).waitFor();
+await page.getByRole('img', { name: /狀態分佈/ }).waitFor();
+await page.getByRole('img', { name: /未結案天數/ }).waitFor();
+await page.getByRole('group', { name: new RegExp(`常見標籤.*${TAG}`) }).waitFor();
+await page.getByRole('heading', { name: '工程師負載（未結案）' }).waitFor(); // staff-only row
+await shot('05d-dashboard-charts');
+// the donut legend is keyboard-reachable links: status → filtered list
+await page.getByRole('list', { name: '狀態分佈' }).getByRole('link', { name: '等待使用者回覆' }).click();
+await page.waitForURL(/\/tickets\?status=pending_user/);
+await page.getByRole('row').filter({ hasText: 'UI 測試：印表機無法列印' }).first().waitFor();
+await page.getByRole('row').filter({ hasText: 'UI 測試：交換器斷線' }).first().waitFor({ state: 'detached' });
+await page.getByLabel('主選單').getByRole('link', { name: '儀表板' }).click();
+await page.getByRole('group', { name: /常見標籤/ }).getByRole('link', { name: new RegExp(TAG) }).click();
+await page.waitForURL(new RegExp(`/tickets\\?tags=${TAG}`));
+await page.getByRole('row').filter({ hasText: 'UI 測試：標籤統計' }).first().waitFor();
+if ((await page.getByLabel('標籤', { exact: true }).inputValue()) !== TAG) throw new Error('tag filter not applied');
+
 step('admin: company logo');
 await page.getByLabel('主選單').getByRole('link', { name: '設定' }).click();
 // draw a test logo in the page so the run needs no fixture file
@@ -238,7 +266,13 @@ await p3.getByLabel('電子郵件').fill(ADMIN.email);
 await p3.getByLabel('密碼').fill(ADMIN.password);
 await p3.getByRole('button', { name: '登入' }).click();
 await p3.getByRole('heading', { name: '儀表板' }).waitFor();
+await p3.getByRole('img', { name: /近 30 天新增與解決/ }).waitFor();
 await noOverflow(p3, 'dashboard');
+await p3.screenshot({ path: `${SHOTS}/11a-dashboard-375-light.png`, fullPage: true });
+await p3.evaluate(() => { document.documentElement.dataset.theme = 'dark'; });
+await noOverflow(p3, 'dashboard (dark)');
+await p3.screenshot({ path: `${SHOTS}/11b-dashboard-375-dark.png`, fullPage: true });
+await p3.evaluate(() => { document.documentElement.dataset.theme = 'light'; });
 for (const [label, path] of [['ticket list', '/tickets'], ['admin users', '/admin/users']]) {
   await p3.goto(`${BASE}${path}`);
   await p3.waitForLoadState('networkidle');

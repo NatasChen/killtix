@@ -52,6 +52,21 @@ code, .mono { font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, mono
 .bar-row { display: grid; grid-template-columns: 130px 1fr 40px; gap: 12px; align-items: center; margin-bottom: 8px; font-size: 13px; }
 .bar-row .ant-progress { margin: 0; }
 .bar-row .num { text-align: right; }
+.bar-row > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+/* SVG charts scale with their viewBox and never exceed the card */
+.chart-svg { display: block; width: 100%; height: auto; margin: 0 auto; }
+.donut { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 16px; }
+.donut .chart-svg { flex: 0 0 150px; width: 150px; margin: 0; }
+.chart-legend { list-style: none; margin: 8px 0 0; padding: 0; font-size: 13px; }
+.donut .chart-legend { margin: 0; flex: 1 1 120px; min-width: 0; }
+.chart-legend li { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; min-width: 0; }
+.chart-legend li .num { margin-left: auto; }
+.chart-legend.inline { display: flex; flex-wrap: wrap; gap: 4px 20px; justify-content: center; }
+.chart-legend.inline li .num { margin-left: 0; }
+.swatch { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+.tag-cloud { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 10px; }
+.tag-cloud a { text-decoration: none; overflow-wrap: anywhere; }
+.tag-cloud a:hover, .tag-cloud a:focus-visible { text-decoration: underline; }
 
 /* ticket properties: let the value column shrink so a long selected name (assignee) is truncated, not widening the panel */
 .ticket-props table { table-layout: fixed; width: 100%; }

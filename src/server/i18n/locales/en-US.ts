@@ -103,6 +103,11 @@ const enUS: Record<string, string> = {
   'ui.dashboard.sla_met_rate': 'SLA met (30 days)', 'ui.dashboard.failed_notifications': 'Failed notifications',
   'ui.dashboard.by_status': 'By status', 'ui.dashboard.by_priority': 'Unresolved by priority', 'ui.dashboard.top_tags': 'Top tags (unresolved)',
   'ui.dashboard.top_help_topics': 'Help topics (unresolved)',
+  'ui.dashboard.trend30d': 'Created and resolved, last 30 days', 'ui.dashboard.created': 'Created', 'ui.dashboard.resolved': 'Resolved',
+  'ui.dashboard.trend_tip': '{date}: {created} created, {resolved} resolved', 'ui.dashboard.total': 'Total',
+  'ui.dashboard.aging': 'Unresolved by age', 'ui.dashboard.aging_range': '{range} days',
+  'ui.dashboard.sla_no_data': 'No tickets resolved in the last 30 days', 'ui.dashboard.workload': 'Engineer workload (unresolved)',
+  'ui.dashboard.by_team': 'Unresolved by team', 'ui.dashboard.no_team': 'No team',
 
   'ui.tickets.search': 'Search', 'ui.tickets.search_placeholder': 'Subject or ticket number', 'ui.tickets.status': 'Status',
   'ui.tickets.priority': 'Priority', 'ui.tickets.assignee': 'Assignee', 'ui.tickets.assigned_to_me': 'Assigned to me',

@@ -18,6 +18,7 @@ import {
   agingCondition,
   buildTicketConditions,
   customFieldFiltersFromQuery,
+  dashboardCharts,
   decodeFieldValue,
   listTickets,
   ticketFilterSchema,
@@ -97,6 +98,7 @@ export const reportRoutes = new Hono<AppEnv>()
       topTags,
       topHelpTopics,
       failedNotifications,
+      ...(await dashboardCharts(c.var.deps, auth)),
     });
   })
 

@@ -6,6 +6,8 @@
 
 工單指派給團隊：使用者可屬於多個團隊，工單可指派給團隊由成員共同處理並認領。升級時啟動會自動套用 migration（新增 `team_members`）並一次性回填既有 `users.team_id`；不需新增環境變數，沒有部署變更。
 
+儀表板圖表：四張同型水平長條改為折線圖、環形圖、直條圖、tag cloud 與 SLA 儀表盤，並可點擊下鑽到工單清單。圖表以 SVG 自繪、不新增套件；沒有環境變數、部署或資料表變更。
+
 ### Added
 - 使用者可屬於多個團隊：新增 `team_members`（`team_id`、`user_id`，複合主鍵，皆 `on delete cascade`）。`users.team_id` 保留但不再使用，下一版移除（DECISIONS D14）。啟動時一次性把 `users.team_id` 有值的使用者回填到 `team_members`，完成後在 `system_settings` 記錄 `migrations.team_members_backfilled`，之後不再執行（管理員移除成員後不會被加回）。
 - 使用者 API 的團隊欄位改為 `teamIds: number[]`（建立、更新、`/auth/me`、`/catalog` 的使用者清單）；「使用者」頁的團隊欄位與新增使用者表單改為多選，「團隊」頁每列顯示成員數。
@@ -14,6 +16,8 @@
 - 工單詳情頁「負責人」欄位旁新增「我來處理」按鈕：有 `ticket:assign`、工單未結案且沒有負責人或負責人不是自己時顯示；按下後沿用 `PATCH /tickets/{id}` 把自己設為負責人（狀態為「新建立」時改為「處理中」並通知負責人），不新增 API。
 - 工單清單新增「團隊」篩選（全部／我的團隊／各團隊）與「團隊」欄；API 的 `teamId` 篩選參數接受團隊編號或 `mine`（目前使用者的任一團隊；沒有團隊時結果為空）。
 - 新增 `tests/teams.test.ts`（8 項：回填、多團隊 API、可見範圍與 404、廠商／一般使用者隔離、`teamId=mine`、建立時指定團隊、團隊通知收件者、認領）與 e2e 團隊步驟。
+- 儀表板改用多種圖表（PRD FR-3.5、DECISIONS D15）：近 30 天新增與解決折線圖、狀態環形圖、未結案天數直條圖（超過 3 天的三組用警示色）、SLA 達標率儀表盤、熱門標籤 tag cloud，內部人員另有工程師負載與各團隊未結案。圖表在新的 `components/charts.tsx` 以 SVG 自繪，不新增套件；點圖表會進入對應篩選的工單清單（狀態、標籤、優先度、超過 3 天、團隊、負責人，「未指派」為 `assignee=none`）。
+- `GET /reports/dashboard` 新增 `trend30d`（30 天、依 `config.timezone` 切日、沒有資料補 0）、`agingBuckets`（超過 3 天的三組沿用 `agingCondition()`，加總等於 `olderThan3Days`）、`workload` 與 `byTeam`（只給內部人員，其他人為 `null`），都只統計自己看得到的工單。新增 `tests/dashboard.test.ts`（5 項）與 e2e 儀表板步驟。
 
 ### Changed
 - 可見範圍：有 `ticket:read:team` 的使用者改為可看到 `tickets.team_id` 是自己**任一**團隊的工單，條件以 `exists (select 1 from team_members …)` 子查詢寫在查詢層（`ticketScope()`）。外部廠商與一般使用者維持現狀：即使被加入團隊，仍只看得到被指派、自己開立或被加入關注的工單；看不到的工單一律回 404。

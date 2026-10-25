@@ -5,8 +5,10 @@ import {
   desc,
   eq,
   exists,
+  gte,
   ilike,
   inArray,
+  isNotNull,
   isNull,
   lt,
   notInArray,
@@ -470,6 +472,84 @@ export function buildTicketConditions(actor: Actor, filters: TicketFilters, now:
     );
   }
   return conds;
+}
+
+// ---------------------------------------------------------------------------
+// Dashboard charts (GET /reports/dashboard). Every query starts from buildTicketConditions(), so
+// each user only counts the tickets they can see; "older than 3 days" is agingCondition().
+// ---------------------------------------------------------------------------
+export const AGING_BUCKET_KEYS = ['0-1', '1-3', '3-7', '7-14', '14+'] as const;
+
+/** The last `days` calendar dates (YYYY-MM-DD) in `timezone`, oldest first, ending today. */
+export function recentDates(now: Date, timezone: string, days: number): string[] {
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
+  const [y, m, d] = today.split('-').map(Number);
+  return Array.from({ length: days }, (_, i) => new Date(Date.UTC(y, m - 1, d - (days - 1 - i))).toISOString().slice(0, 10));
+}
+
+export async function dashboardCharts(deps: Deps, actor: Actor) {
+  const { db, clock, config } = deps;
+  const now = clock();
+  const base = buildTicketConditions(actor, ticketFilterSchema.parse({}), now);
+  const where = (...extra: (SQL | undefined)[]) => and(...base, ...extra);
+  const open = notInArray(tickets.status, CLOSED_STATUSES);
+  const countWhere = async (cond: SQL | undefined) => (await db.select({ n: count() }).from(tickets).where(cond))[0].n;
+
+  // Created / resolved per local calendar day. Rows are grouped by the day string in SQL; the lower
+  // bound is generous (31 days) and the 30 wanted dates are picked in code.
+  const dates = recentDates(now, config.timezone, 30);
+  const windowStart = new Date(now.getTime() - 31 * 86_400_000);
+  const perDay = async (column: typeof tickets.createdAt | typeof tickets.resolvedAt) => {
+    const rows = await db
+      .select({ day: sql<string>`to_char(${column} at time zone ${config.timezone}, 'YYYY-MM-DD')`, n: count() })
+      .from(tickets)
+      .where(where(isNotNull(column), gte(column, windowStart)))
+      .groupBy(sql`1`);
+    return new Map(rows.map((r) => [r.day, r.n]));
+  };
+  const [created, resolved] = await Promise.all([perDay(tickets.createdAt), perDay(tickets.resolvedAt)]);
+  const trend30d = dates.map((date) => ({ date, created: created.get(date) ?? 0, resolved: resolved.get(date) ?? 0 }));
+
+  // Open tickets by age: (0,1], (1,3], (3,7], (7,14], (14,∞) days. Everything above 3 days goes through
+  // agingCondition(), so 3-7 + 7-14 + 14+ always equals the dashboard's olderThan3Days.
+  const over3 = agingCondition(now, 3);
+  const [d1, d3, d7, d14] = [1, 3, 7, 14].map((d) => agingCutoff(now, d));
+  const bucketConds = [
+    and(open, gte(tickets.createdAt, d1)),
+    and(open, lt(tickets.createdAt, d1), gte(tickets.createdAt, d3)),
+    and(over3, gte(tickets.createdAt, d7)),
+    and(over3, lt(tickets.createdAt, d7), gte(tickets.createdAt, d14)),
+    and(over3, lt(tickets.createdAt, d14)),
+  ];
+  const counts = await Promise.all(bucketConds.map((c) => countWhere(where(c))));
+  const agingBuckets = AGING_BUCKET_KEYS.map((key, i) => ({ key, n: counts[i] }));
+
+  // Open tickets per assignee (top 10 + unassigned) and per team (+ no team); staff only.
+  let workload: { assigneeId: number | null; name: string | null; n: number }[] | null = null;
+  let byTeam: { teamId: number | null; name: string | null; n: number }[] | null = null;
+  if (isStaff(actor.permissions)) {
+    const people = await db
+      .select({ assigneeId: tickets.assigneeId, name: users.displayName, n: count() })
+      .from(tickets)
+      .innerJoin(users, eq(users.id, tickets.assigneeId))
+      .where(where(open))
+      .groupBy(tickets.assigneeId, users.displayName)
+      .orderBy(desc(count()), asc(users.displayName))
+      .limit(10);
+    const unassigned = await countWhere(where(open, isNull(tickets.assigneeId)));
+    workload = [...people, { assigneeId: null, name: null, n: unassigned }];
+
+    const groups = await db
+      .select({ teamId: tickets.teamId, name: teams.name, n: count() })
+      .from(tickets)
+      .innerJoin(teams, eq(teams.id, tickets.teamId))
+      .where(where(open))
+      .groupBy(tickets.teamId, teams.name)
+      .orderBy(desc(count()), asc(teams.name));
+    const noTeam = await countWhere(where(open, isNull(tickets.teamId)));
+    byTeam = [...groups, { teamId: null, name: null, n: noTeam }];
+  }
+  return { trend30d, agingBuckets, workload, byTeam };
 }
 
 const requesterUser = alias(users, 'requester');

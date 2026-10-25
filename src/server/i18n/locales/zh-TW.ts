@@ -103,6 +103,11 @@ const zhTW: Record<string, string> = {
   'ui.dashboard.sla_met_rate': 'SLA 達標率（30 天）', 'ui.dashboard.failed_notifications': '通知發送失敗',
   'ui.dashboard.by_status': '狀態分佈', 'ui.dashboard.by_priority': '未結案優先度', 'ui.dashboard.top_tags': '常見標籤（未結案）',
   'ui.dashboard.top_help_topics': '服務類別（未結案）',
+  'ui.dashboard.trend30d': '近 30 天新增與解決', 'ui.dashboard.created': '新增', 'ui.dashboard.resolved': '解決',
+  'ui.dashboard.trend_tip': '{date}：新增 {created}、解決 {resolved}', 'ui.dashboard.total': '合計',
+  'ui.dashboard.aging': '未結案天數', 'ui.dashboard.aging_range': '{range} 天',
+  'ui.dashboard.sla_no_data': '最近 30 天沒有已解決的工單', 'ui.dashboard.workload': '工程師負載（未結案）',
+  'ui.dashboard.by_team': '各團隊未結案', 'ui.dashboard.no_team': '沒有團隊',
 
   'ui.tickets.search': '搜尋', 'ui.tickets.search_placeholder': '主旨或工單編號', 'ui.tickets.status': '狀態',
   'ui.tickets.priority': '優先度', 'ui.tickets.assignee': '負責人', 'ui.tickets.assigned_to_me': '指派給我',

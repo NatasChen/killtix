@@ -377,6 +377,18 @@ ORDER BY t.created_at ASC;
 6. Dashboard 之積壓數字與列表查詢結果必須一致（共用同一 Service 方法，禁止重複實作）。
 7. 支援排程報表：每日 09:00 自動寄送「超過 3 天未結案」清單給 `it_manager`。
 
+#### FR-3.5 儀表板圖表（P1，`[Unreleased]`）
+儀表板（`pages/Dashboard.tsx`、`GET /reports/dashboard`）的數字卡（KPI）內容與計算方式不變，四張同型水平長條改為多種圖表。**不新增任何套件**：圖表以 SVG 自繪，SLA 達標率用 antd 內建 `Progress type="dashboard"`（DECISIONS D15）。
+- **API 新增資料**（全部沿用 `buildTicketConditions()`，每人只統計自己看得到的工單，FR-4.1）：
+  - `trend30d`：最近 30 天（含今天，依 `config.timezone` 切日）每日 `{ date: 'YYYY-MM-DD', created, resolved }`；固定 30 筆、日期連續、沒有資料的日子為 0；時間取自 `deps.clock()`。
+  - `agingBuckets`：未結案工單依已開立天數分為 `0-1`／`1-3`／`3-7`／`7-14`／`14+`；「超過 3 天」的界線沿用 `agingCondition()`（FR-3.4），後三組加總等於既有的 `olderThan3Days`。
+  - `workload`：未結案工單依負責人統計，依件數由多到少取前 10 名，另加「未指派」一筆；`byTeam`：未結案工單依 `tickets.team_id` 統計，含「沒有團隊」一筆。兩者只回給內部人員（`isStaff()`），其他人為 `null`（同 `failedNotifications`）。
+- **圖表元件**：新增 `src/web/components/charts.tsx`，以 SVG 實作 `Donut`（環形圖，中間顯示總數，旁邊有圖例）、`LineChart`（新增與解決兩條折線，X 軸日期刻度、Y 軸刻度與圖例，滑過或聚焦資料點顯示當天數字）、`Columns`（直條圖，柱上或柱下標示數字）、`TagCloud`（依數量分至少 4 級字級，輪流使用 sticker 色）；既有的 `Bars`（水平長條）搬到此檔共用。顏色只取自 `palette.ts`（`usePalette()`、`tone()`），深淺色主題都正確，以 `viewBox` 縮放，375px 寬不可出現水平捲軸。
+- **可及性**：每個圖表加 `role="img"` 與描述內容的 `aria-label`，數字同時以文字呈現（不單靠顏色或圖形傳達，FR-5.2）。
+- **版面**：第一列近 30 天新增與解決折線圖（全寬）；第二列狀態環形圖、未結案天數直條圖（超過 3 天的三組用警示色）、SLA 達標率儀表盤；第三列優先度長條圖、熱門標籤 tag cloud（取代標籤長條圖）、服務類別長條圖；第四列只有內部人員：工程師負載長條圖、各團隊未結案長條圖。窄螢幕時每張圖一列。
+- **點擊導向清單**：狀態 → `/tickets?status=<狀態>`；標籤 → `/tickets?tags=<標籤>`；優先度 → `/tickets?priority=<n>`；未結案天數「超過 3 天」的任一組 → `/tickets?olderThanDays=3`；團隊 → `/tickets?teamId=<id>`；工程師負載的某人 → `/tickets?assignee=<id>`（「未指派」→ `assignee=none`）。可點元素為連結或按鈕，可用鍵盤操作。
+- **不在範圍**：word cloud（主旨斷詞）、任何圖表套件（含 `@ant-design/charts`）、日期區間選擇、匯出圖片；數字卡內容與計算方式、CSV 匯出、環境變數、部署方式與資料表皆不變。
+
 ---
 
 ### FR-4 權限與通知
@@ -684,6 +696,11 @@ curl -X POST https://ticket.example.com/api/v1/tickets \
 | AC-REPORT-01 | 3 天未結案 | 篩選結果與 SQL 基準查詢筆數零誤差；72 小時整邊界不計入 |
 | AC-REPORT-02 | 自訂欄位過濾 | 7 種運算子結果正確；`internal` 欄位僅管理角色可用 |
 | AC-REPORT-03 | 匯出 | CSV/XLSX/PDF 筆數與畫面一致；匯出寫入審計日誌 |
+| AC-REPORT-04 | 30 天趨勢（FR-3.5） | `trend30d` 固定 30 筆、日期連續、沒有資料的日子為 0；`ctx.clock` 控制時間時各日新增與解決數正確（含 `config.timezone` 切日）；真實 PostgreSQL 亦通過 |
+| AC-REPORT-05 | 未結案天數分組（FR-3.5） | `agingBuckets` 的 `3-7`、`7-14`、`14+` 加總等於 `olderThan3Days`；剛好 72 小時的工單不算超過 3 天 |
+| AC-REPORT-06 | 可見範圍與內部統計（FR-3.5） | 一般使用者只統計自己看得到的工單且 `workload`／`byTeam` 為 `null`；工程師只統計自己範圍內（含所屬團隊）的工單；`workload` 依未結案數由多到少、最多 10 人另加「未指派」；`byTeam` 含「沒有團隊」；兩者數字與清單篩選（`assignee`、`teamId`）筆數一致 |
+| AC-REPORT-07 | 圖表可及性與主題（FR-3.5） | 每個圖表有 `role="img"` 與描述內容的 `aria-label`、數字以文字呈現；顏色只取自 `palette.ts`，淺色與深色主題皆正確（`tests/styles.test.ts` 通過）；375px 寬無水平捲軸 |
+| AC-REPORT-08 | 圖表點擊導向（FR-3.5） | 點狀態／標籤／優先度／超過 3 天分組／團隊／工程師負載分別進入工單清單且對應篩選已套用（「未指派」為 `assignee=none`）；可點元素可用鍵盤操作；e2e 涵蓋環形圖與 tag cloud 兩條路徑 |
 | AC-TEAM-01 | 團隊成員升級回填（FR-2.11） | `users.team_id` 有值的使用者啟動後出現在 `team_members`；管理員把他移出團隊、重新啟動後不會被加回（`system_settings` 已記錄回填完成） |
 | AC-TEAM-02 | 多團隊可見範圍（FR-2.11） | 屬於兩個團隊的工程師看得到兩個團隊的工單；不屬於該團隊的工程師讀取該團隊工單回 `404`、清單中也看不到；被移出團隊後立即看不到 |
 | AC-TEAM-03 | 廠商與一般使用者隔離（FR-2.11） | 屬於某團隊的 `vendor` 與 `end_user`，看不到該團隊中未指派給他、非他開立、未關注的工單（回 `404`） |
@@ -793,6 +810,7 @@ curl -X POST https://ticket.example.com/api/v1/tickets \
 | FR-2.1~2.8 | 需求 2（工單核心 + osTicket 模組） | AC-TICKET-01~07 | §Ticket Core |
 | FR-2.9 | 需求 2（SOC REST API） | AC-API-01~02 | §API |
 | FR-3.1~3.4 | 需求 3（Dashboard / 報表 / 3 天未結案） | AC-REPORT-01~03 | §Reporting |
+| FR-3.5 | 需求變更（儀表板改用多種圖表） | AC-REPORT-04~08 | §Reporting |
 | FR-4.1 | 需求 4（RBAC） | AC-RBAC-01~02 | §RBAC/IDOR |
 | FR-4.2 | 需求 4（多管道通知） | AC-NOTIFY-01~02 | §Notification |
 | FR-4.3 | 需求變更（郵件設定與 Resend） | AC-MAIL-01~03 | §Notification |
