@@ -65,6 +65,8 @@ export const users = pgTable(
     roleKey: varchar('role_key', { length: 32 })
       .notNull()
       .references(() => roles.key),
+    // Deprecated since v0.5.0: team membership now lives in `team_members`. Kept only so the
+    // one-time backfill in db/seed.ts can migrate existing data; never read or written elsewhere.
     teamId: integer('team_id').references(() => teams.id, { onDelete: 'set null' }),
     identityProvider: varchar('identity_provider', { length: 16 }).notNull().default('local'),
     mustChangePassword: boolean('must_change_password').notNull().default(false),
@@ -90,6 +92,19 @@ export const users = pgTable(
     check('chk_users_email_lower', sql`${t.email} = lower(${t.email})`),
     check('chk_users_theme', sql`${t.theme} in ('light','dark','system')`),
   ],
+);
+
+export const teamMembers = pgTable(
+  'team_members',
+  {
+    teamId: integer('team_id')
+      .notNull()
+      .references(() => teams.id, { onDelete: 'cascade' }),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+  },
+  (t) => [primaryKey({ columns: [t.teamId, t.userId] }), index('idx_team_members_user').on(t.userId)],
 );
 
 export const passwordHistory = pgTable(

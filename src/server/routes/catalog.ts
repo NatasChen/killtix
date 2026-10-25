@@ -2,7 +2,7 @@ import { and, asc, eq, inArray } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { authOf, guard } from '../auth/session.js';
 import type { AppEnv } from '../context.js';
-import { cannedResponses, customFields, helpTopics, slaPlans, tags, teams, ticketForms, users } from '../db/schema.js';
+import { cannedResponses, customFields, helpTopics, slaPlans, tags, teams, teamMembers, ticketForms, users } from '../db/schema.js';
 import { isStaff } from '../rbac.js';
 
 /** Read-only lookups used to build forms and filters. */
@@ -61,16 +61,23 @@ export const catalogRoutes = new Hono<AppEnv>()
       .from(customFields)
       .innerJoin(ticketForms, eq(ticketForms.id, customFields.formId))
       .where(and(eq(customFields.isFilterable, true), eq(customFields.isActive, true)));
+    const userRows = await db
+      .select({ id: users.id, displayName: users.displayName, email: users.email, role: users.roleKey })
+      .from(users)
+      .where(and(eq(users.isActive, true), inArray(users.roleKey, ['super_admin', 'it_manager', 'agent', 'vendor', 'end_user'])))
+      .orderBy(asc(users.displayName));
+    const memberships = await db
+      .select({ userId: teamMembers.userId, teamId: teamMembers.teamId })
+      .from(teamMembers)
+      .where(inArray(teamMembers.userId, userRows.map((u) => u.id)));
+    const teamIdsByUser = new Map<number, number[]>();
+    for (const m of memberships) teamIdsByUser.set(m.userId, [...(teamIdsByUser.get(m.userId) ?? []), m.teamId]);
     return c.json({
       tags: allTags,
       teams: await db.select().from(teams).orderBy(asc(teams.name)),
       slaPlans: await db.select().from(slaPlans).where(eq(slaPlans.isActive, true)),
       cannedResponses: await db.select().from(cannedResponses).where(eq(cannedResponses.isActive, true)).orderBy(asc(cannedResponses.name)),
-      users: await db
-        .select({ id: users.id, displayName: users.displayName, email: users.email, role: users.roleKey, teamId: users.teamId })
-        .from(users)
-        .where(and(eq(users.isActive, true), inArray(users.roleKey, ['super_admin', 'it_manager', 'agent', 'vendor', 'end_user'])))
-        .orderBy(asc(users.displayName)),
+      users: userRows.map((u) => ({ ...u, teamIds: teamIdsByUser.get(u.id) ?? [] })),
       filterableFields,
     });
   });

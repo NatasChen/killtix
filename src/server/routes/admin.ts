@@ -1,9 +1,10 @@
-import { and, asc, count, desc, eq, ilike, ne, or } from 'drizzle-orm';
+import { and, asc, count, desc, eq, ilike, inArray, ne, or } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { hashPassword, randomPassword, randomToken, sha256 } from '../auth/crypto.js';
 import { authOf, guard, revokeAllSessions } from '../auth/session.js';
 import type { AppContext, AppEnv } from '../context.js';
+import type { DB } from '../db/client.js';
 import {
   apiTokens,
   auditLogs,
@@ -19,6 +20,7 @@ import {
   slaPlans,
   tags,
   teams,
+  teamMembers,
   ticketForms,
   users,
 } from '../db/schema.js';
@@ -97,6 +99,34 @@ async function activeSuperAdmins(c: AppContext) {
   return n;
 }
 
+async function teamIdsFor(db: DB, userIds: number[]): Promise<Map<number, number[]>> {
+  const map = new Map<number, number[]>();
+  if (!userIds.length) return map;
+  const rows = await db
+    .select({ userId: teamMembers.userId, teamId: teamMembers.teamId })
+    .from(teamMembers)
+    .where(inArray(teamMembers.userId, userIds));
+  for (const r of rows) map.set(r.userId, [...(map.get(r.userId) ?? []), r.teamId]);
+  return map;
+}
+
+async function assertTeamsExist(db: DB, teamIds: number[]) {
+  if (!teamIds.length) return;
+  const rows = await db.select({ id: teams.id }).from(teams).where(inArray(teams.id, teamIds));
+  if (rows.length !== new Set(teamIds).size) {
+    throw badRequest(undefined, { errors: [{ path: 'teamIds', message: 'unknown team' }] });
+  }
+}
+
+async function replaceTeamMembers(db: DB, userId: number, teamIds: number[]) {
+  await db.transaction(async (tx) => {
+    await tx.delete(teamMembers).where(eq(teamMembers.userId, userId));
+    if (teamIds.length) {
+      await tx.insert(teamMembers).values(teamIds.map((teamId) => ({ userId, teamId }))).onConflictDoNothing();
+    }
+  });
+}
+
 const manageUsers = guard({ permission: 'admin:users' });
 const manageCatalog = guard({ permission: 'catalog:manage' });
 const manageSystem = guard({ permission: 'admin:settings' });
@@ -116,7 +146,16 @@ export const adminRoutes = new Hono<AppEnv>()
       )
       .orderBy(asc(users.email))
       .limit(500);
-    return c.json(rows.map((u) => ({ ...publicUser(u), isActive: u.isActive, lockedUntil: u.lockedUntil, lastLoginAt: u.lastLoginAt, identityProvider: u.identityProvider })));
+    const memberships = await teamIdsFor(c.var.deps.db, rows.map((u) => u.id));
+    return c.json(
+      rows.map((u) => ({
+        ...publicUser(u, memberships.get(u.id) ?? []),
+        isActive: u.isActive,
+        lockedUntil: u.lockedUntil,
+        lastLoginAt: u.lastLoginAt,
+        identityProvider: u.identityProvider,
+      })),
+    );
   })
 
   .post('/users', manageUsers, async (c) => {
@@ -127,9 +166,10 @@ export const adminRoutes = new Hono<AppEnv>()
         email: z.email().max(255),
         displayName: name,
         role: z.enum(ROLE_KEYS),
-        teamId: id.nullable().optional(),
+        teamIds: z.array(id).max(50).default([]),
       }),
     );
+    await assertTeamsExist(db, body.teamIds);
     // New accounts get a one-time password and must change it at first login.
     const temporaryPassword = randomPassword();
     const passwordHash = await hashPassword(temporaryPassword, config.bcryptCost);
@@ -140,15 +180,15 @@ export const adminRoutes = new Hono<AppEnv>()
           email: body.email.toLowerCase(),
           displayName: body.displayName,
           roleKey: body.role,
-          teamId: body.teamId ?? null,
           passwordHash,
           mustChangePassword: true,
           locale: config.defaultLocale,
         })
         .returning(),
     );
-    await audit(c, 'admin.user_created', { type: 'user', id: user.id }, { role: body.role });
-    return c.json({ user: publicUser(user), temporaryPassword }, 201);
+    await replaceTeamMembers(db, user.id, body.teamIds);
+    await audit(c, 'admin.user_created', { type: 'user', id: user.id }, { role: body.role, teamIds: body.teamIds });
+    return c.json({ user: publicUser(user, body.teamIds), temporaryPassword }, 201);
   })
 
   .patch('/users/:id', manageUsers, async (c) => {
@@ -161,7 +201,7 @@ export const adminRoutes = new Hono<AppEnv>()
         .object({
           displayName: name.optional(),
           role: z.enum(ROLE_KEYS).optional(),
-          teamId: id.nullable().optional(),
+          teamIds: z.array(id).max(50).optional(),
           isActive: z.boolean().optional(),
         })
         .strict(),
@@ -175,14 +215,16 @@ export const adminRoutes = new Hono<AppEnv>()
     if (userId === auth.user.id && (body.isActive === false || (body.role && body.role !== target.roleKey))) {
       throw new ApiError(409, 'cannot_modify_self');
     }
+    if (body.teamIds) await assertTeamsExist(db, body.teamIds);
     const [updated] = await db
       .update(users)
-      .set({ displayName: body.displayName, roleKey: body.role, teamId: body.teamId, isActive: body.isActive })
+      .set({ displayName: body.displayName, roleKey: body.role, isActive: body.isActive })
       .where(eq(users.id, userId))
       .returning();
+    if (body.teamIds) await replaceTeamMembers(db, userId, body.teamIds);
     if (body.isActive === false || body.role) await db.delete(sessions).where(eq(sessions.userId, userId));
     await audit(c, 'admin.user_updated', { type: 'user', id: userId }, body);
-    return c.json(publicUser(updated));
+    return c.json(publicUser(updated, body.teamIds ?? (await teamIdsFor(db, [userId])).get(userId) ?? []));
   })
 
   .post('/users/:id/reset-password', manageUsers, async (c) => {
@@ -228,7 +270,15 @@ export const adminRoutes = new Hono<AppEnv>()
   .get('/roles', manageUsers, async (c) => c.json(await c.var.deps.db.select().from(roles).orderBy(asc(roles.key))))
 
   // ------------------------------------------------------------------ teams
-  .get('/teams', manageCatalog, async (c) => c.json(await c.var.deps.db.select().from(teams).orderBy(asc(teams.name))))
+  .get('/teams', manageCatalog, async (c) => {
+    const rows = await c.var.deps.db.select().from(teams).orderBy(asc(teams.name));
+    const counts = await c.var.deps.db
+      .select({ teamId: teamMembers.teamId, n: count() })
+      .from(teamMembers)
+      .groupBy(teamMembers.teamId);
+    const byTeam = new Map(counts.map((r) => [r.teamId, r.n]));
+    return c.json(rows.map((t) => ({ ...t, memberCount: byTeam.get(t.id) ?? 0 })));
+  })
   .post('/teams', manageCatalog, async (c) => {
     const body = await parseJson(c, z.object({ name, description: z.string().max(2000).optional() }));
     const [row] = await unique(() => c.var.deps.db.insert(teams).values(body).returning());

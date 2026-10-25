@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { notificationLogs, tickets, ticketThreads, users } from '../src/server/db/schema.js';
+import { notificationLogs, teamMembers, tickets, ticketThreads, users } from '../src/server/db/schema.js';
 import { createTestContext, type TestContext } from './helpers.js';
 
 let ctx: TestContext;
@@ -13,11 +13,18 @@ beforeAll(async () => {
   admin = await ctx.adminClient();
   const team = (await admin.post('/api/v1/admin/teams', { name: 'Service Desk' })).body;
   const otherTeam = (await admin.post('/api/v1/admin/teams', { name: 'Network' })).body;
+  const agent = await ctx.createUser('agent@example.com', 'agent');
+  const otherAgent = await ctx.createUser('agent2@example.com', 'agent');
+  // Team visibility now comes from team_members; users.team_id is kept but no longer read.
+  await ctx.db.insert(teamMembers).values([
+    { teamId: team.id, userId: agent.id },
+    { teamId: otherTeam.id, userId: otherAgent.id },
+  ]);
   ids = {
     team: team.id,
     otherTeam: otherTeam.id,
-    agent: (await ctx.createUser('agent@example.com', 'agent', { teamId: team.id })).id,
-    otherAgent: (await ctx.createUser('agent2@example.com', 'agent', { teamId: otherTeam.id })).id,
+    agent: agent.id,
+    otherAgent: otherAgent.id,
     vendor: (await ctx.createUser('vendor@example.com', 'vendor')).id,
     vendor2: (await ctx.createUser('vendor2@example.com', 'vendor')).id,
     user: (await ctx.createUser('user@example.com', 'end_user')).id,

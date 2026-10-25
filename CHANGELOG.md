@@ -4,6 +4,20 @@
 
 ## [Unreleased]
 
+工單指派給團隊：使用者可屬於多個團隊，工單可指派給團隊由成員共同處理並認領。升級時啟動會自動套用 migration（新增 `team_members`）並一次性回填既有 `users.team_id`；不需新增環境變數，沒有部署變更。
+
+### Added
+- 使用者可屬於多個團隊：新增 `team_members`（`team_id`、`user_id`，複合主鍵，皆 `on delete cascade`）。`users.team_id` 保留但不再使用，下一版移除（DECISIONS D14）。啟動時一次性把 `users.team_id` 有值的使用者回填到 `team_members`，完成後在 `system_settings` 記錄 `migrations.team_members_backfilled`，之後不再執行（管理員移除成員後不會被加回）。
+- 使用者 API 的團隊欄位改為 `teamIds: number[]`（建立、更新、`/auth/me`、`/catalog` 的使用者清單）；「使用者」頁的團隊欄位與新增使用者表單改為多選，「團隊」頁每列顯示成員數。
+- 新增工單時可選團隊（`tickets/new` 的「團隊」下拉選單，只有 `ticket:assign` 權限者看得到）；`createTicketSchema` 新增選填 `teamId`，沒有 `ticket:assign` 回 403、團隊不存在回 400；未填時沿用服務類別的預設團隊。團隊與負責人可同時或只指定其中一個。
+- 通知事件 `team_assigned`：工單建立時有團隊且沒有負責人，或更新時團隊改變且沒有負責人時，通知該團隊所有啟用中、具 `ticket:read:team` 或 `ticket:read:all` 權限的成員（不含操作者；廠商與一般使用者不會收到）。已有負責人時不發此通知。
+- 工單詳情頁「負責人」欄位旁新增「我來處理」按鈕：有 `ticket:assign`、工單未結案且沒有負責人或負責人不是自己時顯示；按下後沿用 `PATCH /tickets/{id}` 把自己設為負責人（狀態為「新建立」時改為「處理中」並通知負責人），不新增 API。
+- 工單清單新增「團隊」篩選（全部／我的團隊／各團隊）與「團隊」欄；API 的 `teamId` 篩選參數接受團隊編號或 `mine`（目前使用者的任一團隊；沒有團隊時結果為空）。
+
+### Changed
+- 可見範圍：有 `ticket:read:team` 的使用者改為可看到 `tickets.team_id` 是自己**任一**團隊的工單，條件以 `exists (select 1 from team_members …)` 子查詢寫在查詢層（`ticketScope()`）。外部廠商與一般使用者維持現狀：即使被加入團隊，仍只看得到被指派、自己開立或被加入關注的工單；看不到的工單一律回 404。
+- `rbac.ts` 的 `ticketScope()`、`routes/util.ts` 的 `publicUser`、`routes/catalog.ts` 的使用者清單、`routes/admin.ts` 的使用者建立與更新、前端 `auth.tsx` 的型別都改讀寫 `team_members`，不再讀寫 `users.team_id`。
+
 ## [0.4.0] - 2026-10-25
 
 升級：啟動時自動套用 migration `0001_brand_logos`；不需新增環境變數，Email 預設沿用既有的 `SMTP_*`。

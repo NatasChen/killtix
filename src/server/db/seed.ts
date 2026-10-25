@@ -1,9 +1,9 @@
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, isNotNull, sql } from 'drizzle-orm';
 import { hashPassword, randomPassword } from '../auth/crypto.js';
 import type { Config } from '../config.js';
 import { ROLE_DEFINITIONS } from '../rbac.js';
 import type { DB } from './client.js';
-import { helpTopics, roles, slaPlans, users } from './schema.js';
+import { helpTopics, roles, slaPlans, systemSettings, teamMembers, users } from './schema.js';
 
 export interface SeedResult {
   /** Set only when the bootstrap admin was created in this run with a generated password. */
@@ -16,7 +16,30 @@ export interface SeedResult {
  * changed admin password) are never overwritten, except role permissions, which are
  * code-defined and kept in sync.
  */
+const TEAM_MEMBERS_BACKFILL_KEY = 'migrations.team_members_backfilled';
+
+/** One-time data migration: copy the deprecated `users.team_id` into `team_members`. */
+async function backfillTeamMembers(db: DB) {
+  const [flag] = await db.select().from(systemSettings).where(eq(systemSettings.key, TEAM_MEMBERS_BACKFILL_KEY));
+  if (flag) return;
+  const rows = await db
+    .select({ userId: users.id, teamId: users.teamId })
+    .from(users)
+    .where(isNotNull(users.teamId));
+  if (rows.length) {
+    await db
+      .insert(teamMembers)
+      .values(rows.map((r) => ({ userId: r.userId, teamId: r.teamId! })))
+      .onConflictDoNothing();
+  }
+  await db
+    .insert(systemSettings)
+    .values({ key: TEAM_MEMBERS_BACKFILL_KEY, value: true })
+    .onConflictDoNothing();
+}
+
 export async function seed(db: DB, config: Pick<Config, 'bootstrapAdminEmail' | 'bootstrapAdminPassword' | 'bcryptCost' | 'defaultLocale'>): Promise<SeedResult> {
+  await backfillTeamMembers(db);
   for (const [key, def] of Object.entries(ROLE_DEFINITIONS)) {
     await db
       .insert(roles)

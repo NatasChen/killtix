@@ -39,13 +39,13 @@ export async function rateLimit(c: AppContext, key: string, limit: number, windo
   }
 }
 
-export function publicUser(u: User) {
+export function publicUser(u: User, teamIds: number[] = []) {
   return {
     id: u.id,
     email: u.email,
     displayName: u.displayName,
     role: u.roleKey,
-    teamId: u.teamId,
+    teamIds,
     locale: u.locale,
     theme: u.theme,
     twoFactorEnabled: u.twoFactorEnabled,

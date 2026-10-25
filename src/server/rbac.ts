@@ -1,5 +1,5 @@
 import { and, eq, exists, or, sql, type SQL } from 'drizzle-orm';
-import { tickets, ticketWatchers, type User } from './db/schema.js';
+import { teamMembers, tickets, ticketWatchers, type User } from './db/schema.js';
 
 /**
  * Permission catalogue.
@@ -52,7 +52,7 @@ export const isStaff = (perms: string[]) => can(perms, 'ticket:note');
  * Row-level visibility condition for tickets, applied in the SQL query itself so that
  * unauthorized rows are never loaded (IDOR protection). Returns undefined for "all".
  */
-export function ticketScope(user: Pick<User, 'id' | 'teamId'>, perms: string[], tokenId?: number): SQL | undefined {
+export function ticketScope(user: Pick<User, 'id'>, perms: string[], tokenId?: number): SQL | undefined {
   if (can(perms, 'ticket:read:all')) return undefined;
   const related = or(
     eq(tickets.requesterId, user.id),
@@ -66,9 +66,18 @@ export function ticketScope(user: Pick<User, 'id' | 'teamId'>, perms: string[], 
       )})`,
     ),
   )!;
-  if (can(perms, 'ticket:read:team') && user.teamId != null) {
-    return or(related, eq(tickets.teamId, user.teamId))!;
+  if (can(perms, 'ticket:read:team')) {
+    // Team visibility is applied in the SQL query itself: any team the user belongs to.
+    return or(
+      related,
+      exists(
+        sql`(select 1 from ${teamMembers} where ${and(
+          eq(teamMembers.userId, user.id),
+          eq(teamMembers.teamId, tickets.teamId),
+        )})`,
+      ),
+    )!;
   }
-  if (can(perms, 'ticket:read:team') || can(perms, 'ticket:read:own')) return related;
+  if (can(perms, 'ticket:read:own')) return related;
   return sql`false`;
 }

@@ -316,6 +316,18 @@ new ──▶ open ──▶ pending_user ──▶ open
 - 有指派權限（`ticket:assign`）的人在新增工單時即可指派負責人；指派後工單為 `open`，並通知負責人。
 - 工單合併 (Merge) 與子工單 (Linked Tickets) 為 P1。
 
+#### FR-2.11 團隊指派與認領（P0，`[Unreleased]`）
+工單可指派給團隊，由團隊成員共同處理，再由其中一人認領成為負責人。
+- **使用者可屬於多個團隊**：`team_members`（`team_id`、`user_id`，複合主鍵，皆 `on delete cascade`）。`users.team_id` 保留但不再使用，下一版移除（DECISIONS D14）。升級時一次性把 `users.team_id` 有值的使用者回填到 `team_members`，完成後記錄於 `system_settings`（`migrations.team_members_backfilled`），之後啟動不再執行，管理員移除成員後不會被加回。
+- **API 欄位**：使用者的團隊欄位為 `teamIds: number[]`（使用者建立、更新、`/auth/me`、`/catalog` 的使用者清單）。
+- **可見範圍**：有 `ticket:read:team` 的使用者看得到 `tickets.team_id` 是自己任一團隊的工單，條件以 `exists (select 1 from team_members …)` 寫在查詢層（FR-4.1）。`vendor` 與 `end_user` 維持現狀：即使被加入團隊，仍只看得到被指派、自己開立或被加入關注的工單；看不到的工單回 `404`。
+- **新增工單可選團隊**：`tickets/new` 在「負責人」旁加「團隊」下拉選單，只有 `ticket:assign` 權限者看得到；`createTicketSchema` 新增選填 `teamId`，沒有 `ticket:assign` 回 `403`、團隊不存在回 `400`；未填時沿用服務類別的預設團隊。團隊與負責人可同時指定，也可只指定其中一個；只指定團隊時狀態維持 `new`。
+- **指派給團隊的通知**：事件 `team_assigned`。觸發時機為工單建立時有團隊且沒有負責人，或更新時團隊改變且工單沒有負責人；收件者為該團隊所有啟用中、具 `ticket:read:team` 或 `ticket:read:all` 權限的成員（不含執行這個動作的人），廠商與一般使用者不會收到。已有負責人時不發這個通知（照舊只通知負責人）。
+- **認領（「我來處理」）**：工單詳情頁「負責人」欄位旁新增按鈕，條件為目前使用者有 `ticket:assign`、工單沒有負責人或負責人不是自己、工單未結案；按下後以既有的 `PATCH /tickets/{id}` 把負責人設為自己（狀態為 `new` 時改為 `open`，並通知負責人），不新增 API。
+- **清單篩選**：工單清單的篩選列加「團隊」（全部／我的團隊／各團隊名稱），清單加「團隊」欄；API 的 `teamId` 參數接受團隊編號或 `mine`（目前使用者的任一團隊；沒有團隊時結果為空）。
+- **管理介面**：「使用者」頁的團隊欄位與新增使用者表單改為多選（antd `Select mode="multiple"`，label 綁定控制項）；「團隊」頁每列顯示成員數。
+- **不在範圍**：工單同時指派給多個團隊；團隊主管、團隊層級權限或 SLA；依團隊的報表；廠商透過團隊看到工單；移除 `users.team_id`；SLA 逾時通知的收件者；新的環境變數或部署變更；儀表板（下一張變更單）。
+
 ---
 
 ### FR-3 報表與儀表板
@@ -382,7 +394,7 @@ ORDER BY t.created_at ASC;
 #### FR-4.2 多管道通知（P0）
 | 管道 | 觸發事件 | 設定 | 可靠度要求 |
 | --- | --- | --- | --- |
-| **Email (SMTP)** | 開單、指派、回覆、狀態變更、SLA 預警/逾時 | SMTP host/port/TLS、寄件者、範本 | 失敗重試 3 次（指數退避），記錄 `notification_logs` |
+| **Email (SMTP)** | 開單、指派（含指派給團隊，事件 `team_assigned`）、回覆、狀態變更、SLA 預警/逾時 | SMTP host/port/TLS、寄件者、範本 | 失敗重試 3 次（指數退避），記錄 `notification_logs` |
 | **Telegram Bot** | 指派、Level 4/5 開單、SLA 逾時 | Bot Token、Chat ID / Topic ID、訊息範本 | 429 時依 `retry_after` 重送 |
 | **Microsoft Teams Webhook** | 指派、Level 4/5 開單、每日積壓摘要 | Incoming Webhook URL、Adaptive Card 範本 | 失敗重試 3 次，連續失敗 5 次觸發管理員告警 |
 
@@ -499,6 +511,7 @@ Email 的寄信方式由系統管理員在「系統設定 → 郵件設定」選
 | `users` | 使用者 | `id`、`email`(unique)、`password_hash`、`role_id`、`identity_provider`、`must_change_password`、`two_factor_enabled`、`is_bootstrap_admin`、`is_active`、`failed_login_count`、`locked_until` |
 | `roles` | 角色 | `id`、`key`(unique)、`name`、`permissions`(JSONB) |
 | `teams` | 團隊 | `id`、`name`、`manager_id` |
+| `team_members` | 團隊成員（多對多，FR-2.11） | `team_id`、`user_id`（複合主鍵，皆 `on delete cascade`） |
 | `help_topics` | 服務類別 | `id`、`slug`、`name`、`parent_id`、`form_id`、`sla_plan_id`、`is_public`、`is_active` |
 | `ticket_forms` | 表單 | `id`、`name`、`help_topic_id` |
 | `custom_fields` | 自訂欄位定義 | `id`、`form_id`、`key`、`label`、`type`、`is_required`、`visibility`、`is_filterable`、`validation`(JSONB)、`is_active` |
@@ -671,6 +684,15 @@ curl -X POST https://ticket.example.com/api/v1/tickets \
 | AC-REPORT-01 | 3 天未結案 | 篩選結果與 SQL 基準查詢筆數零誤差；72 小時整邊界不計入 |
 | AC-REPORT-02 | 自訂欄位過濾 | 7 種運算子結果正確；`internal` 欄位僅管理角色可用 |
 | AC-REPORT-03 | 匯出 | CSV/XLSX/PDF 筆數與畫面一致；匯出寫入審計日誌 |
+| AC-TEAM-01 | 團隊成員升級回填（FR-2.11） | `users.team_id` 有值的使用者啟動後出現在 `team_members`；管理員把他移出團隊、重新啟動後不會被加回（`system_settings` 已記錄回填完成） |
+| AC-TEAM-02 | 多團隊可見範圍（FR-2.11） | 屬於兩個團隊的工程師看得到兩個團隊的工單；不屬於該團隊的工程師讀取該團隊工單回 `404`、清單中也看不到；被移出團隊後立即看不到 |
+| AC-TEAM-03 | 廠商與一般使用者隔離（FR-2.11） | 屬於某團隊的 `vendor` 與 `end_user`，看不到該團隊中未指派給他、非他開立、未關注的工單（回 `404`） |
+| AC-TEAM-04 | 新增工單指定團隊（FR-2.11） | 有 `ticket:assign` 者成功；一般使用者回 `403`；不存在的團隊回 `400`；只指定團隊時狀態維持 `new` |
+| AC-TEAM-05 | 團隊指派通知（FR-2.11、FR-4.2） | 指派給團隊且沒有負責人時，通知寄給該團隊具內部權限的啟用中成員（不含操作者、廠商、一般使用者、停用的使用者）；有負責人時不寄團隊通知；測試以 `dispatchPending(deps, fakeSenders)` 或檢查 outbox，不連外 |
+| AC-TEAM-06 | 清單團隊篩選（FR-2.11） | `teamId=mine` 只回傳自己任一團隊的工單；沒有團隊的使用者結果為空 |
+| AC-TEAM-07 | 使用者 API 多團隊（FR-2.11） | 使用者 API 以 `teamIds` 讀寫多個團隊；`/auth/me` 與 `/catalog` 回傳 `teamIds`；「使用者」頁的團隊欄位與新增使用者表單為多選（antd `Select mode="multiple"`，label 綁定控制項）；「團隊」頁每列顯示成員數 |
+| AC-TEAM-08 | 認領「我來處理」（FR-2.11） | 有 `ticket:assign`、工單未結案且沒有負責人或負責人不是自己時才顯示；按下後負責人為自己、狀態由 `new` 變 `open` 並通知負責人；沿用 `PATCH /tickets/{id}`，不新增 API |
+| AC-TEAM-09 | e2e 團隊流程（FR-2.11） | `tests/e2e/ui.mjs` 新增步驟：管理員在「新增工單」選擇團隊建立工單 → 工單清單選「團隊」篩選可看到該工單、團隊欄顯示團隊名稱 → 進入詳情按「我來處理」後負責人顯示為自己、狀態變為「處理中」 → 「使用者」頁可為使用者選擇兩個團隊並在重新整理後仍顯示兩個團隊 |
 | AC-NOTIFY-01 | 多管道 | Email/Telegram/Teams 皆可送達；失敗重試 3 次並記錄 |
 | AC-NOTIFY-02 | 冪等與隔離 | 同一事件不重複發送；通知內容不含內部備忘 |
 | AC-MAIL-01 | 郵件設定與寄信方式（FR-4.3） | 未設定時寄信走 `env`（既有測試全數通過）；切換 `resend` 後 outbox 以正確 payload 呼叫 Resend、切回 `env` 改用 SMTP（測試用假 `fetch`／sender，不打外部服務）；儲存後不需重新啟動即生效 |
