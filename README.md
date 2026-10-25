@@ -7,7 +7,7 @@ SOC、SIEM 等外部系統可以透過 API 自動開單。
 
 | 項目 | 內容 |
 | --- | --- |
-| 目前版本 | **v0.3.0**，2026-10-24 |
+| 目前版本 | **v0.4.0**，2026-10-25 |
 | 狀態 | Docker 版可部署；83 個自動化測試、部署後 API 檢查與瀏覽器端到端測試皆通過 |
 | 本版重點 | UI 視覺規範 [DESIGN.md](DESIGN.md)；介面字型改為自架的 Google Noto（英文 Noto Sans Display、中文 Noto Sans TC）。功能同 v0.1.0：工單、SLA、RBAC、2FA、通知、外部 API、報表、中英文介面 |
 | 尚未實作 | AD/LDAP、SAML、OIDC、SCIM、FIDO2、附件、SLA 營業時間、Cloudflare 部署 |
@@ -189,7 +189,7 @@ npm run dev:web             # 前端 on :5173（代理 /api 到 :8080）
 | --- | --- |
 | v0.1.0 | ✅ Docker 版 MVP |
 | v0.2.0 | ✅ UI 視覺規範 DESIGN.md、Google Noto 字型 |
-| v0.3.0 | ✅ UI 重新設計第 1 批：設計 token、共用元件、登入頁與 sidebar（本版） |
-| v0.4.0 | UI 重新設計第 2 批、企業 Logo、Mail API（Resend）與介面設定、範例工單腳本 |
+| v0.3.0 | ✅ UI 重新設計第 1 批：設計 token、共用元件、登入頁與 sidebar |
+| v0.4.0 | ✅ UI 改用 Ant Design 與第 2 批配色、企業 Logo、郵件設定（Resend）、建立時指派與回覆通知勾選、範例工單腳本（本版） |
 | v1.1 | AD/LDAP、SAML、OIDC、SCIM、FIDO2；附件；SLA 營業時間 |
 | 待定 | Cloudflare Workers 方案（見 [deploy/cloudflare/README.md](deploy/cloudflare/README.md)）、背景工作獨立服務化、Slack 通知 |
