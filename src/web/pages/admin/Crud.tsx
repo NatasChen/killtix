@@ -43,6 +43,7 @@ export function CrudPage<T extends Row>({
   columns,
   fields,
   defaults = {},
+  expand,
 }: {
   title: string;
   path: string;
@@ -50,6 +51,8 @@ export function CrudPage<T extends Row>({
   columns: CrudColumn<T>[];
   fields: CrudField[];
   defaults?: Record<string, unknown>;
+  /** Detail shown when a row is expanded; `reload` refreshes the list (e.g. after the detail changed a count). */
+  expand?: (row: T, reload: () => Promise<void>) => ReactNode;
 }) {
   const { t } = useI18n();
   const { data, error, loading, reload } = useLoad(() => get<T[]>(listPath), [listPath]);
@@ -148,6 +151,7 @@ export function CrudPage<T extends Row>({
           pagination={false}
           size="middle"
           scroll={{ x: 'max-content' }}
+          expandable={expand ? { expandedRowRender: (row) => expand(row, reload) } : undefined}
           columns={[
             ...columns.map((c) => ({ key: c.label, title: c.label, render: (_: unknown, row: T) => c.render(row) })),
             {

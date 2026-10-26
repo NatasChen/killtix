@@ -1,6 +1,7 @@
 import { useI18n } from '../../i18n';
 import { CrudPage } from './Crud';
 import { useOptions } from './shared';
+import { TeamMembers } from './TeamMembers';
 
 /* Simple catalog resources (catalog:manage), each a CrudPage configuration. */
 
@@ -21,6 +22,8 @@ export function TeamsPage() {
         { key: 'name', label: t('ui.admin.name'), type: 'text', required: true },
         { key: 'description', label: t('ui.admin.description'), type: 'textarea' },
       ]}
+      // expand a team to see its members and add or remove them
+      expand={(r: any, reload) => <TeamMembers teamId={r.id} teamName={r.name} onChange={reload} />}
     />
   );
 }

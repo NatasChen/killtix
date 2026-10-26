@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, ilike, inArray, ne, or } from 'drizzle-orm';
+import { and, asc, count, desc, eq, ilike, inArray, ne, notInArray, or } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { hashPassword, randomPassword, randomToken, sha256 } from '../auth/crypto.js';
@@ -9,6 +9,7 @@ import {
   apiTokens,
   auditLogs,
   cannedResponses,
+  CLOSED_STATUSES,
   customFields,
   FIELD_TYPES,
   glossaryTerms,
@@ -22,10 +23,12 @@ import {
   teams,
   teamMembers,
   ticketForms,
+  tickets,
   users,
 } from '../db/schema.js';
 import { ApiError, badRequest, notFound } from '../errors.js';
 import { SUPPORTED_LOCALES } from '../i18n/index.js';
+import { can, ROLE_DEFINITIONS } from '../rbac.js';
 import { audit } from '../services/audit.js';
 import { deleteLogo, LOGO_MAX_BYTES, logoUrls, setLogo } from '../services/branding.js';
 import { sendTestEmail } from '../services/notify.js';
@@ -115,6 +118,17 @@ async function replaceTeamMembers(db: DB, userId: number, teamIds: number[]) {
     }
   });
 }
+
+async function assertTeamExists(db: DB, teamId: number) {
+  const [team] = await db.select({ id: teams.id }).from(teams).where(eq(teams.id, teamId));
+  if (!team) throw notFound();
+}
+
+/** Whether team membership lets this role see the team's tickets (vendors and end users never do: rule 1). */
+const seesTeamTickets = (role: string) => {
+  const perms = ROLE_DEFINITIONS[role]?.permissions ?? [];
+  return can(perms, 'ticket:read:team') || can(perms, 'ticket:read:all');
+};
 
 const manageUsers = guard({ permission: 'admin:users' });
 const manageCatalog = guard({ permission: 'catalog:manage' });
@@ -283,6 +297,65 @@ export const adminRoutes = new Hono<AppEnv>()
     const [row] = await unique(() => c.var.deps.db.update(teams).set(body).where(eq(teams.id, idParam(c))).returning());
     if (!row) throw notFound();
     return c.json(row);
+  })
+
+  // Team members, managed from the teams page (DECISIONS D18). The users page edits the same team_members rows.
+  .get('/teams/:id/members', manageCatalog, async (c) => {
+    const { db } = c.var.deps;
+    const teamId = idParam(c);
+    await assertTeamExists(db, teamId);
+    const rows = await db
+      .select({ id: users.id, displayName: users.displayName, email: users.email, role: users.roleKey, isActive: users.isActive, lockedUntil: users.lockedUntil })
+      .from(teamMembers)
+      .innerJoin(users, eq(users.id, teamMembers.userId))
+      .where(eq(teamMembers.teamId, teamId))
+      .orderBy(asc(users.displayName));
+    const ids = rows.map((r) => r.id);
+    const open = ids.length
+      ? await db
+          .select({ userId: tickets.assigneeId, n: count() })
+          .from(tickets)
+          .where(and(inArray(tickets.assigneeId, ids), notInArray(tickets.status, CLOSED_STATUSES)))
+          .groupBy(tickets.assigneeId)
+      : [];
+    const openByUser = new Map(open.map((r) => [r.userId, r.n]));
+    // Users that can be added: active people (not API clients) who are not members yet.
+    const candidates = await db
+      .select({ id: users.id, displayName: users.displayName, email: users.email, role: users.roleKey })
+      .from(users)
+      .where(and(eq(users.isActive, true), ne(users.roleKey, 'api_client'), ids.length ? notInArray(users.id, ids) : undefined))
+      .orderBy(asc(users.displayName));
+    return c.json({
+      members: rows.map((r) => ({ ...r, openAssigned: openByUser.get(r.id) ?? 0, seesTeamTickets: seesTeamTickets(r.role) })),
+      candidates,
+    });
+  })
+  .post('/teams/:id/members', manageCatalog, async (c) => {
+    const { db } = c.var.deps;
+    const teamId = idParam(c);
+    const body = await parseJson(c, z.object({ userIds: z.array(id).min(1).max(50) }).strict());
+    await assertTeamExists(db, teamId);
+    const userIds = [...new Set(body.userIds)];
+    const found = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(and(inArray(users.id, userIds), eq(users.isActive, true), ne(users.roleKey, 'api_client')));
+    if (found.length !== userIds.length) throw badRequest(undefined, { errors: [{ path: 'userIds', message: 'unknown, inactive or API user' }] });
+    await db.insert(teamMembers).values(userIds.map((userId) => ({ teamId, userId }))).onConflictDoNothing();
+    await audit(c, 'admin.team_members_added', { type: 'team', id: teamId }, { userIds });
+    return c.body(null, 204);
+  })
+  .delete('/teams/:id/members/:userId', manageCatalog, async (c) => {
+    const { db } = c.var.deps;
+    const teamId = idParam(c);
+    const userId = idParam(c, 'userId');
+    const removed = await db
+      .delete(teamMembers)
+      .where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId)))
+      .returning({ userId: teamMembers.userId });
+    if (!removed.length) throw notFound();
+    await audit(c, 'admin.team_member_removed', { type: 'team', id: teamId }, { userId });
+    return c.body(null, 204);
   })
 
   // ------------------------------------------------------------------ SLA plans

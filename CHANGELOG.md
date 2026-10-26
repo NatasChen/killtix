@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+團隊頁管理成員。沒有資料表、環境變數或部署變更。
+
+### Added
+- 「團隊」頁每一列可展開，顯示成員與目前狀態：名稱與 email、角色（廠商與一般使用者註明「不會因團隊看到工單」）、帳號狀態（啟用／停用／鎖定）、指派給他的未結案工單數（連到工單清單）；同一處可加入（多選）與移除成員，成員數即時更新（PRD FR-2.12，DECISIONS D18）。
+- API：`GET /admin/teams/{id}/members`（`members`、可加入的 `candidates`）、`POST /admin/teams/{id}/members`（`userIds`，只接受啟用中、非外部系統的帳號）、`DELETE /admin/teams/{id}/members/{userId}`；需要 `catalog:manage`（系統管理員、IT 服務主管），寫入稽核 `admin.team_members_added`／`admin.team_member_removed`。
+- `CrudPage` 新增選用的 `expand`（可展開的列）；新增 `pages/admin/TeamMembers.tsx`。
+- `tests/teams.test.ts` 新增 2 項（成員狀態與候選名單；加入／移除、可見範圍、無效輸入、權限、稽核），e2e 新增團隊頁展開、加入與移除步驟。
+
 ## [0.7.0] - 2026-10-26
 
 移除 `users.team_id` 與 Cloudflare 方案。升級時啟動會自動套用 migration `0003_team_members_backfill`、`0004_drop_users_team_id`；不需新增環境變數，沒有部署變更。**升級後無法退回 v0.4 以前的版本**（DECISIONS D14）。

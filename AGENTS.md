@@ -14,7 +14,7 @@
 | --- | --- |
 | 目前版本 | **0.7.0**（2026-10-26，git tag `v0.7.0`），見 [CHANGELOG.md](CHANGELOG.md) |
 | 支援部署 | Docker Compose（app + PostgreSQL 16 + Redis 7）。Cloudflare 方案已決定不做（DECISIONS D3） |
-| 測試狀態 | 99 個 Vitest 測試、`scripts/validate.sh`、`scripts/smoke.sh`（24 項）、`scripts/ui-e2e.sh` 全部通過 |
+| 測試狀態 | 101 個 Vitest 測試、`scripts/validate.sh`、`scripts/smoke.sh`（24 項）、`scripts/ui-e2e.sh` 全部通過 |
 | 未實作 | AD/LDAP、SAML、OIDC、SCIM、FIDO2、附件、SLA 營業時間、多副本背景工作 |
 | 待客戶確認 | 見 [specs/DECISIONS.md](specs/DECISIONS.md) 中標示 ⏳ 的項目（SSO 時程）；已決定：預設管理員密碼（D1：各部署以 `.env` 設定）、Cloudflare 不做（D3）、移除 `users.team_id`（D14） |
 | 下一步建議 | v1.1：SSO（`users.identity_provider` 已預留）→ 附件 → SLA 營業時間 |
@@ -89,7 +89,7 @@ src/server/
   routes/tickets.ts   工單 CRUD、對話、關注者（API Token 可用的路由在這裡）
   routes/reports.ts   儀表板、CSV 匯出
   routes/catalog.ts   下拉選單資料（服務類別＋欄位、團隊、使用者、範本）
-  routes/admin.ts     使用者、團隊、SLA、表單/欄位、服務類別、標籤、範本、API Token、設定、glossary、通知紀錄、稽核
+  routes/admin.ts     使用者、團隊（含成員管理）、SLA、表單/欄位、服務類別、標籤、範本、API Token、設定、glossary、通知紀錄、稽核
   routes/util.ts      parseJson/parseWith（zod）、rateLimit、publicUser
   services/tickets.ts 工單核心：建立（冪等）、篩選條件、詳情、狀態機、SLA 暫停、自訂欄位驗證、對話、關注者
   services/notify.ts  outbox：notifyTicketEvent（決定誰收到什麼）、enqueue、dispatchPending（重試/退避）、各管道發送
@@ -111,7 +111,8 @@ src/web/
   pages/…             各頁面；Dashboard.tsx 分「目前狀態」與「期間統計」兩區（期間在網址 ?from=&to=，DECISIONS D16）
   pages/admin/        AdminRoutes.tsx 只放路由與 lazyPage()；每頁一個檔：UsersPage、CatalogPages（團隊／SLA／服務類別／回覆範本，
                       皆為 Crud.tsx 的 CrudPage 設定）、FormsPage、ApiTokensPage、SettingsPage（LogoSettings、MailSettingsCard）、
-                      NotificationsPage、AuditPage；shared.tsx 放共用的 useOptions、OneTimeSecret、tableProps、sectionTitle
+                      NotificationsPage、AuditPage；shared.tsx 放共用的 useOptions、OneTimeSecret、tableProps、sectionTitle；
+                      TeamMembers.tsx 是團隊頁展開列的成員管理（CrudPage 的 expand，DECISIONS D18）
   public/theme-init.js 首次繪製前套用主題（CSP 不允許 inline script，所以是外部檔）
 drizzle/              自動產生的 migration，不要手改
 tests/                Vitest：helpers.ts（測試環境工廠）、auth / tickets / teams / dashboard / notify / i18n 測試；e2e/ui.mjs（瀏覽器）
@@ -222,7 +223,7 @@ crewai_ticket_build.py CrewAI 迭代工具（PM → SAr → PG → UI 設計師 
 
 | 指令 | 內容 | 需要 |
 | --- | --- | --- |
-| `npm test` | 99 個單元/整合測試（PGlite） | Node |
+| `npm test` | 101 個單元/整合測試（PGlite） | Node |
 | `TEST_DATABASE_URL=postgres://… npm test` | 同上，改用真實 PostgreSQL + 正式驅動 | 一個 Postgres（見下） |
 | `npm run validate` | 型別、schema/migration 一致、測試、文件中的測試數、建置、首頁 JS 大小（bundle-check）、OpenAPI JSON、Markdown 連結、compose 設定 | Node（Docker 可選） |
 | `scripts/smoke.sh <url> <預設管理員密碼>` | 部署後 API 端到端 24 項（會改管理員密碼為 `Smoke-Test-Passw0rd!`） | 執行中的系統 |

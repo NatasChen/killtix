@@ -567,6 +567,7 @@
 | REG-TICKET-018 | 建立時指定團隊、認領 | FR-2.11 | `POST /tickets` 帶 `teamId`；成員 `PATCH {assigneeId: 自己}`；e2e「我來處理」 | 只有團隊時維持「新建立」；一般使用者 403、不存在的團隊 400；認領後負責人為自己、狀態「處理中」 | ✅ | P1 |
 | REG-TICKET-019 | 依團隊篩選 | FR-2.11 | `GET /tickets?teamId=mine`；e2e 清單「團隊」篩選 | 只回傳自己任一團隊的工單；沒有團隊時為空 | ✅ | P1 |
 | REG-TICKET-020 | 團隊成員回填與移除 `users.team_id` | FR-2.11 | `tests/teams.test.ts` 的 upgrade 測試：0002 結構放入舊資料 → 套用其餘 migration | v0.4 資料寫入 `team_members`；v0.5／v0.6 已移出的成員不會加回；欄位與旗標已刪除 | ✅ | P1 |
+| REG-TICKET-021 | 團隊頁管理成員 | FR-2.12 | `tests/teams.test.ts`（team members on the teams page）；`scripts/ui-e2e.sh`：展開團隊、加入、移除 | 成員狀態正確、候選名單正確、可見範圍立即反映、權限 403、稽核紀錄；畫面成員數同步 | ✅ | P1 |
 
 ### 6.4 SLA 回歸（REG-SLA）
 

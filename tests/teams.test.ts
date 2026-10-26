@@ -1,6 +1,6 @@
 import { and, eq, like } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { notificationLogs, users } from '../src/server/db/schema.js';
+import { auditLogs, notificationLogs, users } from '../src/server/db/schema.js';
 import { createTestContext, databaseAt, type TestContext } from './helpers.js';
 
 let ctx: TestContext;
@@ -185,5 +185,68 @@ describe('assigning a ticket to a team', () => {
     const res = await client.patch(`/api/v1/tickets/${ticket.number}`, { assigneeId: claimer.id });
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ status: 'open', assignee: { id: claimer.id } });
+  });
+});
+
+describe('team members on the teams page (DECISIONS D18)', () => {
+  it('lists members with their current state and the users that can still be added', async () => {
+    const ops = (await admin.post('/api/v1/admin/teams', { name: 'Members Ops' })).body.id;
+    const busy = await user('tm-ops-agent@example.com', 'agent', [ops]);
+    await user('tm-ops-vendor@example.com', 'vendor', [ops]);
+    const gone = await user('tm-ops-gone@example.com', 'agent', [ops]);
+    await admin.patch(`/api/v1/admin/users/${gone.id}`, { isActive: false });
+    await ctx.createUser('tm-ops-bot@example.com', 'api_client');
+    await ctx.createUser('tm-ops-off@example.com', 'agent', { isActive: false });
+    await ticketFor(ops, { assigneeId: busy.id }); // open → counted
+    const done = await ticketFor(ops, { assigneeId: busy.id });
+    await admin.patch(`/api/v1/tickets/${done.number}`, { status: 'resolved' }); // not open → not counted
+
+    const res = await admin.get(`/api/v1/admin/teams/${ops}/members`);
+    expect(res.status).toBe(200);
+    const byEmail = Object.fromEntries(res.body.members.map((m: any) => [m.email, m]));
+    expect(Object.keys(byEmail).sort()).toEqual(['tm-ops-agent@example.com', 'tm-ops-gone@example.com', 'tm-ops-vendor@example.com']);
+    expect(byEmail['tm-ops-agent@example.com']).toMatchObject({ role: 'agent', isActive: true, openAssigned: 1, seesTeamTickets: true });
+    expect(byEmail['tm-ops-vendor@example.com']).toMatchObject({ role: 'vendor', openAssigned: 0, seesTeamTickets: false });
+    expect(byEmail['tm-ops-gone@example.com'].isActive).toBe(false);
+
+    const candidates = res.body.candidates.map((u: any) => u.email);
+    expect(candidates).toContain('admin@ticket.local');
+    for (const email of ['tm-ops-agent@example.com', 'tm-ops-bot@example.com', 'tm-ops-off@example.com']) expect(candidates).not.toContain(email);
+    expect((await admin.get('/api/v1/admin/teams/999999/members')).status).toBe(404);
+  });
+
+  it('adds and removes members (visibility follows at once), rejects bad users and needs catalog:manage', async () => {
+    const lab = (await admin.post('/api/v1/admin/teams', { name: 'Members Lab' })).body.id;
+    const agent = await user('tm-lab-agent@example.com', 'agent');
+    const ticket = await ticketFor(lab);
+    const client = await ctx.login('tm-lab-agent@example.com');
+    expect((await client.get(`/api/v1/tickets/${ticket.number}`)).status).toBe(404);
+
+    expect((await admin.post(`/api/v1/admin/teams/${lab}/members`, { userIds: [agent.id, agent.id] })).status).toBe(204);
+    expect((await admin.post(`/api/v1/admin/teams/${lab}/members`, { userIds: [agent.id] })).status).toBe(204); // already a member
+    expect((await client.get(`/api/v1/tickets/${ticket.number}`)).status).toBe(200);
+    expect((await admin.get('/api/v1/admin/teams')).body.find((t: any) => t.id === lab).memberCount).toBe(1);
+    expect((await client.get('/api/v1/auth/me')).body.user.teamIds).toEqual([lab]);
+
+    expect((await admin.del(`/api/v1/admin/teams/${lab}/members/${agent.id}`)).status).toBe(204);
+    expect((await client.get(`/api/v1/tickets/${ticket.number}`)).status).toBe(404);
+    expect((await admin.del(`/api/v1/admin/teams/${lab}/members/${agent.id}`)).status).toBe(404);
+
+    const bot = await ctx.createUser('tm-lab-bot@example.com', 'api_client');
+    const off = await ctx.createUser('tm-lab-off@example.com', 'agent', { isActive: false });
+    for (const userIds of [[bot.id], [off.id], [999999], []]) {
+      expect((await admin.post(`/api/v1/admin/teams/${lab}/members`, { userIds })).status, String(userIds)).toBe(400);
+    }
+    expect((await admin.post('/api/v1/admin/teams/999999/members', { userIds: [agent.id] })).status).toBe(404);
+
+    // catalog:manage: an IT manager may, an engineer may not
+    await ctx.createUser('tm-lab-manager@example.com', 'it_manager');
+    const manager = await ctx.login('tm-lab-manager@example.com');
+    expect((await manager.post(`/api/v1/admin/teams/${lab}/members`, { userIds: [agent.id] })).status).toBe(204);
+    expect((await client.get(`/api/v1/admin/teams/${lab}/members`)).status).toBe(403);
+    expect((await client.del(`/api/v1/admin/teams/${lab}/members/${agent.id}`)).status).toBe(403);
+
+    const logged = await ctx.db.select().from(auditLogs).where(and(eq(auditLogs.targetType, 'team'), eq(auditLogs.targetId, String(lab))));
+    expect(logged.map((r) => r.action).filter((a) => a.startsWith('admin.team_member')).sort()).toEqual(['admin.team_member_removed', 'admin.team_members_added', 'admin.team_members_added', 'admin.team_members_added']);
   });
 });

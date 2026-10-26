@@ -133,6 +133,27 @@ const vendorRow = page.getByRole('row').filter({ hasText: VENDOR });
 await vendorRow.getByText(NET).waitFor();
 await vendorRow.getByText(DESK).waitFor();
 
+step('teams page: expand a team, see its members and their state, add and remove members');
+await page.getByLabel('主選單').getByRole('link', { name: '團隊' }).click();
+await page.getByRole('heading', { name: '團隊', exact: true }).waitFor();
+const netTeamRow = page.getByRole('row').filter({ hasText: NET }).first();
+await netTeamRow.getByRole('button', { name: '展開列' }).click();
+const members = page.getByRole('region', { name: `${NET} 的成員` });
+// the vendor added on the users page is listed, with the note that team membership shows them nothing
+await members.getByRole('row').filter({ hasText: 'UI Vendor' }).getByText('不會因團隊看到工單').waitFor();
+await members.getByLabel('加入成員').click(); // a multiple select stays open: pick, then close it
+await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').getByTitle('Bootstrap Administrator (系統管理員)', { exact: true }).click();
+await page.keyboard.press('Escape');
+await members.getByRole('button', { name: '新增' }).click();
+const adminMember = members.getByRole('row').filter({ hasText: 'Bootstrap Administrator' });
+await adminMember.getByText('啟用').waitFor();
+await adminMember.getByRole('link', { name: /^\d+$/ }).waitFor(); // open tickets assigned to the admin above, linked to the list
+await netTeamRow.getByRole('cell', { name: '2', exact: true }).waitFor(); // member count in the team list follows
+await shot('05b-team-members');
+await members.getByRole('button', { name: '把 UI Vendor 移出團隊' }).click();
+await members.getByRole('row').filter({ hasText: 'UI Vendor' }).waitFor({ state: 'detached' });
+await netTeamRow.getByRole('cell', { name: '1', exact: true }).waitFor();
+
 step('dashboard charts: render, drill down by status and by tag');
 const TAG = `e2etag${RUN}`;
 {

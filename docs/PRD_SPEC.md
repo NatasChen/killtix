@@ -329,6 +329,9 @@ new ──▶ open ──▶ pending_user ──▶ open
 - **管理介面**：「使用者」頁的團隊欄位與新增使用者表單改為多選（antd `Select mode="multiple"`，label 綁定控制項）；「團隊」頁每列顯示成員數。
 - **不在範圍**：工單同時指派給多個團隊；團隊主管、團隊層級權限或 SLA；依團隊的報表；廠商透過團隊看到工單；移除 `users.team_id`；SLA 逾時通知的收件者；新的環境變數或部署變更；儀表板（下一張變更單）。
 
+#### FR-2.12 團隊頁管理成員（P1，`[Unreleased]`）
+「團隊」頁（`catalog:manage`）每一列可展開，顯示該團隊的成員與目前狀態：名稱與 email、角色（沒有團隊可見範圍的角色註明「不會因團隊看到工單」）、帳號狀態（啟用／停用／鎖定）、指派給他的未結案工單數（連到工單清單）。同一處可加入成員（多選，只列啟用中、非外部系統且尚未加入的使用者）與移除成員，成員數即時更新。API：`GET /admin/teams/{id}/members`（`members`、`candidates`）、`POST /admin/teams/{id}/members`（`userIds`）、`DELETE /admin/teams/{id}/members/{userId}`，皆需 `catalog:manage` 並寫入稽核（DECISIONS D18）。與「使用者」頁讀寫同一份 `team_members`，可見範圍在下一個請求就生效。
+
 ---
 
 ### FR-3 報表與儀表板
@@ -717,6 +720,7 @@ curl -X POST https://ticket.example.com/api/v1/tickets \
 | AC-TEAM-07 | 使用者 API 多團隊（FR-2.11） | 使用者 API 以 `teamIds` 讀寫多個團隊；`/auth/me` 與 `/catalog` 回傳 `teamIds`；「使用者」頁的團隊欄位與新增使用者表單為多選（antd `Select mode="multiple"`，label 綁定控制項）；「團隊」頁每列顯示成員數 |
 | AC-TEAM-08 | 認領「我來處理」（FR-2.11） | 有 `ticket:assign`、工單未結案且沒有負責人或負責人不是自己時才顯示；按下後負責人為自己、狀態由 `new` 變 `open` 並通知負責人；沿用 `PATCH /tickets/{id}`，不新增 API |
 | AC-TEAM-09 | e2e 團隊流程（FR-2.11） | `tests/e2e/ui.mjs` 新增步驟：管理員在「新增工單」選擇團隊建立工單 → 工單清單選「團隊」篩選可看到該工單、團隊欄顯示團隊名稱 → 進入詳情按「我來處理」後負責人顯示為自己、狀態變為「處理中」 → 「使用者」頁可為使用者選擇兩個團隊並在重新整理後仍顯示兩個團隊 |
+| AC-TEAM-10 | 團隊頁管理成員（FR-2.12） | 成員清單含角色、帳號狀態、未結案指派數與「不會因團隊看到工單」註記；候選名單不含成員、外部系統與停用帳號；加入／移除後成員數與可見範圍立即反映；無效使用者回 400、不存在的團隊或成員回 404、沒有 `catalog:manage` 回 403；動作寫入稽核；e2e 展開、加入與移除 |
 | AC-NOTIFY-01 | 多管道 | Email/Telegram/Teams 皆可送達；失敗重試 3 次並記錄 |
 | AC-NOTIFY-02 | 冪等與隔離 | 同一事件不重複發送；通知內容不含內部備忘 |
 | AC-MAIL-01 | 郵件設定與寄信方式（FR-4.3） | 未設定時寄信走 `env`（既有測試全數通過）；切換 `resend` 後 outbox 以正確 payload 呼叫 Resend、切回 `env` 改用 SMTP（測試用假 `fetch`／sender，不打外部服務）；儲存後不需重新啟動即生效 |
