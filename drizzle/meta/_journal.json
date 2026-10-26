@@ -22,6 +22,20 @@
       "when": 1792930668511,
       "tag": "0002_opposite_vance_astro",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1793004233600,
+      "tag": "0003_team_members_backfill",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793004245382,
+      "tag": "0004_drop_users_team_id",
+      "breakpoints": true
     }
   ]
 }

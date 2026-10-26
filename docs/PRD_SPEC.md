@@ -319,7 +319,7 @@ new ──▶ open ──▶ pending_user ──▶ open
 
 #### FR-2.11 團隊指派與認領（P0，`[Unreleased]`）
 工單可指派給團隊，由團隊成員共同處理，再由其中一人認領成為負責人。
-- **使用者可屬於多個團隊**：`team_members`（`team_id`、`user_id`，複合主鍵，皆 `on delete cascade`）。`users.team_id` 保留但不再使用，下一版移除（DECISIONS D14）。升級時一次性把 `users.team_id` 有值的使用者回填到 `team_members`，完成後記錄於 `system_settings`（`migrations.team_members_backfilled`），之後啟動不再執行，管理員移除成員後不會被加回。
+- **使用者可屬於多個團隊**：`team_members`（`team_id`、`user_id`，複合主鍵，皆 `on delete cascade`）。`users.team_id` 已移除（DECISIONS D14）：migration 0003 在刪欄位前把有值的使用者搬到 `team_members`（v0.5／v0.6 已在啟動時回填過的部署略過，管理員移除的成員不會被加回），0004 刪除欄位。
 - **API 欄位**：使用者的團隊欄位為 `teamIds: number[]`（使用者建立、更新、`/auth/me`、`/catalog` 的使用者清單）。
 - **可見範圍**：有 `ticket:read:team` 的使用者看得到 `tickets.team_id` 是自己任一團隊的工單，條件以 `exists (select 1 from team_members …)` 寫在查詢層（FR-4.1）。`vendor` 與 `end_user` 維持現狀：即使被加入團隊，仍只看得到被指派、自己開立或被加入關注的工單；看不到的工單回 `404`。
 - **新增工單可選團隊**：`tickets/new` 在「負責人」旁加「團隊」下拉選單，只有 `ticket:assign` 權限者看得到；`createTicketSchema` 新增選填 `teamId`，沒有 `ticket:assign` 回 `403`、團隊不存在回 `400`；未填時沿用服務類別的預設團隊。團隊與負責人可同時指定，也可只指定其中一個；只指定團隊時狀態維持 `new`。
@@ -497,6 +497,8 @@ Email 的寄信方式由系統管理員在「系統設定 → 郵件設定」選
 - 需提供健康檢查 (`/healthz`)、資料持久化 Volume、備份與還原指令。
 
 #### FR-6.2 方案 B：Cloudflare 邊緣網路（P0）
+> **不做**（2026-10-26，DECISIONS D3）：只支援方案 A（Docker）。以下保留原始需求供參考，相關驗收條件 AC-DEPLOY-02 不適用。
+
 - 元件：**Workers**（API）、**Pages**（前端）、**D1**（資料庫）、**Queues**（非同步通知）、**KV**（Session/快取）、**Cron Triggers**（SLA 掃描、積壓報表）。
 - `wrangler.toml` 需宣告 D1 binding、Queues producer/consumer、環境變數與環境區分 (`dev` / `staging` / `prod`)。
 - D1 初始化：`wrangler d1 execute <DB> --file=./src/schema.sql`；需提供 migration 執行順序文件。
@@ -706,7 +708,7 @@ curl -X POST https://ticket.example.com/api/v1/tickets \
 | AC-REPORT-07 | 圖表可及性與主題（FR-3.5） | 每個圖表有 `role="img"` 與描述內容的 `aria-label`、數字以文字呈現；顏色只取自 `palette.ts`，淺色與深色主題皆正確（`tests/styles.test.ts` 通過）；375px 寬無水平捲軸 |
 | AC-REPORT-08 | 統計期間（FR-3.6） | `from`/`to` 依 `config.timezone` 的日曆日計算（當地午夜邊界正確）；期間新增／解決、SLA 達標率、狀態分佈、標籤只計期間內的工單，目前狀態數字不受影響；超過 92 天每週一點；起日晚於迄日、超過 366 天或格式錯誤回 400；`createdFrom`/`createdTo` 篩選筆數與儀表板一致 |
 | AC-REPORT-08 | 圖表點擊導向（FR-3.5） | 點狀態／標籤／優先度／超過 3 天分組／團隊／工程師負載分別進入工單清單且對應篩選已套用（「未指派」為 `assignee=none`）；可點元素可用鍵盤操作；e2e 涵蓋環形圖與 tag cloud 兩條路徑 |
-| AC-TEAM-01 | 團隊成員升級回填（FR-2.11） | `users.team_id` 有值的使用者啟動後出現在 `team_members`；管理員把他移出團隊、重新啟動後不會被加回（`system_settings` 已記錄回填完成） |
+| AC-TEAM-01 | 團隊成員升級回填（FR-2.11） | 從 v0.4 升級：`users.team_id` 有值的使用者在 migration 後出現在 `team_members`；從 v0.5／v0.6 升級：已移出團隊的成員不會被加回；升級後 `users.team_id` 欄位與回填旗標都不存在 |
 | AC-TEAM-02 | 多團隊可見範圍（FR-2.11） | 屬於兩個團隊的工程師看得到兩個團隊的工單；不屬於該團隊的工程師讀取該團隊工單回 `404`、清單中也看不到；被移出團隊後立即看不到 |
 | AC-TEAM-03 | 廠商與一般使用者隔離（FR-2.11） | 屬於某團隊的 `vendor` 與 `end_user`，看不到該團隊中未指派給他、非他開立、未關注的工單（回 `404`） |
 | AC-TEAM-04 | 新增工單指定團隊（FR-2.11） | 有 `ticket:assign` 者成功；一般使用者回 `403`；不存在的團隊回 `400`；只指定團隊時狀態維持 `new` |

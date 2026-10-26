@@ -13,10 +13,10 @@
 | 項目 | 內容 |
 | --- | --- |
 | 目前版本 | **0.6.0**（2026-10-26，git tag `v0.6.0`），見 [CHANGELOG.md](CHANGELOG.md) |
-| 支援部署 | Docker Compose（app + PostgreSQL 16 + Redis 7）。Cloudflare 為實驗性、**未實作** |
-| 測試狀態 | 98 個 Vitest 測試、`scripts/validate.sh`、`scripts/smoke.sh`（24 項）、`scripts/ui-e2e.sh` 全部通過 |
-| 未實作 | AD/LDAP、SAML、OIDC、SCIM、FIDO2、附件、SLA 營業時間、Cloudflare、多副本背景工作 |
-| 待客戶確認 | 見 [specs/DECISIONS.md](specs/DECISIONS.md) 中標示 ⏳ 的項目（SSO 時程、Cloudflare 去留、`users.team_id` 移除）；預設管理員密碼已決定（D1：各部署以 `.env` 設定） |
+| 支援部署 | Docker Compose（app + PostgreSQL 16 + Redis 7）。Cloudflare 方案已決定不做（DECISIONS D3） |
+| 測試狀態 | 99 個 Vitest 測試、`scripts/validate.sh`、`scripts/smoke.sh`（24 項）、`scripts/ui-e2e.sh` 全部通過 |
+| 未實作 | AD/LDAP、SAML、OIDC、SCIM、FIDO2、附件、SLA 營業時間、多副本背景工作 |
+| 待客戶確認 | 見 [specs/DECISIONS.md](specs/DECISIONS.md) 中標示 ⏳ 的項目（SSO 時程）；已決定：預設管理員密碼（D1：各部署以 `.env` 設定）、Cloudflare 不做（D3）、移除 `users.team_id`（D14） |
 | 下一步建議 | v1.1：SSO（`users.identity_provider` 已預留）→ 附件 → SLA 營業時間 |
 
 ### 開始工作前的閱讀順序
@@ -47,7 +47,7 @@
 | --- | --- | --- | --- |
 | Runtime | Node.js | 24（本機 nvm 24.22.1，映像 `node:24-alpine`） | ESM（`"type": "module"`） |
 | 語言 | TypeScript | 7.0.2 | 原生編譯器版本；伺服器端 `module: NodeNext`，相對匯入必須寫 `.js` 副檔名 |
-| HTTP | hono / @hono/node-server | 4.13.13 / 2.1.5 | 刻意選擇可跑在 Cloudflare Workers 的框架 |
+| HTTP | hono / @hono/node-server | 4.13.13 / 2.1.5 | 當初為 Cloudflare Workers 選的框架；D3 已決定不做，但不需要更換 |
 | 驗證 | zod | 4.6.7 | **v4 API**：`z.email()`、`z.url()`，不是 `z.string().email()` |
 | ORM | drizzle-orm / drizzle-kit | 0.45.4 / 0.31.11 | |
 | DB 驅動 | postgres（postgres-js） | 3.4.9 | 正式環境 |
@@ -138,13 +138,14 @@ crewai_ticket_build.py CrewAI 迭代工具（PM → SAr → PG → UI 設計師 
 違反任何一條都視為安全或資料正確性問題，必須有測試保護。
 
 1. **授權在 SQL 查詢層套用**：讀取工單一律透過 `loadVisibleTicket()` 或 `buildTicketConditions()`，兩者都使用 `ticketScope()`。不可以先查全部再在程式中過濾。
-   團隊成員資格只看 `team_members`（`users.team_id` 已停用、只保留給一次性回填，DECISIONS D14）；廠商與一般使用者即使在團隊中也不會因此看到團隊工單。
+   團隊成員資格只看 `team_members`（`users.team_id` 已在 migration 0004 移除，DECISIONS D14）；廠商與一般使用者即使在團隊中也不會因此看到團隊工單。
 2. **看不到的工單回 404**，不是 403（不洩漏存在性）。
 3. **`visibility='internal'` 的自訂欄位、系統事件與既有的內部備忘**永遠不回傳給非 staff（`isStaff()` = 有 `ticket:note` 權限），也**永遠不觸發通知**。
    新的回覆一律公開，不可再新增內部備忘（DECISIONS D12）；回覆是否通知由 `POST /tickets/{id}/threads` 的 `notify` 決定。
 4. **改密前、2FA 前不能使用任何業務 API**：由 `guard()` 的 stage 檢查保證。新增路由一定要加 `guard()`。唯一例外是 `routes/branding.ts` 的企業標誌讀取（登入前就要顯示，DECISIONS D11），不可再加其他資料到這裡。
 5. **所有使用者可見文字走 glossary**：前端 `t('ui.…')`、後端錯誤 `ApiError` code → `error.<code>`、通知 `notify.*`。新 key 必須**同時**加到 `zh-TW.ts` 與 `en-US.ts`（`tests/i18n.test.ts` 會檢查）。動態 key（`` t(`ui.role.${x}`) ``）要把前綴與可能值登記到該測試的 `DYNAMIC` 表。
 6. **資料表只在 `src/server/db/schema.ts` 定義**，改完執行 `npm run db:generate`，連同 `drizzle/` 一起提交。不要手寫或修改已發布的 migration。
+   搬資料（例如刪欄位前把值移到新表）用 `npx drizzle-kit generate --custom --name <名稱>` 產生空白的 migration，只在裡面寫資料 SQL，排在改結構的 migration 之前。
 7. **「超過 N 天未結案」只有一個定義**：`services/tickets.ts` 的 `agingCondition()`（嚴格小於，剛好 72 小時不算）。清單、儀表板、CSV、每日報告都必須用它。
 8. **種子資料冪等**：`seed()` 每次啟動都會跑，不可以覆寫使用者已修改的資料（尤其是管理員密碼）。角色權限是例外，以程式碼為準同步。
 9. **秘密不進 log、不進回應**：密碼、token 只存雜湊；API Token 與一次性密碼只在建立的那個回應中出現一次。唯一例外是首次啟動時印出的預設管理員隨機密碼。
@@ -166,6 +167,8 @@ crewai_ticket_build.py CrewAI 迭代工具（PM → SAr → PG → UI 設計師 
 1. 改 `src/server/db/schema.ts` → `npm run db:generate` → 檢查產生的 SQL。
 2. 已有資料的表新增 `NOT NULL` 欄位要給 default。
 3. `npm run validate` 會檢查 schema 與 migration 是否一致。
+4. 刪除或改名欄位前，先用 `--custom` migration 搬資料（規則 6），並用 `tests/helpers.ts` 的 `databaseAt('<前一個 migration>')` 測試升級：
+   建出舊結構、放入舊資料，再 `upgrade()` 套用其餘 migration（範例：`tests/teams.test.ts` 的 upgrade 測試）。
 
 ### 新增權限或角色
 - 修改 `rbac.ts` 的 `ROLE_DEFINITIONS`（啟動時會同步到 `roles` 表）。
@@ -219,7 +222,7 @@ crewai_ticket_build.py CrewAI 迭代工具（PM → SAr → PG → UI 設計師 
 
 | 指令 | 內容 | 需要 |
 | --- | --- | --- |
-| `npm test` | 98 個單元/整合測試（PGlite） | Node |
+| `npm test` | 99 個單元/整合測試（PGlite） | Node |
 | `TEST_DATABASE_URL=postgres://… npm test` | 同上，改用真實 PostgreSQL + 正式驅動 | 一個 Postgres（見下） |
 | `npm run validate` | 型別、schema/migration 一致、測試、文件中的測試數、建置、首頁 JS 大小（bundle-check）、OpenAPI JSON、Markdown 連結、compose 設定 | Node（Docker 可選） |
 | `scripts/smoke.sh <url> <預設管理員密碼>` | 部署後 API 端到端 24 項（會改管理員密碼為 `Smoke-Test-Passw0rd!`） | 執行中的系統 |

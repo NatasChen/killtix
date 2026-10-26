@@ -1,7 +1,6 @@
 # 部署指南（Docker）
 
-本文件說明 TicketDesk v0.1 的部署與維運方式。目前**只支援 Docker**；
-Cloudflare Workers 方案為實驗性、尚未實作（見 [deploy/cloudflare/README.md](../deploy/cloudflare/README.md)）。
+本文件說明 TicketDesk 的部署與維運方式。**只支援 Docker**；Cloudflare Workers 方案已決定不做（[DECISIONS D3](../specs/DECISIONS.md)）。
 
 ## 1. 架構
 

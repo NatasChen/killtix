@@ -4,6 +4,16 @@
 
 ## [Unreleased]
 
+移除 `users.team_id` 與 Cloudflare 方案。升級時啟動會自動套用 migration `0003_team_members_backfill`、`0004_drop_users_team_id`；不需新增環境變數，沒有部署變更。**升級後無法退回 v0.4 以前的版本**（DECISIONS D14）。
+
+### Removed
+- `users.team_id`（DECISIONS D14）：團隊成員資格只存在 `team_members`。migration 0003（drizzle-kit `--custom`）在刪欄位前用 SQL 把仍有值的使用者搬到 `team_members`，已在 v0.5／v0.6 啟動時回填過的部署略過（管理員移除的成員不會被加回），並刪除 `system_settings` 的回填旗標；0004 刪除欄位與索引。`db/seed.ts` 的啟動回填一併移除。
+- Cloudflare Workers 方案（DECISIONS D3：不做）：刪除 `deploy/cloudflare/` 與 `.gitignore` 的 Wrangler 項目；README、部署指南、AGENTS.md 改為只支援 Docker，PRD FR-6.2 與 QA 計畫的 Cloudflare 項目標示不適用。
+
+### Changed
+- 預設管理員密碼（DECISIONS D1）、Cloudflare（D3）、`users.team_id`（D14）改為已決定。
+- 測試：團隊回填測試改為實際升級測試（`tests/helpers.ts` 新增 `databaseAt()`：建出指定 migration 時的結構、放入舊資料，再套用其餘 migration；PGlite 與真實 PostgreSQL 皆可），分別驗證從 v0.4 與從 v0.5／v0.6 升級。AGENTS.md 補上搬資料用 `--custom` migration 的做法。
+
 ## [0.6.0] - 2026-10-26
 
 儀表板統計期間與前端延遲載入。沒有資料表、環境變數或部署變更；`GET /reports/dashboard` 的回應欄位有變動（只有本系統前端使用，見 DECISIONS D16）。

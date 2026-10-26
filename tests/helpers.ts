@@ -1,7 +1,12 @@
 import { randomBytes } from 'node:crypto';
+import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { PGlite } from '@electric-sql/pglite';
 import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/pglite';
+import { drizzle as drizzlePostgres } from 'drizzle-orm/postgres-js';
+import { migrate as migratePostgres } from 'drizzle-orm/postgres-js/migrator';
 import postgres from 'postgres';
 import { migrate } from 'drizzle-orm/pglite/migrator';
 import { createApp } from '../src/server/app.js';
@@ -53,6 +58,55 @@ async function openDatabase(): Promise<{ db: DB; close: () => Promise<void> }> {
       await admin.end();
     },
   };
+}
+
+/**
+ * For testing a data migration: a database migrated only up to the migration `lastTag`, so a test can insert
+ * data in the old shape, then `upgrade()` applies the remaining migrations the way a deployment would on
+ * startup. Uses PGlite, or a throwaway database on TEST_DATABASE_URL like openDatabase().
+ */
+export async function databaseAt(lastTag: string) {
+  const dir = mkdtempSync(join(tmpdir(), 'td-migrations-'));
+  cpSync(MIGRATIONS, dir, { recursive: true });
+  const journalFile = join(dir, 'meta', '_journal.json');
+  const journal = JSON.parse(readFileSync(journalFile, 'utf8')) as { entries: { tag: string }[] };
+  const last = journal.entries.findIndex((e) => e.tag === lastTag);
+  if (last < 0) throw new Error(`unknown migration ${lastTag}`);
+  journal.entries = journal.entries.slice(0, last + 1);
+  writeFileSync(journalFile, JSON.stringify(journal));
+
+  let query: (sql: string) => Promise<Record<string, unknown>[]>;
+  let migrateFrom: (folder: string) => Promise<void>;
+  let close: () => Promise<void>;
+  const serverUrl = process.env.TEST_DATABASE_URL;
+  if (!serverUrl) {
+    const pg = new PGlite();
+    const db = drizzle(pg);
+    query = async (sql) => (await pg.query<Record<string, unknown>>(sql)).rows;
+    migrateFrom = (folder) => migrate(db, { migrationsFolder: folder });
+    close = () => pg.close();
+  } else {
+    const admin = postgres(serverUrl, { max: 1, onnotice: () => {} });
+    const name = `td_test_${randomBytes(6).toString('hex')}`;
+    await admin.unsafe(`create database ${name}`);
+    const url = new URL(serverUrl);
+    url.pathname = `/${name}`;
+    const client = postgres(url.toString(), { max: 1, onnotice: () => {} });
+    const db = drizzlePostgres(client);
+    query = async (sql) => [...(await client.unsafe(sql))];
+    migrateFrom = (folder) => migratePostgres(db, { migrationsFolder: folder });
+    close = async () => {
+      await client.end();
+      await admin.unsafe(`drop database ${name} with (force)`);
+      await admin.end();
+    };
+  }
+  try {
+    await migrateFrom(dir);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+  return { query, upgrade: () => migrateFrom(MIGRATIONS), close };
 }
 
 export async function createTestContext(env: Record<string, string> = {}) {

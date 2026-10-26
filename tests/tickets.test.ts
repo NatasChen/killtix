@@ -15,7 +15,7 @@ beforeAll(async () => {
   const otherTeam = (await admin.post('/api/v1/admin/teams', { name: 'Network' })).body;
   const agent = await ctx.createUser('agent@example.com', 'agent');
   const otherAgent = await ctx.createUser('agent2@example.com', 'agent');
-  // Team visibility now comes from team_members; users.team_id is kept but no longer read.
+  // Team visibility comes from team_members.
   await ctx.db.insert(teamMembers).values([
     { teamId: team.id, userId: agent.id },
     { teamId: otherTeam.id, userId: otherAgent.id },

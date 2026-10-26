@@ -1,8 +1,7 @@
 import { and, eq, like } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { notificationLogs, systemSettings, teamMembers, users } from '../src/server/db/schema.js';
-import { seed } from '../src/server/db/seed.js';
-import { createTestContext, type TestContext } from './helpers.js';
+import { notificationLogs, users } from '../src/server/db/schema.js';
+import { createTestContext, databaseAt, type TestContext } from './helpers.js';
 
 let ctx: TestContext;
 let admin: Awaited<ReturnType<TestContext['adminClient']>>;
@@ -30,19 +29,48 @@ const teamMail = async (ticketId: number) =>
     .map((r) => r.recipient)
     .sort();
 
-describe('team membership', () => {
-  it('backfills users.team_id once and never re-adds a removed member', async () => {
-    const legacy = await ctx.createUser('legacy@example.com', 'agent', { teamId: team.desk });
-    await ctx.db.delete(systemSettings).where(eq(systemSettings.key, 'migrations.team_members_backfilled'));
-    await seed(ctx.db, ctx.deps.config);
-    const member = and(eq(teamMembers.userId, legacy.id), eq(teamMembers.teamId, team.desk));
-    expect(await ctx.db.select().from(teamMembers).where(member)).toHaveLength(1);
-
-    await ctx.db.delete(teamMembers).where(member);
-    await seed(ctx.db, ctx.deps.config);
-    expect(await ctx.db.select().from(teamMembers).where(member)).toHaveLength(0);
+describe('upgrade: users.team_id moves to team_members, then the column is dropped (DECISIONS D14)', () => {
+  // The schema after 0002 (users.team_id and team_members both exist): v0.4 data that is upgrading straight
+  // through 0002–0004 has no team_members rows yet; v0.5/v0.6 already copied them at startup and set the flag.
+  const legacy = async (backfilledAtStartup: boolean) => {
+    const db = await databaseAt('0002_opposite_vance_astro');
+    await db.query(`insert into roles (key, name) values ('agent', 'Agent')`);
+    await db.query(`insert into teams (id, name) values (1, 'Desk'), (2, 'Network')`);
+    await db.query(`insert into users (id, email, display_name, role_key, team_id) values (1, 'a@example.com', 'a', 'agent', 1), (2, 'b@example.com', 'b', 'agent', 2)`);
+    if (backfilledAtStartup) {
+      // v0.5/v0.6 copied both at startup and set the flag; an administrator then removed user 2 from Network
+      await db.query(`insert into team_members (team_id, user_id) values (1, 1)`);
+      await db.query(`insert into system_settings (key, value) values ('migrations.team_members_backfilled', 'true')`);
+    }
+    await db.upgrade();
+    return db;
+  };
+  const state = async (db: Awaited<ReturnType<typeof legacy>>) => ({
+    members: (await db.query('select team_id, user_id from team_members order by user_id')).map((r) => [r.team_id, r.user_id]),
+    column: (await db.query(`select 1 from information_schema.columns where table_name = 'users' and column_name = 'team_id'`)).length,
+    flag: (await db.query(`select 1 from system_settings where key = 'migrations.team_members_backfilled'`)).length,
   });
 
+  it('copies users.team_id into team_members when upgrading straight from v0.4', async () => {
+    const db = await legacy(false);
+    try {
+      expect(await state(db)).toEqual({ members: [[1, 1], [2, 2]], column: 0, flag: 0 });
+    } finally {
+      await db.close();
+    }
+  });
+
+  it('does not re-add members removed after the v0.5 startup backfill', async () => {
+    const db = await legacy(true);
+    try {
+      expect(await state(db)).toEqual({ members: [[1, 1]], column: 0, flag: 0 });
+    } finally {
+      await db.close();
+    }
+  });
+});
+
+describe('team membership', () => {
   it('reads and writes several teams through the user API, /auth/me and /catalog', async () => {
     const u = await user('two-teams@example.com', 'agent', [team.desk, team.network]);
     const listed = (await admin.get('/api/v1/admin/users?q=two-teams')).body[0];

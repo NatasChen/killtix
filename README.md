@@ -8,9 +8,9 @@ SOC、SIEM 等外部系統可以透過 API 自動開單。
 | 項目 | 內容 |
 | --- | --- |
 | 目前版本 | **v0.6.0**，2026-10-26 |
-| 狀態 | Docker 版可部署；98 個自動化測試、部署後 API 檢查與瀏覽器端到端測試皆通過 |
+| 狀態 | Docker 版可部署；99 個自動化測試、部署後 API 檢查與瀏覽器端到端測試皆通過 |
 | 本版重點 | 儀表板統計期間（目前狀態與期間統計分開，可選起訖日）；工單清單可依建立日期篩選；所有頁面延遲載入，首頁 JS 減少約三成，一般使用者不再下載管理頁 |
-| 尚未實作 | AD/LDAP、SAML、OIDC、SCIM、FIDO2、附件、SLA 營業時間、Cloudflare 部署 |
+| 尚未實作 | AD/LDAP、SAML、OIDC、SCIM、FIDO2、附件、SLA 營業時間（只支援 Docker 部署，Cloudflare 方案不做，見 DECISIONS D3） |
 | 完整變更 | [CHANGELOG.md](CHANGELOG.md) |
 | 與原始規格的差異 | [specs/DECISIONS.md](specs/DECISIONS.md)（含待客戶確認事項） |
 | 接手開發 | 人或 AI Agent 請先讀 [AGENTS.md](AGENTS.md) |
@@ -146,7 +146,6 @@ npm run dev:web             # 前端 on :5173（代理 /api 到 :8080）
 ├── scripts/               init-env.sh（產生 .env 密鑰）、validate.sh（品質檢查）、smoke.sh（部署後 API 檢查）、ui-e2e.sh（瀏覽器測試）、seed-sample-tickets.py（範例工單）
 ├── docs/                  PRD、部署指南、QA 測試計畫、OpenAPI
 ├── specs/                 客戶需求、實作決策、需求變更單
-├── deploy/cloudflare/     Cloudflare 方案（實驗性，未實作）
 ├── AGENTS.md              接手指南：程式碼地圖、規則、常見任務、已知陷阱
 └── CLAUDE.md              讓 Claude Code 自動載入 AGENTS.md
 ```
@@ -195,4 +194,4 @@ npm run dev:web             # 前端 on :5173（代理 /api 到 :8080）
 | v0.5.0 | ✅ 工單指派給團隊（多團隊、認領）、儀表板圖表與下鑽、淺色側邊欄選單與趨勢圖修正 |
 | v0.6.0 | ✅ 儀表板統計期間、建立日期篩選、頁面延遲載入與首頁大小檢查（本版） |
 | v1.1 | AD/LDAP、SAML、OIDC、SCIM、FIDO2；附件；SLA 營業時間 |
-| 待定 | Cloudflare Workers 方案（見 [deploy/cloudflare/README.md](deploy/cloudflare/README.md)）、背景工作獨立服務化、Slack 通知 |
+| 待定 | 背景工作獨立服務化、Slack 通知 |

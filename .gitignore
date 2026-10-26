@@ -20,14 +20,6 @@ secrets.json
 id_rsa
 id_rsa.pub
 
-# ---------------------------------------------------------------------------
-# Cloudflare / Wrangler
-# ---------------------------------------------------------------------------
-.wrangler/
-wrangler.toml.bak
-.dev.vars
-.dev.vars.*
-worker-configuration.d.ts
 
 # ---------------------------------------------------------------------------
 # Node.js dependencies & caches

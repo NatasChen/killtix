@@ -97,6 +97,8 @@
 5. **資料過濾口徑一致**：「超過 3 天未結案」在 Dashboard、列表、匯出、排程報表 **筆數零誤差**，且 72 小時整邊界 **不計入**。
 6. **回歸零破壞**：v1.0.0 全 P0 需求在雙軌（Docker / Cloudflare）皆通過回歸。
 
+> **Cloudflare 不做**（2026-10-26，DECISIONS D3）：本計畫中 `qa-cf` 環境、D1／`wrangler` 相關案例（SEC-BA-008、SEC-BA-052、REG-DEPLOY-004～005 等）與「雙軌」要求都不適用，只驗證 Docker。
+
 ### 1.2 測試層級、工具與覆蓋目標
 
 | 層級 | 範圍 | 工具 | 覆蓋目標 |
@@ -564,7 +566,7 @@
 | REG-TICKET-017 | 回覆的通知勾選 | AC-TICKET-04 | 回覆 `notify:false`，再以預設值回覆 | 第一則不產生任何通知；第二則通知申請人且只含該則內容 | ✅ | P0 |
 | REG-TICKET-018 | 建立時指定團隊、認領 | FR-2.11 | `POST /tickets` 帶 `teamId`；成員 `PATCH {assigneeId: 自己}`；e2e「我來處理」 | 只有團隊時維持「新建立」；一般使用者 403、不存在的團隊 400；認領後負責人為自己、狀態「處理中」 | ✅ | P1 |
 | REG-TICKET-019 | 依團隊篩選 | FR-2.11 | `GET /tickets?teamId=mine`；e2e 清單「團隊」篩選 | 只回傳自己任一團隊的工單；沒有團隊時為空 | ✅ | P1 |
-| REG-TICKET-020 | 團隊成員回填 | FR-2.11 | 有 `users.team_id` 的使用者 → 啟動；移出團隊 → 再啟動 | 第一次啟動寫入 `team_members`；之後不會把移出的成員加回 | ✅ | P1 |
+| REG-TICKET-020 | 團隊成員回填與移除 `users.team_id` | FR-2.11 | `tests/teams.test.ts` 的 upgrade 測試：0002 結構放入舊資料 → 套用其餘 migration | v0.4 資料寫入 `team_members`；v0.5／v0.6 已移出的成員不會加回；欄位與旗標已刪除 | ✅ | P1 |
 
 ### 6.4 SLA 回歸（REG-SLA）
 
