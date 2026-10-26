@@ -52,7 +52,7 @@ scripts/init-env.sh
 | `APP_BIND` / `APP_PORT` | | 對外綁定位址與連接埠，預設 `127.0.0.1:8080`（只給本機的反向代理使用） |
 | `TRUST_PROXY` | | 在反向代理之後設為 `true`，才會採用 `X-Forwarded-For` 作為用戶端 IP（影響登入速率限制與稽核日誌） |
 | `BOOTSTRAP_ADMIN_EMAIL` | | 預設 `admin@ticket.local` |
-| `BOOTSTRAP_ADMIN_PASSWORD` | | 留空：首次啟動隨機產生並印在 log 一次。填入：使用指定密碼（例如客戶規格的 `Admin@InitTemp2026!`）。兩種情況首次登入都必須改密 |
+| `BOOTSTRAP_ADMIN_PASSWORD` | | 留空：首次啟動隨機產生並印在 log 一次。填入：使用指定密碼（例如 `admin@password`，DECISIONS D1；初始密碼不檢查密碼政策）。兩種情況首次登入都必須改成符合政策的密碼。只在資料庫還沒有管理員時生效 |
 | `TZ` / `DEFAULT_LOCALE` | | 預設 `Asia/Taipei` / `zh-TW` |
 | `SMTP_*`、`TELEGRAM_BOT_TOKEN`、`TEAMS_WEBHOOK_URL` | | 通知管道，留空即停用（通知紀錄會標示「未設定管道」）。Email 也可以在「系統設定 → 郵件設定」改用介面填寫的 SMTP 或 Resend，不需重新部署；`SMTP_*` 只在選「環境變數」時使用 |
 | `AGING_DIGEST_HOUR` | | 每天幾點（app 時區）之後發送「超過 3 天未結案」報告到 Teams，預設 9 |

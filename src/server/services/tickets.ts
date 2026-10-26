@@ -402,6 +402,9 @@ export const ticketFilterSchema = z.object({
   assignee: z.union([z.enum(['me', 'none']), z.coerce.number().int().positive()]).optional(),
   slaStatus: z.enum(['on_track', 'at_risk', 'breached', 'met']).optional(),
   olderThanDays: z.coerce.number().int().min(1).max(3650).optional(),
+  // created on or after / on or before these local calendar days (config.timezone), inclusive
+  createdFrom: z.iso.date().optional(),
+  createdTo: z.iso.date().optional(),
   q: z.string().trim().max(200).optional(),
   sort: z.enum(['created_at', '-created_at', 'updated_at', '-updated_at', 'priority', '-priority']).default('-created_at'),
   page: z.coerce.number().int().min(1).default(1),
@@ -424,7 +427,15 @@ export function customFieldFiltersFromQuery(query: Record<string, string>): Tick
 
 const escapeLike = (s: string) => s.replace(/[\\%_]/g, (ch) => `\\${ch}`);
 
-export function buildTicketConditions(actor: Actor, filters: TicketFilters, now: Date): SQL[] {
+/** The instant a local calendar day (YYYY-MM-DD, `plusDays` later) starts in `timezone`; computed in SQL. */
+export const localDayStart = (date: string, timezone: string, plusDays = 0) =>
+  sql`((${date}::date + ${plusDays}::int)::timestamp at time zone ${timezone})`;
+
+/** `column` falls on one of the local calendar days from..to (inclusive). */
+export const withinDays = (column: typeof tickets.createdAt | typeof tickets.resolvedAt, from: string, to: string, timezone: string) =>
+  and(gte(column, localDayStart(from, timezone)), lt(column, localDayStart(to, timezone, 1)))!;
+
+export function buildTicketConditions(actor: Actor, filters: TicketFilters, now: Date, timezone: string): SQL[] {
   const conds: SQL[] = [];
   const scope = ticketScope(actor.user, actor.permissions, actor.tokenId);
   if (scope) conds.push(scope);
@@ -444,6 +455,8 @@ export function buildTicketConditions(actor: Actor, filters: TicketFilters, now:
   else if (typeof filters.assignee === 'number') conds.push(eq(tickets.assigneeId, filters.assignee));
   if (filters.slaStatus) conds.push(eq(tickets.slaStatus, filters.slaStatus));
   if (filters.olderThanDays) conds.push(agingCondition(now, filters.olderThanDays));
+  if (filters.createdFrom) conds.push(gte(tickets.createdAt, localDayStart(filters.createdFrom, timezone)));
+  if (filters.createdTo) conds.push(lt(tickets.createdAt, localDayStart(filters.createdTo, timezone, 1)));
   if (filters.q) {
     const pattern = `%${escapeLike(filters.q)}%`;
     conds.push(or(ilike(tickets.subject, pattern), ilike(tickets.number, pattern))!);
@@ -480,35 +493,68 @@ export function buildTicketConditions(actor: Actor, filters: TicketFilters, now:
 // ---------------------------------------------------------------------------
 export const AGING_BUCKET_KEYS = ['0-1', '1-3', '3-7', '7-14', '14+'] as const;
 
+const DAY_MS = 86_400_000;
+const shiftDate = (date: string, days: number) => new Date(Date.parse(date) + days * DAY_MS).toISOString().slice(0, 10);
+
+/** Today's calendar date (YYYY-MM-DD) in `timezone`. */
+export const localToday = (now: Date, timezone: string) =>
+  new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
+
 /** The last `days` calendar dates (YYYY-MM-DD) in `timezone`, oldest first, ending today. */
 export function recentDates(now: Date, timezone: string, days: number): string[] {
-  const today = new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
-  const [y, m, d] = today.split('-').map(Number);
-  return Array.from({ length: days }, (_, i) => new Date(Date.UTC(y, m - 1, d - (days - 1 - i))).toISOString().slice(0, 10));
+  const today = localToday(now, timezone);
+  return Array.from({ length: days }, (_, i) => shiftDate(today, i - (days - 1)));
 }
 
-export async function dashboardCharts(deps: Deps, actor: Actor) {
+export const DASHBOARD_DEFAULT_DAYS = 30;
+export const DASHBOARD_MAX_DAYS = 366;
+/** Longer ranges are charted per week (Monday start) instead of per day. */
+export const DASHBOARD_DAILY_MAX_DAYS = 92;
+
+export const dashboardRangeSchema = z.object({ from: z.iso.date().optional(), to: z.iso.date().optional() });
+export type DashboardRange = { from: string; to: string; days: number; unit: 'day' | 'week' };
+
+/**
+ * The dashboard period: local calendar days from..to, inclusive. Defaults to the last 30 days ending today;
+ * only `to` given → the 30 days ending then; only `from` given → from then until today.
+ */
+export function dashboardRange(now: Date, timezone: string, query: z.infer<typeof dashboardRangeSchema>): DashboardRange {
+  const to = query.to ?? localToday(now, timezone);
+  const from = query.from ?? shiftDate(to, 1 - DASHBOARD_DEFAULT_DAYS);
+  const days = Math.round((Date.parse(to) - Date.parse(from)) / DAY_MS) + 1;
+  if (days < 1) throw badRequest(undefined, { errors: [{ path: 'from', message: 'from must not be after to' }] });
+  if (days > DASHBOARD_MAX_DAYS) throw badRequest(undefined, { errors: [{ path: 'to', message: `at most ${DASHBOARD_MAX_DAYS} days` }] });
+  return { from, to, days, unit: days > DASHBOARD_DAILY_MAX_DAYS ? 'week' : 'day' };
+}
+
+export async function dashboardCharts(deps: Deps, actor: Actor, range: DashboardRange) {
   const { db, clock, config } = deps;
   const now = clock();
-  const base = buildTicketConditions(actor, ticketFilterSchema.parse({}), now);
+  const base = buildTicketConditions(actor, ticketFilterSchema.parse({}), now, config.timezone);
   const where = (...extra: (SQL | undefined)[]) => and(...base, ...extra);
   const open = notInArray(tickets.status, CLOSED_STATUSES);
   const countWhere = async (cond: SQL | undefined) => (await db.select({ n: count() }).from(tickets).where(cond))[0].n;
 
-  // Created / resolved per local calendar day. Rows are grouped by the day string in SQL; the lower
-  // bound is generous (31 days) and the 30 wanted dates are picked in code.
-  const dates = recentDates(now, config.timezone, 30);
-  const windowStart = new Date(now.getTime() - 31 * 86_400_000);
+  // Created / resolved per local calendar day of the range, grouped by the day string in SQL; zero-filled
+  // in code. Ranges over 92 days are summed per week, each point dated by its first day inside the range.
   const perDay = async (column: typeof tickets.createdAt | typeof tickets.resolvedAt) => {
     const rows = await db
       .select({ day: sql<string>`to_char(${column} at time zone ${config.timezone}, 'YYYY-MM-DD')`, n: count() })
       .from(tickets)
-      .where(where(isNotNull(column), gte(column, windowStart)))
+      .where(where(isNotNull(column), withinDays(column, range.from, range.to, config.timezone)))
       .groupBy(sql`1`);
     return new Map(rows.map((r) => [r.day, r.n]));
   };
   const [created, resolved] = await Promise.all([perDay(tickets.createdAt), perDay(tickets.resolvedAt)]);
-  const trend30d = dates.map((date) => ({ date, created: created.get(date) ?? 0, resolved: resolved.get(date) ?? 0 }));
+  const trend: { date: string; created: number; resolved: number }[] = [];
+  for (let i = 0; i < range.days; i++) {
+    const date = shiftDate(range.from, i);
+    const monday = new Date(Date.parse(date)).getUTCDay() === 1;
+    if (range.unit === 'day' || i === 0 || monday) trend.push({ date, created: 0, resolved: 0 });
+    const point = trend[trend.length - 1];
+    point.created += created.get(date) ?? 0;
+    point.resolved += resolved.get(date) ?? 0;
+  }
 
   // Open tickets by age: (0,1], (1,3], (3,7], (7,14], (14,∞) days. Everything above 3 days goes through
   // agingCondition(), so 3-7 + 7-14 + 14+ always equals the dashboard's olderThan3Days.
@@ -549,7 +595,7 @@ export async function dashboardCharts(deps: Deps, actor: Actor) {
     const noTeam = await countWhere(where(open, isNull(tickets.teamId)));
     byTeam = [...groups, { teamId: null, name: null, n: noTeam }];
   }
-  return { trend30d, agingBuckets, workload, byTeam };
+  return { trend, agingBuckets, workload, byTeam };
 }
 
 const requesterUser = alias(users, 'requester');
@@ -557,7 +603,7 @@ const assigneeUser = alias(users, 'assignee');
 
 export async function listTickets(deps: Deps, actor: Actor, filters: TicketFilters, opts: { all?: boolean } = {}) {
   const { db, clock } = deps;
-  const where = and(...buildTicketConditions(actor, filters, clock()));
+  const where = and(...buildTicketConditions(actor, filters, clock(), deps.config.timezone));
   const sortCol = { created_at: tickets.createdAt, updated_at: tickets.updatedAt, priority: tickets.priority }[
     filters.sort.replace('-', '') as 'created_at'
   ];

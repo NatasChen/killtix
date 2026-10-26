@@ -1,4 +1,4 @@
-import { and, count, desc, eq, gte, inArray, isNotNull, notInArray, sql, type SQL } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, isNotNull, notInArray, type SQL } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { authOf, guard } from '../auth/session.js';
 import type { AppEnv } from '../context.js';
@@ -19,9 +19,12 @@ import {
   buildTicketConditions,
   customFieldFiltersFromQuery,
   dashboardCharts,
+  dashboardRange,
+  dashboardRangeSchema,
   decodeFieldValue,
   listTickets,
   ticketFilterSchema,
+  withinDays,
 } from '../services/tickets.js';
 import { parseWith } from './util.js';
 
@@ -37,31 +40,34 @@ export const reportRoutes = new Hono<AppEnv>()
     const { db, clock, config } = c.var.deps;
     const auth = authOf(c);
     const now = clock();
-    const base = buildTicketConditions(auth, parseWith(ticketFilterSchema, {}), now);
+    // Two kinds of numbers (DECISIONS D16): the current state (open, aging, SLA at risk/breached, priority,
+    // workload, teams) ignores the period; the period numbers count tickets created or resolved from..to.
+    const range = dashboardRange(now, config.timezone, parseWith(dashboardRangeSchema, c.req.query()));
+    const base = buildTicketConditions(auth, parseWith(ticketFilterSchema, {}), now, config.timezone);
     const where = (...extra: (SQL | undefined)[]) => and(...base, ...extra);
     const open = notInArray(tickets.status, CLOSED_STATUSES);
-    // Dates inside raw sql`` are passed as ISO strings: postgres-js would otherwise send Date.toString().
-    const startOfToday = sql`(date_trunc('day', ${now.toISOString()}::timestamptz at time zone ${config.timezone}) at time zone ${config.timezone})`;
+    const createdInRange = withinDays(tickets.createdAt, range.from, range.to, config.timezone);
+    const resolvedInRange = withinDays(tickets.resolvedAt, range.from, range.to, config.timezone);
     const countWhere = async (cond: SQL | undefined) =>
       (await db.select({ n: count() }).from(tickets).where(cond))[0].n;
 
-    const [openCount, newToday, resolvedToday, olderThan3Days, breached, atRisk] = await Promise.all([
+    const [openCount, newInRange, resolvedCount, olderThan3Days, breached, atRisk] = await Promise.all([
       countWhere(where(open)),
-      countWhere(where(gte(tickets.createdAt, startOfToday))),
-      countWhere(where(gte(tickets.resolvedAt, startOfToday))),
+      countWhere(where(createdInRange)),
+      countWhere(where(resolvedInRange)),
       countWhere(where(agingCondition(now, 3))),
       countWhere(where(open, eq(tickets.slaStatus, 'breached'))),
       countWhere(where(open, eq(tickets.slaStatus, 'at_risk'))),
     ]);
 
-    const byStatus = await db.select({ key: tickets.status, n: count() }).from(tickets).where(where()).groupBy(tickets.status);
+    const byStatus = await db.select({ key: tickets.status, n: count() }).from(tickets).where(where(createdInRange)).groupBy(tickets.status);
     const byPriority = await db.select({ key: tickets.priority, n: count() }).from(tickets).where(where(open)).groupBy(tickets.priority);
     const topTags = await db
       .select({ key: tags.name, n: count() })
       .from(ticketTags)
       .innerJoin(tags, eq(tags.id, ticketTags.tagId))
       .innerJoin(tickets, eq(tickets.id, ticketTags.ticketId))
-      .where(where(open))
+      .where(where(createdInRange))
       .groupBy(tags.name)
       .orderBy(desc(count()))
       .limit(10);
@@ -69,15 +75,14 @@ export const reportRoutes = new Hono<AppEnv>()
       .select({ key: helpTopics.name, n: count() })
       .from(tickets)
       .innerJoin(helpTopics, eq(helpTopics.id, tickets.helpTopicId))
-      .where(where(open))
+      .where(where(createdInRange))
       .groupBy(helpTopics.name)
       .orderBy(desc(count()))
       .limit(10);
-    const thirtyDaysAgo = new Date(now.getTime() - 30 * 86_400_000);
     const slaOutcomes = await db
       .select({ key: tickets.slaStatus, n: count() })
       .from(tickets)
-      .where(where(isNotNull(tickets.resolvedAt), gte(tickets.resolvedAt, thirtyDaysAgo), inArray(tickets.slaStatus, ['met', 'breached'])))
+      .where(where(isNotNull(tickets.resolvedAt), resolvedInRange, inArray(tickets.slaStatus, ['met', 'breached'])))
       .groupBy(tickets.slaStatus);
     const met = slaOutcomes.find((r) => r.key === 'met')?.n ?? 0;
     const missed = slaOutcomes.find((r) => r.key === 'breached')?.n ?? 0;
@@ -86,19 +91,20 @@ export const reportRoutes = new Hono<AppEnv>()
       : null;
 
     return c.json({
+      range,
       openCount,
-      newToday,
-      resolvedToday,
+      newInRange,
+      resolvedInRange: resolvedCount,
       olderThan3Days,
       slaBreached: breached,
       slaAtRisk: atRisk,
-      slaMetRate30d: met + missed ? Math.round((met / (met + missed)) * 1000) / 10 : null,
+      slaMetRate: met + missed ? Math.round((met / (met + missed)) * 1000) / 10 : null,
       byStatus,
       byPriority,
       topTags,
       topHelpTopics,
       failedNotifications,
-      ...(await dashboardCharts(c.var.deps, auth)),
+      ...(await dashboardCharts(c.var.deps, auth, range)),
     });
   })
 

@@ -44,6 +44,8 @@ await shot('02-dashboard');
 
 step('create ticket through the form');
 await page.getByRole('link', { name: '新增工單' }).first().click();
+// pages are lazy chunks: the previous page stays until the new one has loaded, so wait for its heading
+await page.getByRole('heading', { name: '新增工單' }).waitFor();
 await pick(page.getByLabel('服務類別'), '一般問題');
 await page.getByLabel('主旨').fill('UI 測試：印表機無法列印');
 await page.getByLabel('問題描述').fill('三樓印表機顯示卡紙，但實際上沒有紙張卡住。');
@@ -69,6 +71,7 @@ await shot('03-ticket-detail');
 
 step('ticket list + 3-day filter');
 await page.getByLabel('主選單').getByRole('link', { name: '工單', exact: true }).click();
+await page.getByRole('heading', { name: '工單', exact: true }).waitFor();
 await page.getByText('UI 測試：印表機無法列印').first().waitFor();
 await shot('04-ticket-list');
 await page.getByLabel('只看超過 3 天未結案').check();
@@ -78,6 +81,7 @@ await page.getByText('沒有資料').waitFor();
 
 step('admin: create user');
 await page.getByLabel('主選單').getByRole('link', { name: '使用者' }).click();
+await page.getByRole('heading', { name: '使用者', exact: true }).waitFor();
 await page.getByLabel('電子郵件').fill(VENDOR);
 await page.getByLabel('顯示名稱').fill('UI Vendor');
 await pick(page.getByLabel('角色').first(), '外部廠商');
@@ -93,12 +97,14 @@ for (const name of [NET, DESK]) {
   if (!res.ok()) throw new Error(`create team ${name}: ${res.status()}`);
 }
 await page.getByLabel('主選單').getByRole('link', { name: '新增工單' }).click();
+await page.getByRole('heading', { name: '新增工單' }).waitFor();
 await page.getByLabel('主旨').fill('UI 測試：交換器斷線');
 await pick(page.getByLabel('團隊'), NET);
 await page.getByRole('button', { name: '送出工單' }).click();
 await page.getByRole('heading', { name: 'UI 測試：交換器斷線' }).waitFor();
 await page.locator('.ant-descriptions').getByText('新建立').waitFor(); // a team alone does not start the work
 await page.getByLabel('主選單').getByRole('link', { name: '工單', exact: true }).click();
+await page.getByRole('heading', { name: '工單', exact: true }).waitFor();
 await pick(page.getByLabel('團隊'), NET);
 await page.getByRole('button', { name: '套用' }).click();
 await page.waitForURL(/teamId=\d+/);
@@ -113,6 +119,7 @@ await page.locator('.ant-descriptions').getByText('處理中').waitFor();
 if (await page.getByRole('button', { name: '我來處理' }).count()) throw new Error('claim button should disappear once claimed');
 await shot('05a-ticket-claimed');
 await page.getByLabel('主選單').getByRole('link', { name: '使用者' }).click();
+await page.getByRole('heading', { name: '使用者', exact: true }).waitFor();
 const vendorTeams = page.getByRole('row').filter({ hasText: VENDOR }).getByLabel('團隊');
 await vendorTeams.click(); // a multiple select stays open: pick both, then close it
 for (const name of [NET, DESK]) {
@@ -137,14 +144,14 @@ const TAG = `e2etag${RUN}`;
 }
 await page.getByLabel('主選單').getByRole('link', { name: '儀表板' }).click();
 await page.getByRole('heading', { name: '儀表板' }).waitFor();
-await page.getByRole('img', { name: /近 30 天新增與解決/ }).waitFor();
+await page.getByRole('img', { name: /新增與解決趨勢/ }).waitFor();
 await page.getByRole('img', { name: /狀態分佈/ }).waitFor();
 await page.getByRole('img', { name: /未結案天數/ }).waitFor();
 await page.getByRole('group', { name: new RegExp(`常見標籤.*${TAG}`) }).waitFor();
 await page.getByRole('heading', { name: '工程師負載（未結案）' }).waitFor(); // staff-only row
 {
   // the trend line chart fills its card instead of stopping at a fixed size
-  const [svg, body] = await page.getByRole('img', { name: /近 30 天新增與解決/ }).evaluate((el) => [
+  const [svg, body] = await page.getByRole('img', { name: /新增與解決趨勢/ }).evaluate((el) => [
     el.getBoundingClientRect().width,
     el.closest('.ant-card-body').clientWidth,
   ]);
@@ -161,6 +168,28 @@ await page.getByRole('group', { name: /常見標籤/ }).getByRole('link', { name
 await page.waitForURL(new RegExp(`/tickets\\?tags=${TAG}`));
 await page.getByRole('row').filter({ hasText: 'UI 測試：標籤統計' }).first().waitFor();
 if ((await page.getByLabel('標籤', { exact: true }).inputValue()) !== TAG) throw new Error('tag filter not applied');
+
+step('dashboard period: preset, section heading, drill-down keeps the dates');
+await page.getByLabel('主選單').getByRole('link', { name: '儀表板' }).click();
+await page.getByRole('heading', { name: '目前狀態' }).waitFor();
+await page.getByLabel('統計期間').click();
+await page.locator('.ant-picker-presets').getByText('近 7 天', { exact: true }).click();
+await page.waitForURL(/[?&]from=\d{4}-\d{2}-\d{2}&to=\d{4}-\d{2}-\d{2}/);
+{
+  const url = new URL(page.url());
+  const [from, to] = [url.searchParams.get('from'), url.searchParams.get('to')];
+  if ((Date.parse(to) - Date.parse(from)) / 86_400_000 !== 6) throw new Error(`7-day preset gave ${from} ~ ${to}`);
+  await page.getByRole('heading', { name: `期間統計：${from} ~ ${to}` }).waitFor();
+  // one hover target per day in the trend chart
+  const points = await page.getByRole('img', { name: /新增與解決趨勢/ }).locator('rect[tabindex="0"]').count();
+  if (points !== 7) throw new Error(`trend has ${points} points for 7 days`);
+  await shot('05f-dashboard-period');
+  // the period KPI opens the list filtered by the same created dates, shown in the filter form
+  await page.locator('.kpi').filter({ hasText: '期間新增' }).getByRole('link').click();
+  await page.waitForURL(new RegExp(`/tickets\\?createdFrom=${from}&createdTo=${to}`));
+  await page.getByRole('row').filter({ hasText: 'UI 測試：標籤統計' }).first().waitFor();
+  if ((await page.getByLabel('建立日期').inputValue()) !== from) throw new Error('created-date filter not shown');
+}
 
 step('admin: company logo');
 await page.getByLabel('主選單').getByRole('link', { name: '設定' }).click();
@@ -300,7 +329,7 @@ await p3.getByLabel('電子郵件').fill(ADMIN.email);
 await p3.getByLabel('密碼').fill(ADMIN.password);
 await p3.getByRole('button', { name: '登入' }).click();
 await p3.getByRole('heading', { name: '儀表板' }).waitFor();
-await p3.getByRole('img', { name: /近 30 天新增與解決/ }).waitFor();
+await p3.getByRole('img', { name: /新增與解決趨勢/ }).waitFor();
 await noOverflow(p3, 'dashboard');
 await p3.screenshot({ path: `${SHOTS}/11a-dashboard-375-light.png`, fullPage: true });
 await p3.evaluate(() => { document.documentElement.dataset.theme = 'dark'; });

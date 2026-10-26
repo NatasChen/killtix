@@ -1,4 +1,5 @@
-import { Button, Card, Checkbox, Flex, Form, Input, Pagination, Table, type TableColumnsType } from 'antd';
+import { Button, Card, Checkbox, DatePicker, Flex, Form, Input, Pagination, Table, type TableColumnsType } from 'antd';
+import dayjs from 'dayjs';
 import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { get } from '../api';
@@ -24,7 +25,7 @@ export interface TicketRow {
 }
 
 const UNRESOLVED = 'new,open,pending_user';
-const FILTER_KEYS = ['q', 'status', 'priority', 'assignee', 'teamId', 'olderThanDays', 'tags', 'tagsMode', 'slaStatus', 'sort'];
+const FILTER_KEYS = ['q', 'status', 'priority', 'assignee', 'teamId', 'createdFrom', 'createdTo', 'olderThanDays', 'tags', 'tagsMode', 'slaStatus', 'sort'];
 
 export function TicketListPage() {
   const { t } = useI18n();
@@ -172,6 +173,20 @@ export function TicketListPage() {
                 </Field>
               </div>
             )}
+            <div style={{ minWidth: 250 }}>
+              {/* local calendar days, inclusive; the dashboard's period links fill these in */}
+              <Field label={t('ui.tickets.created_range')}>
+                <DatePicker.RangePicker
+                  value={[draft.createdFrom ? dayjs(draft.createdFrom) : null, draft.createdTo ? dayjs(draft.createdTo) : null]}
+                  format="YYYY-MM-DD"
+                  allowEmpty={[true, true]}
+                  style={{ width: '100%' }}
+                  onChange={(range) =>
+                    setDraft((d) => ({ ...d, createdFrom: range?.[0]?.format('YYYY-MM-DD') ?? '', createdTo: range?.[1]?.format('YYYY-MM-DD') ?? '' }))
+                  }
+                />
+              </Field>
+            </div>
             <div {...filter}>
               <Field label={t('ui.tickets.sla')}>
                 <Choice

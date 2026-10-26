@@ -4,6 +4,20 @@
 
 ## [Unreleased]
 
+儀表板統計期間與前端延遲載入。沒有資料表、環境變數或部署變更；`GET /reports/dashboard` 的回應欄位有變動（只有本系統前端使用，見 DECISIONS D16）。
+
+### Added
+- 儀表板統計期間（DECISIONS D16）：「期間統計」區可選起訖日（快捷選項：今天、近 7／30／90 天、本月、今年；最長 366 天，不可選未來日期），期間記在網址（`/?from=&to=`）。期間新增、期間解決、SLA 達標率、新增與解決趨勢（超過 92 天改為每週一點）、狀態分佈、常見標籤、服務類別依期間計算；「目前狀態」區（未結案、超過 3 天、SLA 逾時／即將逾時、通知失敗、未結案天數、優先度、工程師負載、各團隊）不受期間影響。`GET /reports/dashboard` 接受 `from`、`to`（`config.timezone` 的日曆日，含頭尾），格式錯誤、起日晚於迄日或超過 366 天回 400。
+- 工單清單與 CSV 匯出新增 `createdFrom`／`createdTo` 篩選（日曆日、含頭尾），清單的篩選表單新增「建立日期」區間；儀表板期間圖表的下鑽連結帶上同一段日期。`docs/openapi.json` 同步。
+- `scripts/bundle-check.mjs`（`validate.sh` 執行）：首頁 JS 超過 300 KB（gzip），或首頁含有只在管理頁使用的字典 key 時失敗。
+- `tests/dashboard.test.ts` 新增 2 項（期間計算與當地午夜邊界、每週彙總與無效期間），e2e 新增儀表板期間步驟（快捷選項、區段標題、7 個資料點、下鑽後清單顯示建立日期）。
+
+### Changed
+- 前端依頁面延遲載入（DECISIONS D17）：`AdminRoutes.tsx`（原本近 1,000 行）拆成 `pages/admin/` 下的 `UsersPage`、`CatalogPages`（團隊、SLA、服務類別、回覆範本）、`FormsPage`、`ApiTokensPage`、`SettingsPage`（`LogoSettings`、`MailSettingsCard`）、`NotificationsPage`、`AuditPage` 與共用的 `shared.tsx`；所有頁面（含登入頁）經 `src/web/lazy.ts` 的 `lazyPage()` 延遲載入，React 獨立成 `react` 檔案。首頁 JS 由 1,195 KB（gzip 376 KB）降為 797 KB（gzip 259 KB）；一般使用者與廠商不再下載管理頁。頁面載入中側邊欄保留，內容區顯示載入圖示。行為、路由與文字不變。
+- 儀表板改為「目前狀態」與「期間統計」兩區；「今日新增」「今日解決」改為「期間新增」「期間解決」，「SLA 達標率」「常見標籤」「服務類別」「狀態分佈」改依期間計算。`GET /reports/dashboard` 回應新增 `range`、`trend`、`newInRange`、`resolvedInRange`、`slaMetRate`，移除 `trend30d`、`slaMetRate30d`、`newToday`、`resolvedToday`。
+- 趨勢圖的日期標籤依資料點數自動調整為約 6 個；未結案天數直條圖限制最大寬度，兩欄版面下不會被放大。
+- `dayjs` 列入 `devDependencies`（與 antd 使用的版本相同，沒有新增下載），供日期區間選擇使用。
+
 ## [0.5.0] - 2026-10-26
 
 工單指派給團隊：使用者可屬於多個團隊，工單可指派給團隊由成員共同處理並認領。升級時啟動會自動套用 migration（新增 `team_members`）並一次性回填既有 `users.team_id`；不需新增環境變數，沒有部署變更。

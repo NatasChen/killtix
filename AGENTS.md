@@ -14,9 +14,9 @@
 | --- | --- |
 | 目前版本 | **0.5.0**（2026-10-26，git tag `v0.5.0`），見 [CHANGELOG.md](CHANGELOG.md) |
 | 支援部署 | Docker Compose（app + PostgreSQL 16 + Redis 7）。Cloudflare 為實驗性、**未實作** |
-| 測試狀態 | 96 個 Vitest 測試、`scripts/validate.sh`、`scripts/smoke.sh`（24 項）、`scripts/ui-e2e.sh` 全部通過 |
+| 測試狀態 | 98 個 Vitest 測試、`scripts/validate.sh`、`scripts/smoke.sh`（24 項）、`scripts/ui-e2e.sh` 全部通過 |
 | 未實作 | AD/LDAP、SAML、OIDC、SCIM、FIDO2、附件、SLA 營業時間、Cloudflare、多副本背景工作 |
-| 待客戶確認 | 見 [specs/DECISIONS.md](specs/DECISIONS.md) 中標示 ⏳ 的項目（預設管理員密碼、SSO 時程、Cloudflare 去留） |
+| 待客戶確認 | 見 [specs/DECISIONS.md](specs/DECISIONS.md) 中標示 ⏳ 的項目（SSO 時程、Cloudflare 去留、`users.team_id` 移除）；預設管理員密碼已決定（D1：各部署以 `.env` 設定） |
 | 下一步建議 | v1.1：SSO（`users.identity_provider` 已預留）→ 附件 → SLA 營業時間 |
 
 ### 開始工作前的閱讀順序
@@ -99,7 +99,8 @@ src/server/
   services/audit.ts   稽核日誌
   services/rateLimit.ts 記憶體 / Redis 固定視窗計數
 src/web/
-  main.tsx            路由；依 session stage 切換登入/改密/2FA 頁面
+  main.tsx            路由；依 session stage 切換登入/改密/2FA 頁面。所有頁面都以 lazyPage() 延遲載入（DECISIONS D17）
+  lazy.ts             lazyPage(load, name)：具名匯出的 React.lazy()；Suspense 在 Layout 內容區（載入圖示）與 main.tsx（登入頁）
   api.ts              fetch 包裝：自動帶 X-Requested-With、錯誤轉 ApiError、401/stage 錯誤觸發重新整理 auth
   auth.tsx / i18n.tsx / theme.ts   全域狀態；theme.ts 另有 useThemeMode() 與 antdTheme()（Ant Design 主題）
   branding.tsx        企業標誌網址（BrandingProvider）與 <Brand>：側邊欄用深色背景版，登入頁依主題選擇
@@ -107,11 +108,15 @@ src/web/
   components/common.tsx 共用元件：Field（label 綁定控制項）、Choice（下拉選單）、PageHeader、各種 badge、ErrorBanner、useLoad/useAction
   components/charts.tsx 儀表板圖表（Donut、LineChart、Columns、TagCloud、Bars）：SVG 自繪、顏色只取自 palette.ts、viewBox 縮放、role="img" + aria-label
   styles.css          只放版面與首次繪製的底色，元件樣式來自 Ant Design
-  pages/…             各頁面；pages/admin/Crud.tsx 是簡單資源的通用 CRUD 元件
+  pages/…             各頁面；Dashboard.tsx 分「目前狀態」與「期間統計」兩區（期間在網址 ?from=&to=，DECISIONS D16）
+  pages/admin/        AdminRoutes.tsx 只放路由與 lazyPage()；每頁一個檔：UsersPage、CatalogPages（團隊／SLA／服務類別／回覆範本，
+                      皆為 Crud.tsx 的 CrudPage 設定）、FormsPage、ApiTokensPage、SettingsPage（LogoSettings、MailSettingsCard）、
+                      NotificationsPage、AuditPage；shared.tsx 放共用的 useOptions、OneTimeSecret、tableProps、sectionTitle
   public/theme-init.js 首次繪製前套用主題（CSP 不允許 inline script，所以是外部檔）
 drizzle/              自動產生的 migration，不要手改
 tests/                Vitest：helpers.ts（測試環境工廠）、auth / tickets / teams / dashboard / notify / i18n 測試；e2e/ui.mjs（瀏覽器）
 scripts/              init-env.sh（建立 .env、只填空白密鑰）、validate.sh、smoke.sh、ui-e2e.sh、check-links.mjs、
+                      bundle-check.mjs（首頁 JS ≤ 300 KB gzip、首頁不含管理頁程式碼）、
                       seed-sample-tickets.py（經 API 建立 30 張範例工單，只用 Python 標準函式庫）
 specs/                客戶需求、決策紀錄、CrewAI 需求變更單
 crewai_ticket_build.py CrewAI 迭代工具（PM → SAr → PG → UI 設計師 → QA，全部以本文件為規則）。維護者本機工具，
@@ -164,7 +169,7 @@ crewai_ticket_build.py CrewAI 迭代工具（PM → SAr → PG → UI 設計師 
 
 ### 新增權限或角色
 - 修改 `rbac.ts` 的 `ROLE_DEFINITIONS`（啟動時會同步到 `roles` 表）。
-- 新角色要加 `ui.role.<key>` 字典、`tests/i18n.test.ts` 的 `DYNAMIC['ui.role.']`、`routes/admin.ts` 的 `ROLE_KEYS`、前端 `AdminRoutes.tsx` 的 `ROLES`。
+- 新角色要加 `ui.role.<key>` 字典、`tests/i18n.test.ts` 的 `DYNAMIC['ui.role.']`、`routes/admin.ts` 的 `ROLE_KEYS`、前端 `pages/admin/UsersPage.tsx` 的 `ROLES`。
 
 ### 新增通知事件或管道
 - 事件：在 `services/notify.ts` 的 `TicketEvent` 加型別，在 `notifyTicketEvent()` 決定收件者，字典加 `notify.<event>.subject/body/teams`。
@@ -173,7 +178,9 @@ crewai_ticket_build.py CrewAI 迭代工具（PM → SAr → PG → UI 設計師 
 - 測試用 `dispatchPending(deps, fakeSenders)`，不要打真實外部服務。
 
 ### 新增前端頁面
-- 頁面放 `src/web/pages/`，在 `main.tsx`（一般）或 `pages/admin/AdminRoutes.tsx`（管理）註冊，導覽在 `components/Layout.tsx`。
+- 頁面放 `src/web/pages/`（管理頁放 `pages/admin/`，一頁一個檔，共用的小工具放 `shared.tsx`），在 `main.tsx`（一般）或
+  `pages/admin/AdminRoutes.tsx`（管理）用 `lazyPage(() => import('./X'), 'XPage')` 註冊，**不要靜態 import 頁面**
+  （`scripts/bundle-check.mjs` 會因首頁變大或含管理頁程式碼而失敗）。導覽在 `components/Layout.tsx`。
 - **UI 一律用 Ant Design 元件**（Card、Table、Form、Input、Select、Button、Tag、Alert…），不手刻 HTML 控制項，也不另加其他 UI 套件。
   表單欄位用 `common.tsx` 的 `<Field label>`（label 會綁定控制項，螢幕閱讀器與 e2e 的 `getByLabel()` 才找得到），下拉選單用 `<Choice>`；
   值放在元件 state，antd `Form` 只用來排版與送出。
@@ -212,9 +219,9 @@ crewai_ticket_build.py CrewAI 迭代工具（PM → SAr → PG → UI 設計師 
 
 | 指令 | 內容 | 需要 |
 | --- | --- | --- |
-| `npm test` | 96 個單元/整合測試（PGlite） | Node |
+| `npm test` | 98 個單元/整合測試（PGlite） | Node |
 | `TEST_DATABASE_URL=postgres://… npm test` | 同上，改用真實 PostgreSQL + 正式驅動 | 一個 Postgres（見下） |
-| `npm run validate` | 型別、schema/migration 一致、測試、文件中的測試數、建置、OpenAPI JSON、Markdown 連結、compose 設定 | Node（Docker 可選） |
+| `npm run validate` | 型別、schema/migration 一致、測試、文件中的測試數、建置、首頁 JS 大小（bundle-check）、OpenAPI JSON、Markdown 連結、compose 設定 | Node（Docker 可選） |
 | `scripts/smoke.sh <url> <預設管理員密碼>` | 部署後 API 端到端 24 項（會改管理員密碼為 `Smoke-Test-Passw0rd!`） | 執行中的系統 |
 | `scripts/ui-e2e.sh <url> <管理員密碼>` | 瀏覽器操作主要流程、截圖到 `tests/e2e/shots/` | Docker |
 
@@ -271,6 +278,11 @@ docker compose --env-file /tmp/td.env -p tdtest down -v
     - `Select` 不是原生 `<select>`：e2e 用 `tests/e2e/ui.mjs` 的 `pick()`（點開後依 title 點選項），選項要帶 `title`（`<Choice>` 已處理）。
     - `Input.TextArea` 的 `autoSize` 會在頁面放一個隱藏的量測用 textarea，e2e 要用 `textarea:visible`。
     - `Layout.Sider` 的 `breakpoint` 要等第一次量測後才收合，手機上第一個畫面會被撐寬；`Layout.tsx` 用 `matchMedia` 決定初始的 `collapsed`。
+    - 巢狀 `ConfigProvider` 換了 `algorithm` 仍會繼承外層的 token：側邊欄的深色選單曾繼承淺色主題的白色 `colorBgElevated`，變成白底白字。
+      巢狀主題要自己設定會用到的底色（`Layout.tsx` 的 `navControls`）。
+13. **頁面延遲載入後，舊頁面會留到新頁面的程式下載完**（React Router 以 transition 導覽）：e2e 點連結後要先等新頁面的標題
+    （`getByRole('heading', …).waitFor()`）再操作，否則 `getByLabel()` 可能抓到舊頁面上同名的元素（曾抓到儀表板的「服務類別」圖表）。
+14. **Playwright 的 `waitForFunction` 在本系統不能用**：它需要 eval，CSP（`script-src 'self'`）會擋下。改用 locator 或以 `evaluate` 輪詢。
 
 ---
 

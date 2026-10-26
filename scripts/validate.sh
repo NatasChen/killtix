@@ -41,6 +41,9 @@ echo "$total tests, documented correctly"
 step "production build"
 npm run --silent build >/dev/null
 
+step "first-screen bundle: size budget, no admin code"
+node scripts/bundle-check.mjs
+
 step "OpenAPI document is valid JSON"
 node -e "JSON.parse(require('fs').readFileSync('docs/openapi.json','utf8'))"
 

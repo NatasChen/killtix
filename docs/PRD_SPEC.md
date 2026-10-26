@@ -12,9 +12,10 @@
 
 ---
 
-> **實作狀態（2026-10-24，v0.2.0）**：本文件是需求基線。Docker 版 MVP 已實作並通過自動化測試；
+> **實作狀態（2026-10-26，v0.5.0 + `[Unreleased]`）**：本文件是需求基線。Docker 版 MVP 與之後各版的 FR（Ant Design 介面、
+> 企業標誌、郵件設定、團隊指派、儀表板圖表與統計期間）已實作並通過自動化測試；各版內容見 [`CHANGELOG.md`](../CHANGELOG.md)。
 > AD/LDAP/SAML/OIDC/SCIM、FIDO2、附件、SLA 營業時間與 Cloudflare 方案尚未實作。
-> 與本文件不同的決策（預設管理員密碼、403 回應碼、3 天邊界）見 [`specs/DECISIONS.md`](../specs/DECISIONS.md)。
+> 與本文件不同的決策（預設管理員密碼、403 回應碼、3 天邊界等）見 [`specs/DECISIONS.md`](../specs/DECISIONS.md)。
 
 
 ## 1. 文件目的與範圍
@@ -389,6 +390,9 @@ ORDER BY t.created_at ASC;
 - **點擊導向清單**：狀態 → `/tickets?status=<狀態>`；標籤 → `/tickets?tags=<標籤>`；優先度 → `/tickets?priority=<n>`；未結案天數「超過 3 天」的任一組 → `/tickets?olderThanDays=3`；團隊 → `/tickets?teamId=<id>`；工程師負載的某人 → `/tickets?assignee=<id>`（「未指派」→ `assignee=none`）。可點元素為連結或按鈕，可用鍵盤操作。
 - **不在範圍**：word cloud（主旨斷詞）、任何圖表套件（含 `@ant-design/charts`）、日期區間選擇、匯出圖片；數字卡內容與計算方式、CSV 匯出、環境變數、部署方式與資料表皆不變。
 
+#### FR-3.6 儀表板統計期間（P1，`[Unreleased]`）
+儀表板分「目前狀態」與「期間統計」兩區（DECISIONS D16）。期間由使用者選擇起訖日（`config.timezone` 的日曆日，含頭尾；預設近 30 天、最長 366 天），記在網址 `/?from=&to=`；`GET /reports/dashboard?from=&to=` 回傳 `range`、`trend`（超過 92 天每週一點）、`newInRange`、`resolvedInRange`、`slaMetRate`，狀態分佈、常見標籤、服務類別依建立日落在期間內的工單計算。目前狀態的數字（未結案、超過 3 天、SLA 逾時／即將逾時、未結案天數、優先度、工程師負載、各團隊）不受期間影響。工單清單新增 `createdFrom`／`createdTo` 篩選，期間圖表的下鑽連結帶上同一段日期。
+
 ---
 
 ### FR-4 權限與通知
@@ -700,6 +704,7 @@ curl -X POST https://ticket.example.com/api/v1/tickets \
 | AC-REPORT-05 | 未結案天數分組（FR-3.5） | `agingBuckets` 的 `3-7`、`7-14`、`14+` 加總等於 `olderThan3Days`；剛好 72 小時的工單不算超過 3 天 |
 | AC-REPORT-06 | 可見範圍與內部統計（FR-3.5） | 一般使用者只統計自己看得到的工單且 `workload`／`byTeam` 為 `null`；工程師只統計自己範圍內（含所屬團隊）的工單；`workload` 依未結案數由多到少、最多 10 人另加「未指派」；`byTeam` 含「沒有團隊」；兩者數字與清單篩選（`assignee`、`teamId`）筆數一致 |
 | AC-REPORT-07 | 圖表可及性與主題（FR-3.5） | 每個圖表有 `role="img"` 與描述內容的 `aria-label`、數字以文字呈現；顏色只取自 `palette.ts`，淺色與深色主題皆正確（`tests/styles.test.ts` 通過）；375px 寬無水平捲軸 |
+| AC-REPORT-08 | 統計期間（FR-3.6） | `from`/`to` 依 `config.timezone` 的日曆日計算（當地午夜邊界正確）；期間新增／解決、SLA 達標率、狀態分佈、標籤只計期間內的工單，目前狀態數字不受影響；超過 92 天每週一點；起日晚於迄日、超過 366 天或格式錯誤回 400；`createdFrom`/`createdTo` 篩選筆數與儀表板一致 |
 | AC-REPORT-08 | 圖表點擊導向（FR-3.5） | 點狀態／標籤／優先度／超過 3 天分組／團隊／工程師負載分別進入工單清單且對應篩選已套用（「未指派」為 `assignee=none`）；可點元素可用鍵盤操作；e2e 涵蓋環形圖與 tag cloud 兩條路徑 |
 | AC-TEAM-01 | 團隊成員升級回填（FR-2.11） | `users.team_id` 有值的使用者啟動後出現在 `team_members`；管理員把他移出團隊、重新啟動後不會被加回（`system_settings` 已記錄回填完成） |
 | AC-TEAM-02 | 多團隊可見範圍（FR-2.11） | 屬於兩個團隊的工程師看得到兩個團隊的工單；不屬於該團隊的工程師讀取該團隊工單回 `404`、清單中也看不到；被移出團隊後立即看不到 |

@@ -50,6 +50,8 @@
           { "name": "tags", "in": "query", "schema": { "type": "string" }, "description": "Comma separated tag names" },
           { "name": "tagsMode", "in": "query", "schema": { "type": "string", "enum": ["any", "all"], "default": "any" } },
           { "name": "olderThanDays", "in": "query", "schema": { "type": "integer", "minimum": 1 }, "description": "Unresolved (not resolved/closed) and created strictly more than N×24 hours ago" },
+          { "name": "createdFrom", "in": "query", "schema": { "type": "string", "format": "date" }, "description": "Created on or after this calendar day (server timezone, TZ), YYYY-MM-DD" },
+          { "name": "createdTo", "in": "query", "schema": { "type": "string", "format": "date" }, "description": "Created on or before this calendar day (server timezone, TZ), YYYY-MM-DD" },
           { "name": "slaStatus", "in": "query", "schema": { "type": "string", "enum": ["on_track", "at_risk", "breached", "met"] } },
           { "name": "q", "in": "query", "schema": { "type": "string" }, "description": "Substring of subject or ticket number" },
           { "name": "cf.<key>", "in": "query", "schema": { "type": "string" }, "description": "Custom field equals (only fields marked filterable)" },

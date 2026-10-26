@@ -101,7 +101,8 @@ export function Columns({ title, data }: { title: string; data: Datum[] }) {
   const width = band * 0.6;
   return (
     <div>
-      <svg className="chart-svg" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={describe(title, data)}>
+      {/* capped so a wide card does not blow the columns and labels up; centred by .chart-svg */}
+      <svg className="chart-svg" style={{ maxWidth: 400 }} viewBox={`0 0 ${W} ${H}`} role="img" aria-label={describe(title, data)}>
         <line x1="0" x2={W} y1={top + plot} y2={top + plot} stroke={p.hairline} />
         {data.map((d, i) => {
           const h = d.n > 0 ? Math.max(2, (d.n / max) * plot) : 0;
@@ -173,6 +174,8 @@ export function LineChart({
   const resolvedTone = tone(p, 'green');
   const line = (k: 'created' | 'resolved') => points.map((d, i) => `${x(i)},${y(d[k])}`).join(' ');
   const cell = N > 1 ? pw / (N - 1) : pw;
+  // about six date labels whatever the period length, counted back from the last point
+  const labelEvery = Math.max(1, Math.ceil(N / 6));
   const label = `${title}: ${createdLabel} ${sum('created')}, ${resolvedLabel} ${sum('resolved')}`;
   return (
     <div ref={box}>
@@ -186,7 +189,7 @@ export function LineChart({
           </g>
         ))}
         {points.map((d, i) =>
-          (N - 1 - i) % 7 === 0 ? (
+          (N - 1 - i) % labelEvery === 0 ? (
             <text key={d.date} x={x(i)} y={H - 8} textAnchor="middle" fontSize="11" fill={p.ink3}>
               {d.date.slice(5)}
             </text>

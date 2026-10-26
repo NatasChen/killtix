@@ -8,7 +8,7 @@ SOC、SIEM 等外部系統可以透過 API 自動開單。
 | 項目 | 內容 |
 | --- | --- |
 | 目前版本 | **v0.5.0**，2026-10-26 |
-| 狀態 | Docker 版可部署；96 個自動化測試、部署後 API 檢查與瀏覽器端到端測試皆通過 |
+| 狀態 | Docker 版可部署；98 個自動化測試、部署後 API 檢查與瀏覽器端到端測試皆通過 |
 | 本版重點 | 工單指派給團隊（使用者可屬多個團隊、成員認領）；儀表板改用多種圖表並可點擊下鑽；修正淺色主題側邊欄選單無法辨識、趨勢圖無法隨寬度縮放 |
 | 尚未實作 | AD/LDAP、SAML、OIDC、SCIM、FIDO2、附件、SLA 營業時間、Cloudflare 部署 |
 | 完整變更 | [CHANGELOG.md](CHANGELOG.md) |
@@ -39,8 +39,8 @@ SOC、SIEM 等外部系統可以透過 API 自動開單。
 - 權限在 **SQL 查詢層**套用：工程師看得到自己任一團隊（`team_members`）的工單；廠商只看得到被指派或被加入關注的工單，越權存取一律 404
 
 **報表與儀表板**
-- 儀表板：未結案、今日新增／解決、**超過 3 天未結案**、SLA 逾時／即將逾時、30 天 SLA 達標率；圖表為近 30 天新增與解決折線圖、狀態環形圖、未結案天數直條圖、SLA 達標率儀表盤、優先度與服務類別長條圖、熱門標籤 tag cloud（內部人員另有工程師負載與各團隊未結案），點圖表可下鑽到對應篩選的工單清單
-- 工單清單可依狀態、優先度、負責人、標籤、SLA、自訂欄位、「超過 3 天未結案」篩選
+- 儀表板分兩區：**目前狀態**（未結案、**超過 3 天未結案**、SLA 逾時／即將逾時、未結案天數直條圖、優先度長條圖，內部人員另有工程師負載與各團隊未結案）與**期間統計**（可選起訖日，預設近 30 天、最長 366 天：期間新增／解決、SLA 達標率儀表盤、新增與解決趨勢折線圖、狀態環形圖、熱門標籤 tag cloud、服務類別長條圖）；點圖表可下鑽到對應篩選的工單清單
+- 工單清單可依狀態、優先度、負責人、標籤、SLA、建立日期、自訂欄位、「超過 3 天未結案」篩選
 - CSV 匯出（含自訂欄位、Excel 可直接開啟中文、防公式注入）
 
 **通知**：Email、Telegram Bot、Microsoft Teams；outbox 佇列、失敗重試、可在介面查看與重送。Email 的寄信方式由系統管理員在「系統設定 → 郵件設定」選擇：沿用 `SMTP_*` 環境變數（預設）、介面填寫的 SMTP，或 Resend API；儲存後立即生效，密碼與 API Key 加密儲存、只寫不讀，並可寄送測試信
@@ -82,7 +82,7 @@ docker compose logs app | grep -A4 "bootstrap administrator"   # 取得預設管
 - 啟動時若出現 `required variable APP_SECRET is missing a value`，代表 `.env` 的密鑰還是空的，執行上面的 `scripts/init-env.sh` 即可。
 - `APP_SECRET` 與 `POSTGRES_PASSWORD` 在首次啟動後**不要再更改**（前者會讓已啟用的 2FA 失效，後者會讓 app 連不上既有資料庫）。
 
-- 想使用客戶規格指定的固定初始密碼，在 `.env` 設定 `BOOTSTRAP_ADMIN_PASSWORD=Admin@InitTemp2026!`（首次登入仍會強制改密）。
+- 想使用固定的初始密碼，在**第一次啟動前**於 `.env` 設定，例如 `BOOTSTRAP_ADMIN_PASSWORD=admin@password`（DECISIONS D1；初始密碼不檢查密碼政策，首次登入仍會強制改成符合政策的密碼）。資料庫已經有管理員時這個設定不會生效，請改用上面的 `reset-password`。
 - 想先看有資料的畫面（展示、測試）：`TD_PASSWORD='<改過的密碼>' python3 scripts/seed-sample-tickets.py http://localhost:8080 --psql "docker compose exec -T postgres psql -U ticketdesk -d ticketdesk"`
   會建立 30 張範例工單（各種狀態、優先度、標籤，部分日期往前推，標籤 `sample`）。只用 Python 標準函式庫；Email 已設定時會停止，避免寄信給範例申請人。不要在正式環境執行。
 - 正式環境設定（TLS、反向代理、備份、通知管道）見 [docs/DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md)。

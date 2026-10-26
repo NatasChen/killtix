@@ -1,20 +1,14 @@
 import { App as AntApp, ConfigProvider } from 'antd';
 import enUS from 'antd/locale/en_US';
 import zhTW from 'antd/locale/zh_TW';
-import { StrictMode, useEffect, type ReactNode } from 'react';
+import { StrictMode, Suspense, useEffect, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider, useAuth } from './auth';
 import { BrandingProvider } from './branding';
 import { Layout } from './components/Layout';
 import { I18nProvider, useI18n } from './i18n';
-import { ChangePasswordPage, LoginPage, MfaEnrollPage, MfaVerifyPage } from './pages/AuthPages';
-import { DashboardPage } from './pages/Dashboard';
-import { ProfilePage } from './pages/Profile';
-import { TicketDetailPage } from './pages/TicketDetail';
-import { TicketListPage } from './pages/TicketList';
-import { TicketNewPage } from './pages/TicketNew';
-import { AdminRoutes } from './pages/admin/AdminRoutes';
+import { lazyPage } from './lazy';
 import { antdTheme, applyTheme, useThemeMode, watchSystemTheme } from './theme';
 import { Empty } from './components/common';
 // Self-hosted Google Noto fonts (bundled by Vite, same origin, so the CSP stays unchanged)
@@ -23,6 +17,18 @@ import '@fontsource-variable/noto-sans-tc';
 import './styles.css';
 
 watchSystemTheme();
+
+// Every page is its own chunk, loaded on first use: the first screen only downloads the shell, React and antd.
+const LoginPage = lazyPage(() => import('./pages/AuthPages'), 'LoginPage');
+const ChangePasswordPage = lazyPage(() => import('./pages/AuthPages'), 'ChangePasswordPage');
+const MfaVerifyPage = lazyPage(() => import('./pages/AuthPages'), 'MfaVerifyPage');
+const MfaEnrollPage = lazyPage(() => import('./pages/AuthPages'), 'MfaEnrollPage');
+const DashboardPage = lazyPage(() => import('./pages/Dashboard'), 'DashboardPage');
+const TicketListPage = lazyPage(() => import('./pages/TicketList'), 'TicketListPage');
+const TicketNewPage = lazyPage(() => import('./pages/TicketNew'), 'TicketNewPage');
+const TicketDetailPage = lazyPage(() => import('./pages/TicketDetail'), 'TicketDetailPage');
+const ProfilePage = lazyPage(() => import('./pages/Profile'), 'ProfilePage');
+const AdminRoutes = lazyPage(() => import('./pages/admin/AdminRoutes'), 'AdminRoutes');
 
 /** Ant Design theme (palette.ts tokens, light/dark algorithm) and the locale of antd's built-in labels. */
 function ThemeRoot({ children }: { children: ReactNode }) {
@@ -54,10 +60,12 @@ function Root() {
   }, [user?.id]);
 
   if (loading) return null;
-  if (!user || !stage) return <LoginPage />;
-  if (stage === 'password_change') return <ChangePasswordPage />;
-  if (stage === 'mfa_verify') return <MfaVerifyPage />;
-  if (stage === 'mfa_enroll') return <MfaEnrollPage />;
+  // the sign-in pages are lazy too; nothing is shown until their chunk arrives (pages inside Layout show a spinner)
+  const signIn = (page: ReactNode) => <Suspense fallback={null}>{page}</Suspense>;
+  if (!user || !stage) return signIn(<LoginPage />);
+  if (stage === 'password_change') return signIn(<ChangePasswordPage />);
+  if (stage === 'mfa_verify') return signIn(<MfaVerifyPage />);
+  if (stage === 'mfa_enroll') return signIn(<MfaEnrollPage />);
 
   return (
     <Routes>

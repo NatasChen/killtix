@@ -1,5 +1,5 @@
-import { Button, ConfigProvider, Layout as AntLayout, Menu, Select, theme as antdThemes, type MenuProps } from 'antd';
-import { useState } from 'react';
+import { Button, ConfigProvider, Flex, Layout as AntLayout, Menu, Select, Spin, theme as antdThemes, type MenuProps } from 'antd';
+import { Suspense, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { patch } from '../api';
 import { useAuth } from '../auth';
@@ -150,7 +150,15 @@ export function Layout() {
         </nav>
       </AntLayout.Sider>
       <AntLayout.Content className="main">
-        <Outlet />
+        {/* pages are lazy chunks (main.tsx): the sidebar stays while the page's chunk downloads */}
+        <Suspense
+          fallback={
+            <Flex justify="center" style={{ padding: 48 }}>
+              <Spin aria-label={t('ui.common.loading')} />
+            </Flex>
+          }>
+          <Outlet />
+        </Suspense>
       </AntLayout.Content>
     </AntLayout>
   );
