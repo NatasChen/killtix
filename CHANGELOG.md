@@ -23,6 +23,10 @@
 - 可見範圍：有 `ticket:read:team` 的使用者改為可看到 `tickets.team_id` 是自己**任一**團隊的工單，條件以 `exists (select 1 from team_members …)` 子查詢寫在查詢層（`ticketScope()`）。外部廠商與一般使用者維持現狀：即使被加入團隊，仍只看得到被指派、自己開立或被加入關注的工單；看不到的工單一律回 404。
 - `rbac.ts` 的 `ticketScope()`、`routes/util.ts` 的 `publicUser`、`routes/catalog.ts` 的使用者清單、`routes/admin.ts` 的使用者建立與更新、前端 `auth.tsx` 的型別都改讀寫 `team_members`，不再讀寫 `users.team_id`。
 
+### Fixed
+- 淺色主題下，側邊欄「主題」「語言」下拉選單的選項是白底白字而無法辨識：選單改用側邊欄自己的深色底色與滑過、選取色。e2e 新增對比檢查（≥ 4.5:1）。
+- 儀表板「近 30 天新增與解決」折線圖在寬螢幕被限制在固定大小、兩側留白，手機上軸文字縮得過小：圖表寬度改為跟隨卡片實際寬度，高度與 11px 文字固定。e2e 新增寬度檢查。
+
 ## [0.4.0] - 2026-10-25
 
 升級：啟動時自動套用 migration `0001_brand_logos`；不需新增環境變數，Email 預設沿用既有的 `SMTP_*`。

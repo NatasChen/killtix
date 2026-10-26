@@ -142,6 +142,14 @@ await page.getByRole('img', { name: /狀態分佈/ }).waitFor();
 await page.getByRole('img', { name: /未結案天數/ }).waitFor();
 await page.getByRole('group', { name: new RegExp(`常見標籤.*${TAG}`) }).waitFor();
 await page.getByRole('heading', { name: '工程師負載（未結案）' }).waitFor(); // staff-only row
+{
+  // the trend line chart fills its card instead of stopping at a fixed size
+  const [svg, body] = await page.getByRole('img', { name: /近 30 天新增與解決/ }).evaluate((el) => [
+    el.getBoundingClientRect().width,
+    el.closest('.ant-card-body').clientWidth,
+  ]);
+  if (svg < body * 0.9) throw new Error(`trend chart ${svg}px wide in a ${body}px card`);
+}
 await shot('05d-dashboard-charts');
 // the donut legend is keyboard-reachable links: status → filtered list
 await page.getByRole('list', { name: '狀態分佈' }).getByRole('link', { name: '等待使用者回覆' }).click();
@@ -190,6 +198,32 @@ await shot('05c-settings-mail');
 await pick(page.getByLabel('寄信方式'), '環境變數（SMTP）');
 await mail.getByRole('button', { name: '儲存' }).click();
 await page.getByText('目前使用環境變數設定，以下為唯讀資訊（不顯示密碼）。').waitFor();
+
+step('sidebar theme menu is readable in the light theme');
+if ((await page.evaluate(() => document.documentElement.dataset.theme)) !== 'light') throw new Error('expected the light theme');
+await page.getByLabel('主選單').getByLabel('主題').click();
+{
+  // the theme select's own dropdown (another one may still be playing its close animation)
+  const menu = page.locator('.ant-select-dropdown').filter({ has: page.locator('#nav-theme_list') });
+  const option = menu.locator('.ant-select-item-option').first();
+  await option.waitFor();
+  // wait for the open animation (it fades in) before measuring and taking the screenshot; polled here
+  // because the page's CSP forbids the eval that waitForFunction needs
+  for (let i = 0; i < 40 && (await menu.evaluate((el) => getComputedStyle(el).opacity)) !== '1'; i++) await page.waitForTimeout(50);
+  const ratio = await option.evaluate((el) => {
+    const rgb = (c) => c.match(/[\d.]+/g).slice(0, 3).map(Number);
+    const lum = (c) => {
+      const [r, g, b] = rgb(c).map((v) => ((v /= 255) <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    const bg = getComputedStyle(el.closest('.ant-select-dropdown')).backgroundColor;
+    const [a, b] = [lum(getComputedStyle(el).color), lum(bg)].sort((x, y) => y - x);
+    return (a + 0.05) / (b + 0.05);
+  });
+  if (ratio < 4.5) throw new Error(`sidebar theme option contrast ${ratio.toFixed(2)} < 4.5`);
+  await shot('05e-sidebar-theme-menu-light');
+  await page.keyboard.press('Escape');
+}
 
 step('dark theme + English');
 await pick(page.getByLabel('主選單').getByLabel('主題'), '深色');

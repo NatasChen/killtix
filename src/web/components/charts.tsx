@@ -1,5 +1,5 @@
 import { Progress, Tooltip } from 'antd';
-import type { ReactNode } from 'react';
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useI18n } from '../i18n';
 import { ROTATION, tone, type Tone } from '../palette';
@@ -145,9 +145,22 @@ export function LineChart({
   tip: (p: TrendPoint) => string;
 }) {
   const p = usePalette();
-  const W = 480;
+  // The viewBox width follows the rendered width (1 unit = 1px), so the lines stretch across the card while
+  // the height and the 11px axis labels stay the same on any screen.
+  const box = useRef<HTMLDivElement>(null);
+  const [W, setW] = useState(480);
+  useLayoutEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const measure = () => setW(Math.max(240, Math.round(el.clientWidth)));
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
   const H = 220;
-  const [L, R, T, B] = [34, 10, 12, 26];
+  const [L, R, T, B] = [34, 20, 12, 26]; // R leaves room for half of the last date label
   const pw = W - L - R;
   const ph = H - T - B;
   const N = points.length;
@@ -162,8 +175,8 @@ export function LineChart({
   const cell = N > 1 ? pw / (N - 1) : pw;
   const label = `${title}: ${createdLabel} ${sum('created')}, ${resolvedLabel} ${sum('resolved')}`;
   return (
-    <div>
-      <svg className="chart-svg" style={{ maxHeight: 260 }} viewBox={`0 0 ${W} ${H}`} role="img" aria-label={label}>
+    <div ref={box}>
+      <svg className="chart-svg" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={label}>
         {[0, 1, 2, 3, 4].map((i) => (
           <g key={i}>
             <line x1={L} x2={W - R} y1={y(i * step)} y2={y(i * step)} stroke={p.hairline} />

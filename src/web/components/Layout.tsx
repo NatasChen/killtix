@@ -77,10 +77,21 @@ export function Layout() {
     .filter((i) => (i.end ? pathname === i.to : pathname === i.to || pathname.startsWith(`${i.to}/`)))
     .sort((a, b) => b.to.length - a.to.length)[0]?.to;
 
-  // Footer controls sit on the indigo sidebar, so they get the dark algorithm and the nav colours.
+  // Footer controls sit on the indigo sidebar, so they get the dark algorithm and the nav colours. The
+  // dropdowns need their own elevated background: the app theme's (white in light mode) would otherwise
+  // be inherited and leave the light option text unreadable.
   const navControls = {
     algorithm: antdThemes.darkAlgorithm,
-    token: { colorBgContainer: p.nav.field, colorBorder: p.nav.fieldBorder, colorText: p.nav.text, colorTextSecondary: p.nav.muted, colorPrimary: p.nav.indicator },
+    token: {
+      colorBgContainer: p.nav.field,
+      colorBgElevated: p.nav.field,
+      colorBorder: p.nav.fieldBorder,
+      colorText: p.nav.text,
+      colorTextSecondary: p.nav.muted,
+      colorPrimary: p.nav.indicator,
+      controlItemBgHover: p.nav.hover,
+      controlItemBgActive: p.nav.active,
+    },
   };
   const label = { display: 'block', color: p.nav.muted, fontSize: 12, marginBottom: 4 } as const;
 
