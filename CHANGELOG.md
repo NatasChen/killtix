@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-26
+
 儀表板統計期間與前端延遲載入。沒有資料表、環境變數或部署變更；`GET /reports/dashboard` 的回應欄位有變動（只有本系統前端使用，見 DECISIONS D16）。
 
 ### Added
