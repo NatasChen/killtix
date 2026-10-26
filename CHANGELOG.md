@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-26
+
 移除 `users.team_id` 與 Cloudflare 方案。升級時啟動會自動套用 migration `0003_team_members_backfill`、`0004_drop_users_team_id`；不需新增環境變數，沒有部署變更。**升級後無法退回 v0.4 以前的版本**（DECISIONS D14）。
 
 ### Removed
