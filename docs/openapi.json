@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "TicketDesk External API",
-    "version": "0.4.0",
+    "version": "0.5.0",
     "description": "API for external systems (SOC, SIEM, monitoring) to open and query tickets. Authenticate with an API token created under Admin → API tokens: `Authorization: Bearer td_xxxx_...`. Tokens carry scopes `tickets:write` and/or `tickets:read` and are rate-limited per token (default 60 requests/minute; `X-RateLimit-Limit`, `X-RateLimit-Remaining` and, on 429, `Retry-After` headers). Errors use RFC 7807 `application/problem+json` with a stable `code`."
   },
   "servers": [{ "url": "/api/v1" }],
