@@ -99,8 +99,10 @@ src/server/
   services/audit.ts   稽核日誌
   services/rateLimit.ts 記憶體 / Redis 固定視窗計數
 src/web/
-  main.tsx            路由；依 session stage 切換登入/改密/2FA 頁面。所有頁面都以 lazyPage() 延遲載入（DECISIONS D17）
-  lazy.ts             lazyPage(load, name)：具名匯出的 React.lazy()；Suspense 在 Layout 內容區（載入圖示）與 main.tsx（登入頁）
+  main.tsx            路由；依 session stage 切換登入/改密/2FA 頁面。所有頁面（含登入頁、每個管理頁）都以 lazyPage() 延遲載入
+  lazy.ts             lazyPage(load, name)：具名匯出的 React.lazy()；Suspense 在 Layout 內容區（載入圖示）與 main.tsx（登入頁）。
+                      React 拆成獨立的 `react` 檔（很少變動，可跨版本快取）；antd **不要**合成單一檔案：實測合成後首頁 JS
+                      350 KB（gzip），交給自動拆分為 259 KB，因為合成會把只有部分頁面用到的元件（Table、Upload、DatePicker…）放進首頁
   api.ts              fetch 包裝：自動帶 X-Requested-With、錯誤轉 ApiError、401/stage 錯誤觸發重新整理 auth
   auth.tsx / i18n.tsx / theme.ts   全域狀態；theme.ts 另有 useThemeMode() 與 antdTheme()（Ant Design 主題）
   branding.tsx        企業標誌網址（BrandingProvider）與 <Brand>：側邊欄用深色背景版，登入頁依主題選擇

@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Changed
+- `specs/DECISIONS.md` 精簡：D1、D14 只留結論（過程見 CHANGELOG），D8 移除已不適用的 CSS 變數規則，D17（實作慣例）移到 AGENTS.md 第 3 節；編號不變。
+
 ## [0.8.0] - 2026-10-26
 
 團隊頁管理成員。沒有資料表、環境變數或部署變更。
