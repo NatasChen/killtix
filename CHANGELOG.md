@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### Added
+- 系統名稱可自訂（系統設定的「標誌與名稱」，預設 TicketDesk，1–40 字），顯示在登入頁、側邊欄標誌旁與瀏覽器分頁標題；`GET /branding` 回應新增 `name`，新增 `PUT /admin/branding/name`（`admin:settings`，寫入稽核 `admin.brand_name_updated`）。存在 `system_settings`，沒有 migration（DECISIONS D11）。
+
+### Fixed
+- 上傳企業標誌後登入頁與側邊欄的 TicketDesk 名稱消失：標誌與名稱改為兩個元素，標誌高度縮為 32 像素並排在名稱左側。
+
 ### Changed
 - `specs/DECISIONS.md` 精簡：D1、D14 只留結論（過程見 CHANGELOG），D8 移除已不適用的 CSS 變數規則，D17（實作慣例）移到 AGENTS.md 第 3 節；編號不變。
 

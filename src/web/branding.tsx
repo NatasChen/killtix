@@ -8,43 +8,55 @@ export interface LogoUrls {
   dark: string | null;
 }
 
-const BrandingContext = createContext<{ logo: LogoUrls; setLogo: (logo: LogoUrls) => void }>({
-  logo: { light: null, dark: null },
-  setLogo: () => undefined,
-});
+const DEFAULT_NAME = 'TicketDesk';
 
-/** Loads the logo URLs once (also before sign-in, for the login page); the settings page updates them after an upload. */
+const BrandingContext = createContext<{
+  logo: LogoUrls;
+  name: string;
+  setLogo: (logo: LogoUrls) => void;
+  setName: (name: string) => void;
+}>({ logo: { light: null, dark: null }, name: DEFAULT_NAME, setLogo: () => undefined, setName: () => undefined });
+
+/**
+ * Loads the logo URLs and the product name once (also before sign-in, for the login page); the settings page
+ * updates them after saving. The name is also the browser tab title.
+ */
 export function BrandingProvider({ children }: { children: ReactNode }) {
   const [logo, setLogo] = useState<LogoUrls>({ light: null, dark: null });
+  const [name, setName] = useState(DEFAULT_NAME);
   useEffect(() => {
-    get<{ logo: LogoUrls }>('/branding')
-      .then((r) => setLogo(r.logo))
-      .catch(() => undefined); // no logo: the TicketDesk mark is shown
+    get<{ logo: LogoUrls; name: string }>('/branding')
+      .then((r) => {
+        setLogo(r.logo);
+        setName(r.name);
+      })
+      .catch(() => undefined); // keep the TicketDesk mark and name
   }, []);
-  return <BrandingContext.Provider value={{ logo, setLogo }}>{children}</BrandingContext.Provider>;
+  useEffect(() => {
+    document.title = name;
+  }, [name]);
+  return <BrandingContext.Provider value={{ logo, name, setLogo, setName }}>{children}</BrandingContext.Provider>;
 }
 
 export const useBranding = () => useContext(BrandingContext);
 
 /**
- * The brand mark at the top of the sidebar and the login card: the company logo when one is uploaded,
- * otherwise the TicketDesk icon and name. `on` is the background it sits on: a dark background uses the
- * dark-background logo and falls back to the light one.
+ * The brand mark at the top of the sidebar and the login card: two elements, the logo (the company logo when one
+ * is uploaded, otherwise the TicketDesk icon) and the product name. `on` is the background it sits on: a dark
+ * background uses the dark-background logo and falls back to the light one.
  */
 export function Brand({ on, color }: { on: 'light' | 'dark'; color?: string }) {
   const { t } = useI18n();
-  const { logo } = useBranding();
+  const { logo, name } = useBranding();
   const src = on === 'dark' ? (logo.dark ?? logo.light) : logo.light;
-  if (src) {
-    return (
-      <div className="brand">
-        <img className="brand-logo" src={src} alt={t('ui.brand.logo_alt')} />
-      </div>
-    );
-  }
   return (
     <div className="brand" style={{ color }}>
-      <img src="/favicon.svg" width={22} height={22} alt="" /> TicketDesk
+      {src ? (
+        <img className="brand-logo" src={src} alt={t('ui.brand.logo_alt')} />
+      ) : (
+        <img src="/favicon.svg" width={22} height={22} alt="" />
+      )}
+      <span className="brand-name">{name}</span>
     </div>
   );
 }

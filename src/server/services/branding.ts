@@ -5,6 +5,7 @@ import { brandLogos, LOGO_VARIANTS, type LogoVariant } from '../db/schema.js';
 import { ApiError } from '../errors.js';
 
 export const LOGO_MAX_BYTES = 512 * 1024;
+export const BRAND_NAME_MAX = 40;
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
 /** Accepts only a PNG within the size limit: signature, then an IHDR chunk with a non-zero size. */

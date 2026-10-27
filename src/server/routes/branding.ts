@@ -3,15 +3,17 @@ import type { AppEnv } from '../context.js';
 import { LOGO_VARIANTS, type LogoVariant } from '../db/schema.js';
 import { notFound } from '../errors.js';
 import { getLogo, logoUrls } from '../services/branding.js';
+import { getSetting } from '../services/settings.js';
 
 /**
- * Company logo for the login page and the sidebar. Deliberately public (no guard()): the login page shows it
- * before anyone signs in, and it is the only data served here (specs/DECISIONS.md D11).
+ * Company logo and product name for the login page and the sidebar. Deliberately public (no guard()): the login
+ * page shows them before anyone signs in, and they are the only data served here (specs/DECISIONS.md D11).
  */
 export const brandingRoutes = new Hono<AppEnv>()
   .get('/', async (c) => {
     c.header('Cache-Control', 'no-cache');
-    return c.json({ logo: await logoUrls(c.var.deps.db) });
+    const { db } = c.var.deps;
+    return c.json({ logo: await logoUrls(db), name: await getSetting(db, 'branding.name') });
   })
 
   .get('/logo/:variant', async (c) => {

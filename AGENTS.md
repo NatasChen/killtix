@@ -14,7 +14,7 @@
 | --- | --- |
 | 目前版本 | **0.8.0**（2026-10-26，git tag `v0.8.0`），見 [CHANGELOG.md](CHANGELOG.md) |
 | 支援部署 | Docker Compose（app + PostgreSQL 16 + Redis 7）。Cloudflare 方案已決定不做（DECISIONS D3） |
-| 測試狀態 | 101 個 Vitest 測試、`scripts/validate.sh`、`scripts/smoke.sh`（24 項）、`scripts/ui-e2e.sh` 全部通過 |
+| 測試狀態 | 103 個 Vitest 測試、`scripts/validate.sh`、`scripts/smoke.sh`（24 項）、`scripts/ui-e2e.sh` 全部通過 |
 | 未實作 | AD/LDAP、SAML、OIDC、SCIM、FIDO2、附件、SLA 營業時間、多副本背景工作 |
 | 待客戶確認 | 見 [specs/DECISIONS.md](specs/DECISIONS.md) 中標示 ⏳ 的項目（SSO 時程）；已決定：預設管理員密碼（D1：各部署以 `.env` 設定）、Cloudflare 不做（D3）、移除 `users.team_id`（D14） |
 | 下一步建議 | v1.1：SSO（`users.identity_provider` 已預留）→ 附件 → SLA 營業時間 |
@@ -85,7 +85,7 @@ src/server/
   i18n/index.ts       Glossary：內建字典 + DB 覆寫，缺字回退 en-US
   i18n/locales/*.ts   zh-TW / en-US 字典（伺服器錯誤、通知、整個前端介面）
   routes/auth.ts      登入、登出、me、改密、2FA
-  routes/branding.ts  企業標誌的公開讀取（唯一不掛 guard() 的業務路由，DECISIONS D11）；上傳在 routes/admin.ts
+  routes/branding.ts  企業標誌與系統名稱的公開讀取（唯一不掛 guard() 的業務路由，DECISIONS D11）；上傳、改名在 routes/admin.ts
   routes/tickets.ts   工單 CRUD、對話、關注者（API Token 可用的路由在這裡）
   routes/reports.ts   儀表板、CSV 匯出
   routes/catalog.ts   下拉選單資料（服務類別＋欄位、團隊、使用者、範本）
@@ -94,7 +94,7 @@ src/server/
   services/tickets.ts 工單核心：建立（冪等）、篩選條件、詳情、狀態機、SLA 暫停、自訂欄位驗證、對話、關注者
   services/notify.ts  outbox：notifyTicketEvent（決定誰收到什麼）、enqueue、dispatchPending（重試/退避）、各管道發送
   services/jobs.ts    scanSla（逾時/即將逾時）、agingDigest（每日 3 天積壓報告）
-  services/settings.ts system_settings 讀寫：2FA 全域開關、digest 執行日、郵件設定（秘密以 secretBox 加密、只寫不讀，DECISIONS D13）
+  services/settings.ts system_settings 讀寫：2FA 全域開關、digest 執行日、系統名稱、郵件設定（秘密以 secretBox 加密、只寫不讀，DECISIONS D13）
   services/branding.ts 企業標誌：PNG 檢查（檔頭、512 KB）、brand_logos 讀寫、帶版本的公開網址
   services/audit.ts   稽核日誌
   services/rateLimit.ts 記憶體 / Redis 固定視窗計數
@@ -105,7 +105,7 @@ src/web/
                       350 KB（gzip），交給自動拆分為 259 KB，因為合成會把只有部分頁面用到的元件（Table、Upload、DatePicker…）放進首頁
   api.ts              fetch 包裝：自動帶 X-Requested-With、錯誤轉 ApiError、401/stage 錯誤觸發重新整理 auth
   auth.tsx / i18n.tsx / theme.ts   全域狀態；theme.ts 另有 useThemeMode() 與 antdTheme()（Ant Design 主題）
-  branding.tsx        企業標誌網址（BrandingProvider）與 <Brand>：側邊欄用深色背景版，登入頁依主題選擇
+  branding.tsx        企業標誌網址與系統名稱（BrandingProvider，名稱也是分頁標題）與 <Brand>（標誌＋名稱兩個元素）：側邊欄用深色背景版，登入頁依主題選擇
   palette.ts          唯一的顏色來源：兩種主題的色票、tone()、狀態/優先度/SLA 對應的色相（tests/styles.test.ts 檢查對比）
   components/common.tsx 共用元件：Field（label 綁定控制項）、Choice（下拉選單）、PageHeader、各種 badge、ErrorBanner、useLoad/useAction
   components/charts.tsx 儀表板圖表（Donut、LineChart、Columns、TagCloud、Bars）：SVG 自繪、顏色只取自 palette.ts、viewBox 縮放、role="img" + aria-label
@@ -145,7 +145,7 @@ crewai_ticket_build.py CrewAI 迭代工具（PM → SAr → PG → UI 設計師 
 2. **看不到的工單回 404**，不是 403（不洩漏存在性）。
 3. **`visibility='internal'` 的自訂欄位、系統事件與既有的內部備忘**永遠不回傳給非 staff（`isStaff()` = 有 `ticket:note` 權限），也**永遠不觸發通知**。
    新的回覆一律公開，不可再新增內部備忘（DECISIONS D12）；回覆是否通知由 `POST /tickets/{id}/threads` 的 `notify` 決定。
-4. **改密前、2FA 前不能使用任何業務 API**：由 `guard()` 的 stage 檢查保證。新增路由一定要加 `guard()`。唯一例外是 `routes/branding.ts` 的企業標誌讀取（登入前就要顯示，DECISIONS D11），不可再加其他資料到這裡。
+4. **改密前、2FA 前不能使用任何業務 API**：由 `guard()` 的 stage 檢查保證。新增路由一定要加 `guard()`。唯一例外是 `routes/branding.ts` 的企業標誌與系統名稱讀取（登入前就要顯示，DECISIONS D11），不可再加其他資料到這裡。
 5. **所有使用者可見文字走 glossary**：前端 `t('ui.…')`、後端錯誤 `ApiError` code → `error.<code>`、通知 `notify.*`。新 key 必須**同時**加到 `zh-TW.ts` 與 `en-US.ts`（`tests/i18n.test.ts` 會檢查）。動態 key（`` t(`ui.role.${x}`) ``）要把前綴與可能值登記到該測試的 `DYNAMIC` 表。
 6. **資料表只在 `src/server/db/schema.ts` 定義**，改完執行 `npm run db:generate`，連同 `drizzle/` 一起提交。不要手寫或修改已發布的 migration。
    搬資料（例如刪欄位前把值移到新表）用 `npx drizzle-kit generate --custom --name <名稱>` 產生空白的 migration，只在裡面寫資料 SQL，排在改結構的 migration 之前。
@@ -225,7 +225,7 @@ crewai_ticket_build.py CrewAI 迭代工具（PM → SAr → PG → UI 設計師 
 
 | 指令 | 內容 | 需要 |
 | --- | --- | --- |
-| `npm test` | 101 個單元/整合測試（PGlite） | Node |
+| `npm test` | 103 個單元/整合測試（PGlite） | Node |
 | `TEST_DATABASE_URL=postgres://… npm test` | 同上，改用真實 PostgreSQL + 正式驅動 | 一個 Postgres（見下） |
 | `npm run validate` | 型別、schema/migration 一致、測試、文件中的測試數、建置、首頁 JS 大小（bundle-check）、OpenAPI JSON、Markdown 連結、compose 設定 | Node（Docker 可選） |
 | `scripts/smoke.sh <url> <預設管理員密碼>` | 部署後 API 端到端 24 項（會改管理員密碼為 `Smoke-Test-Passw0rd!`） | 執行中的系統 |

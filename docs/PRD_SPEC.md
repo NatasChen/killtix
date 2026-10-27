@@ -485,7 +485,8 @@ Email 的寄信方式由系統管理員在「系統設定 → 郵件設定」選
 
 #### FR-5.5 企業標誌（P2，`[Unreleased]`）
 - 系統管理員（`admin:settings`）可在系統設定上傳與移除企業標誌；只接受 512 KB 以內的 PNG（不支援 SVG）。
-- 標誌顯示在登入頁與側邊欄頂端，依比例縮放、不裁切；未上傳時顯示 TicketDesk 名稱。
+- 標誌顯示在登入頁與側邊欄頂端，依比例縮放、不裁切；未上傳時顯示 TicketDesk 圖示。標誌與系統名稱是兩個元素，上傳標誌後名稱仍顯示在旁邊。
+- 系統管理員可自訂系統名稱（預設 TicketDesk，1–40 字），顯示在標誌旁與瀏覽器分頁標題，儲存後立即生效。
 - 可另外上傳深色背景用的標誌（選填）：側邊欄（兩種主題都是深靛藍）與深色主題的登入頁使用，未上傳時改用淺色背景用的標誌。
 - 標誌的讀取不需登入（登入頁要顯示），見 DECISIONS D11。
 
@@ -733,7 +734,7 @@ curl -X POST https://ticket.example.com/api/v1/tickets \
 | AC-THEME-03 | 設計 token 與共用元件（FR-5.4） | 淺色變數符合 `DESIGN.md`（暖白 canvas-soft、白卡片、hairline、ink 層級、單一 primary）；深色由淺色推導且文字／背景 ≥ 4.5:1；語意色與 badge 兩種主題皆 ≥ 4.5:1；既有變數名稱全數保留（只增不改不刪）；登入／改密／2FA 使用 `ex-auth-form-card` 風格、sidebar 保留左側 |
 | AC-THEME-05 | 資料色與側邊欄（FR-5.4 第 2 批） | 未結案的各狀態 badge 背景互不相同，也不同於 L3～L5；sticker 實色對卡片 ≥ 3:1、文字 ≥ 4.5:1；側邊欄文字 ≥ 4.5:1、色塊與焦點框 ≥ 3:1 |
 | AC-THEME-04 | 版面與範圍控制（FR-5.4） | 淺色與深色主題主要畫面可讀；375px 寬度無水平捲軸；無新增字典 key、無外部資源、無原品牌名稱；元件行為、API 呼叫、路由與文字不變；`npm run validate` 通過 |
-| AC-BRAND-01 | 企業標誌（FR-5.5） | 只有系統管理員能上傳／移除；非 PNG 或超過 512 KB 回 400 `invalid_logo`；上傳後登入頁與側邊欄顯示標誌、未登入也能讀取；深色版未上傳時側邊欄使用淺色版 |
+| AC-BRAND-01 | 企業標誌（FR-5.5） | 只有系統管理員能上傳／移除；非 PNG 或超過 512 KB 回 400 `invalid_logo`；上傳後登入頁與側邊欄顯示標誌且名稱仍在、未登入也能讀取；深色版未上傳時側邊欄使用淺色版；系統名稱只有系統管理員能改，空白或超過 40 字回 400，改名後側邊欄、登入頁與分頁標題立即更新 |
 | AC-DEPLOY-01 | Docker | `docker-compose up -d` 後 3 分鐘內可登入；健康檢查通過 |
 | AC-DEPLOY-02 | Cloudflare | `wrangler deploy` 後 API 可用；D1 migration 成功；Queues 通知可送達 |
 | AC-GH-01 | GitHub 門面 | `README.md`、`CHANGELOG.md`、`.gitignore` 齊備且內容正確 |

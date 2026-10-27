@@ -1,20 +1,31 @@
-import { Button, Card, Col, Flex, Row, Upload } from 'antd';
+import { Alert, Button, Card, Col, Flex, Form, Input, Row, Upload } from 'antd';
 import { useState } from 'react';
 import { del, put } from '../../api';
 import { useBranding, type LogoUrls } from '../../branding';
-import { ErrorBanner, useAction, usePalette } from '../../components/common';
+import { ErrorBanner, Field, useAction, usePalette } from '../../components/common';
 import { useI18n } from '../../i18n';
 import { sectionTitle } from './shared';
 
 export function LogoSettings() {
   const { t } = useI18n();
   const p = usePalette();
-  const { logo, setLogo } = useBranding();
+  const { logo, setLogo, name, setName } = useBranding();
   const action = useAction();
-  const [active, setActive] = useState<keyof LogoUrls>(); // the variant being uploaded, for its button's spinner
+  const [active, setActive] = useState<keyof LogoUrls | 'name'>(); // what is being saved, for its button's spinner
+  const [draft, setDraft] = useState<string>();
+  const [saved, setSaved] = useState(false);
+  const saveName = () =>
+    void action.run(async () => {
+      setActive('name');
+      setSaved(false);
+      setName((await put<{ name: string }>('/admin/branding/name', { name: draft ?? name })).name);
+      setDraft(undefined);
+      setSaved(true);
+    });
   const upload = (variant: keyof LogoUrls, file: File) =>
     void action.run(async () => {
       setActive(variant);
+      setSaved(false);
       const data = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(String(reader.result).replace(/^data:[^,]*,/, ''));
@@ -32,8 +43,17 @@ export function LogoSettings() {
   ];
   return (
     <Card title={sectionTitle(t('ui.settings.logo'))} style={{ marginBottom: 16 }}>
-      <p className="small muted" style={{ marginTop: 0 }}>{t('ui.settings.logo_hint')}</p>
       <ErrorBanner error={action.error} />
+      {saved && <Alert type="success" showIcon title={t('ui.common.saved')} style={{ marginBottom: 12 }} />}
+      <Form layout="vertical" onFinish={saveName} style={{ maxWidth: 480 }}>
+        <Field label={t('ui.settings.brand_name')} extra={t('ui.settings.brand_name_hint')} required>
+          <Input required maxLength={40} value={draft ?? name} onChange={(e) => setDraft(e.target.value)} />
+        </Field>
+        <Button htmlType="submit" type="primary" loading={action.busy && active === 'name'} disabled={action.busy}>
+          {t('ui.common.save')}
+        </Button>
+      </Form>
+      <p className="small muted" style={{ marginTop: 16 }}>{t('ui.settings.logo_hint')}</p>
       <Row gutter={[16, 16]}>
         {variants.map((v) => (
           <Col key={v.key} xs={24} md={12}>

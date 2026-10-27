@@ -636,6 +636,7 @@
 | REG-PERF-01 | 首頁載入大小 | FR-5（非功能） | `scripts/bundle-check.mjs`（`npm run validate`） | 首頁 JS ≤ 300 KB（gzip）；首頁不含只在管理頁使用的程式碼 | ✅ | P2 |
 | REG-BRAND-001 | 企業標誌權限與檔案檢查 | AC-BRAND-01 | `tests/branding.test.ts`：IT 主管上傳／移除；上傳 SVG、超過 512 KB、截斷的 PNG、非 base64 | 非系統管理員 403；其餘皆 400 `invalid_logo`，資料表不變 | ✅ | P0 |
 | REG-BRAND-002 | 企業標誌顯示 | AC-BRAND-01 | 系統設定上傳淺色標誌（`scripts/ui-e2e.sh`），檢查側邊欄與未登入的登入頁；`tests/branding.test.ts` 讀取圖檔 | 側邊欄與登入頁顯示「公司標誌」圖片；未登入可讀取 `image/png`，帶版本的網址可長期快取、ETag 相符回 304 | ✅ | P1 |
+| REG-BRAND-003 | 系統名稱 | AC-BRAND-01 | `tests/branding.test.ts`；`scripts/ui-e2e.sh` 上傳標誌後改名為「ACME 服務台」 | 預設 TicketDesk、未登入可讀；非系統管理員 403；空白、超過 40 字、含換行回 400；前後空白去除、寫入稽核；標誌旁仍有名稱，改名後側邊欄、登入頁、分頁標題立即更新 | ✅ | P1 |
 
 ### 6.8 雙軌佈署回歸（REG-DEPLOY）
 
@@ -871,7 +872,7 @@ $PSQL -f scripts/qa/fixtures.sql
 | FR-5.2 Light/Dark | AC-THEME-01 | REG-THEME-001~003 | §6.7 |
 | FR-5.3 優先度 badge 色彩 | AC-THEME-02 | REG-THEME-004~005 | §6.7 |
 | FR-5.4 第 2 批 資料色與側邊欄、Ant Design | AC-THEME-05 | REG-THEME-006~007 | §6.7 |
-| FR-5.5 企業標誌 | AC-BRAND-01 | REG-BRAND-001~002 | §6.7 |
+| FR-5.5 企業標誌 | AC-BRAND-01 | REG-BRAND-001~003 | §6.7 |
 | FR-6.1~6.3 雙軌佈署 | AC-DEPLOY-01~02 | REG-DEPLOY-001~008 | §6.8 |
 | FR-7 GitHub 門面 | AC-GH-01 | 文件審查（SEC-BA-055） | §3.8 |
 

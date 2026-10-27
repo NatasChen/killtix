@@ -30,7 +30,7 @@ import { ApiError, badRequest, notFound } from '../errors.js';
 import { SUPPORTED_LOCALES } from '../i18n/index.js';
 import { can, ROLE_DEFINITIONS } from '../rbac.js';
 import { audit } from '../services/audit.js';
-import { deleteLogo, LOGO_MAX_BYTES, logoUrls, setLogo } from '../services/branding.js';
+import { BRAND_NAME_MAX, deleteLogo, LOGO_MAX_BYTES, logoUrls, setLogo } from '../services/branding.js';
 import { sendTestEmail } from '../services/notify.js';
 import { getMailSettings, getSetting, hasResendKey, MAIL_PROVIDERS, saveMailSettings, setSetting } from '../services/settings.js';
 import { idParam, parseJson, parseWith, publicUser, rateLimit, teamIdsFor } from './util.js';
@@ -654,6 +654,16 @@ export const adminRoutes = new Hono<AppEnv>()
     await deleteLogo(c.var.deps.db, variant);
     await audit(c, 'admin.logo_removed', undefined, { variant });
     return c.json({ logo: await logoUrls(c.var.deps.db) });
+  })
+  .put('/branding/name', manageSystem, async (c) => {
+    const auth = authOf(c);
+    const { name } = await parseJson(
+      c,
+      z.object({ name: z.string().trim().min(1).max(BRAND_NAME_MAX).regex(/^[^\p{Cc}]*$/u) }).strict(),
+    );
+    await setSetting(c.var.deps.db, 'branding.name', name, auth.user.id);
+    await audit(c, 'admin.brand_name_updated', undefined, { name });
+    return c.json({ name });
   })
 
   .get('/glossary', manageSystem, async (c) =>

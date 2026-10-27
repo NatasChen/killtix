@@ -230,6 +230,12 @@ const logo = Buffer.from(
 );
 await page.locator('section[aria-label="淺色背景用"] input[type=file]').setInputFiles({ name: 'logo.png', mimeType: 'image/png', buffer: logo });
 await page.getByLabel('主選單').getByRole('img', { name: '公司標誌' }).waitFor();
+// the name stays beside the uploaded logo, and a new name shows at once in the sidebar and the tab title
+await page.getByLabel('主選單').locator('.brand-name', { hasText: 'TicketDesk' }).waitFor();
+await page.getByLabel('系統名稱').fill('ACME 服務台');
+await page.getByRole('button', { name: '儲存', exact: true }).first().click();
+await page.getByLabel('主選單').locator('.brand-name', { hasText: 'ACME 服務台' }).waitFor();
+if ((await page.title()) !== 'ACME 服務台') throw new Error(`tab title not renamed: ${await page.title()}`);
 await shot('05b-settings-logo');
 
 step('admin: mail settings');
@@ -330,6 +336,7 @@ p3.on('pageerror', (e) => errors.push(String(e)));
 await p3.goto(BASE);
 await p3.getByLabel('電子郵件').waitFor();
 await p3.getByRole('img', { name: '公司標誌' }).waitFor(); // uploaded in the logo step
+await p3.locator('.brand-name', { hasText: 'ACME 服務台' }).waitFor(); // renamed in the logo step
 await noOverflow(p3, 'login page (light)');
 await p3.screenshot({ path: `${SHOTS}/09-login-375-light.png`, fullPage: true });
 await p3.evaluate(() => { document.documentElement.dataset.theme = 'dark'; });

@@ -1,4 +1,6 @@
+import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { auditLogs } from '../src/server/db/schema.js';
 import { LOGO_MAX_BYTES } from '../src/server/services/branding.js';
 import { createTestContext, type TestContext } from './helpers.js';
 
@@ -70,5 +72,30 @@ describe('company logo', () => {
     expect(res.status).toBe(200);
     expect(res.body.logo.dark).toBeNull();
     expect((await ctx.client().get('/api/v1/branding/logo/dark')).status).toBe(404);
+  });
+});
+
+describe('product name', () => {
+  it('defaults to TicketDesk and is public, next to the logo', async () => {
+    const res = await ctx.client().get('/api/v1/branding');
+    expect(res.status).toBe(200);
+    expect(res.body.name).toBe('TicketDesk');
+  });
+
+  it('is changed by system administrators only, trimmed, audited and validated', async () => {
+    await ctx.createUser('name-manager@example.com', 'it_manager');
+    const manager = await ctx.login('name-manager@example.com');
+    expect((await manager.raw('PUT', '/api/v1/admin/branding/name', { name: 'Nope' })).status).toBe(403);
+
+    const admin = await ctx.adminClient();
+    for (const name of ['', '   ', 'x'.repeat(41), 'line\nbreak']) {
+      expect((await admin.raw('PUT', '/api/v1/admin/branding/name', { name })).status).toBe(400);
+    }
+    const res = await admin.raw('PUT', '/api/v1/admin/branding/name', { name: '  ACME 服務台 ' });
+    expect(res.status).toBe(200);
+    expect(res.body.name).toBe('ACME 服務台');
+    expect((await ctx.client().get('/api/v1/branding')).body.name).toBe('ACME 服務台');
+    const logged = await ctx.db.select().from(auditLogs).where(eq(auditLogs.action, 'admin.brand_name_updated'));
+    expect(logged).toHaveLength(1);
   });
 });

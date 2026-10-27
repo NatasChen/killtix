@@ -9,6 +9,8 @@ export const SETTING_DEFAULTS = {
   'security.2fa_enforced': false as boolean,
   // Date (YYYY-MM-DD, app timezone) the "older than 3 days" digest was last sent.
   'jobs.aging_digest_last_run': '' as string,
+  // Product name next to the logo on the sign-in page, the sidebar and the browser tab (DECISIONS D11).
+  'branding.name': 'TicketDesk' as string,
 };
 export type SettingKey = keyof typeof SETTING_DEFAULTS;
 
