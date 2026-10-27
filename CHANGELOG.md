@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-27
+
+系統名稱可自訂，上傳標誌後名稱不再消失。沒有資料表、環境變數或部署變更。
+
 ### Added
 - 系統名稱可自訂（系統設定的「標誌與名稱」，預設 TicketDesk，1–40 字），顯示在登入頁、側邊欄標誌旁與瀏覽器分頁標題；`GET /branding` 回應新增 `name`，新增 `PUT /admin/branding/name`（`admin:settings`，寫入稽核 `admin.brand_name_updated`）。存在 `system_settings`，沒有 migration（DECISIONS D11）。
 
