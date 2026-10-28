@@ -19,6 +19,7 @@ const DYNAMIC: Record<string, string[]> = {
   'ticket.priority.': ['1', '2', '3', '4', '5'],
   'ticket.sla.': ['on_track', 'at_risk', 'breached', 'met'],
   'ui.locale.': ['zh-TW', 'en-US'],
+  'ui.theme.': ['light', 'dark'],
   'ui.role.': ['super_admin', 'it_manager', 'agent', 'vendor', 'end_user', 'api_client'],
   'ui.notify.': ['pending', 'sending', 'sent', 'dead', 'skipped'],
   'ui.password.rule.': ['min_length', 'max_length', 'uppercase', 'lowercase', 'digit', 'symbol'],

@@ -10,7 +10,7 @@ export interface Me {
   role: string;
   teamIds: number[];
   locale: string;
-  theme: 'light' | 'dark' | 'system';
+  theme: 'light' | 'dark';
   twoFactorEnabled: boolean;
   mustChangePassword: boolean;
   isBootstrapAdmin: boolean;

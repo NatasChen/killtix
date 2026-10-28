@@ -36,6 +36,20 @@
       "when": 1793004245382,
       "tag": "0004_drop_users_team_id",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1793189449991,
+      "tag": "0005_users_theme_light",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793189451651,
+      "tag": "0006_users_theme_light_only",
+      "breakpoints": true
     }
   ]
 }

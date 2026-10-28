@@ -88,7 +88,7 @@ export const authRoutes = new Hono<AppEnv>()
       z.object({
         displayName: z.string().trim().min(1).max(128).optional(),
         locale: z.enum(SUPPORTED_LOCALES as [string, ...string[]]).optional(),
-        theme: z.enum(['light', 'dark', 'system']).optional(),
+        theme: z.enum(['light', 'dark']).optional(),
         telegramChatId: z.string().trim().max(64).regex(/^-?\d*$/).nullable().optional(),
       }),
     );

@@ -14,7 +14,7 @@
 | --- | --- |
 | 目前版本 | **0.9.0**（2026-10-27，git tag `v0.9.0`），見 [CHANGELOG.md](CHANGELOG.md) |
 | 支援部署 | Docker Compose（nginx + app + PostgreSQL 16 + Redis 7；只有 nginx 對主機開放 HTTP 埠，DECISIONS D19）。Cloudflare 方案已決定不做（DECISIONS D3） |
-| 測試狀態 | 103 個 Vitest 測試、`scripts/validate.sh`、`scripts/smoke.sh`（24 項）、`scripts/ui-e2e.sh` 全部通過 |
+| 測試狀態 | 107 個 Vitest 測試、`scripts/validate.sh`、`scripts/smoke.sh`（24 項）、`scripts/ui-e2e.sh` 全部通過 |
 | 未實作 | AD/LDAP、SAML、OIDC、SCIM、FIDO2、附件、SLA 營業時間、多副本背景工作 |
 | 待客戶確認 | 見 [specs/DECISIONS.md](specs/DECISIONS.md) 中標示 ⏳ 的項目（SSO 時程）；已決定：預設管理員密碼（D1：各部署以 `.env` 設定）、Cloudflare 不做（D3）、移除 `users.team_id`（D14） |
 | 下一步建議 | v1.1：SSO（`users.identity_provider` 已預留）→ 附件 → SLA 營業時間 |
@@ -201,7 +201,7 @@ crewai_ticket_build.py CrewAI 迭代工具（PM → SAr → PG → UI 設計師 
     （`main.tsx` 匯入，Vite 打包成同源檔案），**不要改成 Google Fonts CDN**：CSP 只允許同源，而且內網部署連不到外部。
     CSS 的 family 名稱是 `'Noto Sans Display Variable', 'Noto Sans TC Variable'`（英文在前，中文字自動落到 TC）。
   - 工單系統需要語意色（錯誤、成功、警告、SLA 逾時、優先度）：在 `palette.ts` 獨立定義，不受「裝飾色不能用在結構」的限制。
-  - sticker 色盤可用於有意義的資料色（`palette.sticker`：狀態 badge、儀表板色帶與長條圖、選單群組色塊），側邊欄用深靛藍（`palette.nav`），
+  - sticker 色盤可用於有意義的資料色（`palette.sticker`：狀態 badge、儀表板色帶與長條圖、側邊欄圖示），側邊欄用深靛藍（`palette.nav`），
     見 [specs/DECISIONS.md](specs/DECISIONS.md) D9。主要動作、連結與焦點仍只用主色藍；顏色一定要搭配文字，不單靠顏色傳達。
   - DESIGN.md 的應用程式元件（app shell、data table、auth form card、modal、toast、empty state、text input、button、badge-pill）
     對應到 Ant Design 的 Layout/Menu、Table、Card、Modal、message、Empty、Input、Button、Tag；hero、pricing 等行銷區塊不適用。
@@ -226,7 +226,7 @@ crewai_ticket_build.py CrewAI 迭代工具（PM → SAr → PG → UI 設計師 
 
 | 指令 | 內容 | 需要 |
 | --- | --- | --- |
-| `npm test` | 103 個單元/整合測試（PGlite） | Node |
+| `npm test` | 107 個單元/整合測試（PGlite） | Node |
 | `TEST_DATABASE_URL=postgres://… npm test` | 同上，改用真實 PostgreSQL + 正式驅動 | 一個 Postgres（見下） |
 | `npm run validate` | 型別、schema/migration 一致、測試、文件中的測試數、建置、首頁 JS 大小（bundle-check）、OpenAPI JSON、Markdown 連結、compose 與 nginx 設定 | Node（Docker 可選） |
 | `scripts/smoke.sh <url> <預設管理員密碼>` | 部署後 API 端到端 24 項（會改管理員密碼為 `Smoke-Test-Passw0rd!`） | 執行中的系統 |
@@ -293,6 +293,8 @@ docker compose --env-file /tmp/td.env -p tdtest down -v
 15. **nginx 的 `X-Forwarded-For` 必須覆寫，不能附加**：`clientIp()` 在 `TRUST_PROXY=true` 時取第一個值；改成 `$proxy_add_x_forwarded_for`
     會讓用戶端自帶的標頭成為第一個值，可偽造登入速率限制與稽核日誌的 IP。app 不對主機開放連接埠，除錯請用
     `docker compose exec app wget -qO- http://127.0.0.1:8080/healthz` 或經 nginx。
+16. **側邊欄收合時 antd `Menu` 的展開群組**：收合（手機寬度、或 Playwright 滿版截圖暫時把視窗縮成 1×1）時，antd 會呼叫 `onOpenChange([])`，
+    而且仍展開的群組會變成浮動子選單蓋住頁面。`Layout.tsx` 在收合時傳 `openKeys={[]}`、不採用 `onOpenChange`，展開後還原使用者的選擇。
 
 ---
 

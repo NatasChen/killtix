@@ -2,33 +2,14 @@ import { useEffect, useState } from 'react';
 import { theme as antdThemes, type ThemeConfig } from 'antd';
 import { FONT_FAMILY, PALETTES, type Mode } from './palette';
 
-export type ThemePref = 'light' | 'dark' | 'system';
-
-const media = () => window.matchMedia('(prefers-color-scheme: dark)');
-
-export function applyTheme(pref: ThemePref) {
+/** Light or dark; light is the default and there is no "follow the system" theme. */
+export function applyTheme(mode: Mode) {
   try {
-    localStorage.setItem('td-theme', pref);
+    localStorage.setItem('td-theme', mode);
   } catch {
     /* storage unavailable: theme still applies for this page */
   }
-  const dark = pref === 'dark' || (pref === 'system' && media().matches);
-  document.documentElement.dataset.theme = dark ? 'dark' : 'light';
-}
-
-export function currentThemePref(): ThemePref {
-  try {
-    return (localStorage.getItem('td-theme') as ThemePref) ?? 'system';
-  } catch {
-    return 'system';
-  }
-}
-
-/** Keeps "system" in sync with OS changes. */
-export function watchSystemTheme() {
-  media().addEventListener('change', () => {
-    if (currentThemePref() === 'system') applyTheme('system');
-  });
+  document.documentElement.dataset.theme = mode;
 }
 
 /** The applied theme (light/dark), following data-theme on <html> as applyTheme() changes it. */

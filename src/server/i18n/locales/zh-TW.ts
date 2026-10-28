@@ -63,7 +63,8 @@ const zhTW: Record<string, string> = {
 
   // UI
   'ui.nav.main': '主選單', 'ui.nav.dashboard': '儀表板', 'ui.nav.tickets': '工單', 'ui.nav.new_ticket': '新增工單',
-  'ui.nav.admin': '管理', 'ui.nav.users': '使用者', 'ui.nav.teams': '團隊', 'ui.nav.help_topics': '服務類別',
+  'ui.nav.group.users': '使用者管理', 'ui.nav.group.catalog': '工單設定', 'ui.nav.group.system': '系統相關',
+  'ui.nav.users': '使用者', 'ui.nav.teams': '團隊', 'ui.nav.help_topics': '服務類別',
   'ui.nav.sla_plans': 'SLA 方案', 'ui.nav.forms': '表單與自訂欄位', 'ui.nav.canned': '回覆範本', 'ui.nav.api_tokens': 'API Token',
   'ui.nav.notifications': '通知紀錄', 'ui.nav.settings': '系統設定', 'ui.nav.audit': '稽核日誌', 'ui.nav.profile': '個人設定',
 
@@ -72,7 +73,7 @@ const zhTW: Record<string, string> = {
   'ui.common.edit': '編輯', 'ui.common.add': '新增', 'ui.common.remove': '移除', 'ui.common.close': '關閉',
   'ui.common.copy': '複製', 'ui.common.total': '共 {n} 筆', 'ui.common.system': '系統', 'ui.common.theme': '主題',
   'ui.common.language': '語言',
-  'ui.theme.system': '跟隨系統', 'ui.theme.light': '淺色', 'ui.theme.dark': '深色',
+  'ui.theme.light': '淺色', 'ui.theme.dark': '深色', 'ui.theme.dark_mode': '深色主題',
   'ui.locale.zh-TW': '繁體中文', 'ui.locale.en-US': 'English',
 
   'ui.role.super_admin': '系統管理員', 'ui.role.it_manager': 'IT 服務主管', 'ui.role.agent': '內部工程師',

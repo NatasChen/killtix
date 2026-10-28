@@ -43,6 +43,8 @@ export interface Palette {
   /** sidebar: the DESIGN.md deep indigo "night" band */
   nav: { bg: string; text: string; muted: string; hover: string; active: string; indicator: string; divider: string; field: string; fieldBorder: string };
   navTile: Record<'sky' | 'purple' | 'orange' | 'teal', string>;
+  /** sidebar theme switch: track and icon (also the handle) of the switch in this theme's position (sun / moon) */
+  themeSwitch: { track: string; icon: string };
   /** the QR code needs a white quiet zone in both themes */
   qrCanvas: string;
 }
@@ -88,6 +90,7 @@ export const PALETTES: Record<Mode, Palette> = {
       fieldBorder: '#7d89cf',
     },
     navTile: { sky: '#62aef0', purple: '#c7a4f2', orange: '#f59a5c', teal: '#4cc3be' },
+    themeSwitch: { track: '#ffd166', icon: '#7a3e00' },
     qrCanvas: '#ffffff',
   },
   dark: {
@@ -130,6 +133,7 @@ export const PALETTES: Record<Mode, Palette> = {
       fieldBorder: '#6f7bc0',
     },
     navTile: { sky: '#62aef0', purple: '#c7a4f2', orange: '#f59a5c', teal: '#4cc3be' },
+    themeSwitch: { track: '#5b6be8', icon: '#fff4c4' },
     qrCanvas: '#ffffff',
   },
 };

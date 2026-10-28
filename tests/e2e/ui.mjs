@@ -23,6 +23,13 @@ const pick = async (field, option) => {
   await field.click();
   await field.page().locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').getByTitle(option, { exact: true }).click();
 };
+// Sidebar link; admin pages sit in collapsible groups, so open the group first when the link is hidden.
+const nav = async (name, group, pg = page, menuName = '主選單') => {
+  const menu = pg.getByLabel(menuName);
+  const link = menu.getByRole('link', { name, exact: true });
+  if (group && !(await link.isVisible())) await menu.getByRole('menuitem', { name: group }).click();
+  await link.click();
+};
 const shot = (n) => page.screenshot({ path: `${SHOTS}/${n}.png`, fullPage: true });
 
 step('reset admin preferences');
@@ -41,6 +48,19 @@ await shot('01-login');
 await page.getByRole('button', { name: '登入' }).click();
 await page.getByRole('heading', { name: '儀表板' }).waitFor();
 await shot('02-dashboard');
+
+step('sidebar admin groups start collapsed and expand on click');
+{
+  const menu = page.getByLabel('主選單');
+  const group = menu.getByRole('menuitem', { name: '系統相關' });
+  if ((await group.getAttribute('aria-expanded')) !== 'false') throw new Error('system group should start collapsed');
+  if (await menu.getByRole('link', { name: '稽核日誌' }).isVisible()) throw new Error('collapsed group shows its links');
+  await group.click();
+  await menu.getByRole('link', { name: '稽核日誌' }).waitFor();
+  await shot('02b-sidebar-groups');
+  await group.click();
+  await menu.getByRole('link', { name: '稽核日誌' }).waitFor({ state: 'hidden' });
+}
 
 step('create ticket through the form');
 await page.getByRole('link', { name: '新增工單' }).first().click();
@@ -80,7 +100,7 @@ await page.waitForURL(/olderThanDays=3/);
 await page.getByText('沒有資料').waitFor();
 
 step('admin: create user');
-await page.getByLabel('主選單').getByRole('link', { name: '使用者' }).click();
+await nav('使用者', '使用者管理');
 await page.getByRole('heading', { name: '使用者', exact: true }).waitFor();
 await page.getByLabel('電子郵件').fill(VENDOR);
 await page.getByLabel('顯示名稱').fill('UI Vendor');
@@ -118,7 +138,7 @@ await page.locator('.ant-descriptions').getByText('Bootstrap Administrator (系�
 await page.locator('.ant-descriptions').getByText('處理中').waitFor();
 if (await page.getByRole('button', { name: '我來處理' }).count()) throw new Error('claim button should disappear once claimed');
 await shot('05a-ticket-claimed');
-await page.getByLabel('主選單').getByRole('link', { name: '使用者' }).click();
+await nav('使用者', '使用者管理');
 await page.getByRole('heading', { name: '使用者', exact: true }).waitFor();
 const vendorTeams = page.getByRole('row').filter({ hasText: VENDOR }).getByLabel('團隊');
 await vendorTeams.click(); // a multiple select stays open: pick both, then close it
@@ -134,7 +154,7 @@ await vendorRow.getByText(NET).waitFor();
 await vendorRow.getByText(DESK).waitFor();
 
 step('teams page: expand a team, see its members and their state, add and remove members');
-await page.getByLabel('主選單').getByRole('link', { name: '團隊' }).click();
+await nav('團隊', '使用者管理');
 await page.getByRole('heading', { name: '團隊', exact: true }).waitFor();
 const netTeamRow = page.getByRole('row').filter({ hasText: NET }).first();
 await netTeamRow.getByRole('button', { name: '展開列' }).click();
@@ -213,7 +233,7 @@ await page.waitForURL(/[?&]from=\d{4}-\d{2}-\d{2}&to=\d{4}-\d{2}-\d{2}/);
 }
 
 step('admin: company logo');
-await page.getByLabel('主選單').getByRole('link', { name: '設定' }).click();
+await nav('系統設定', '系統相關');
 // draw a test logo in the page so the run needs no fixture file
 const logo = Buffer.from(
   await page.evaluate(() => {
@@ -255,34 +275,41 @@ await pick(page.getByLabel('寄信方式'), '環境變數（SMTP）');
 await mail.getByRole('button', { name: '儲存' }).click();
 await page.getByText('目前使用環境變數設定，以下為唯讀資訊（不顯示密碼）。').waitFor();
 
-step('sidebar theme menu is readable in the light theme');
+step('sidebar language menu and theme switch are readable in the light theme');
 if ((await page.evaluate(() => document.documentElement.dataset.theme)) !== 'light') throw new Error('expected the light theme');
-await page.getByLabel('主選單').getByLabel('主題').click();
-{
-  // the theme select's own dropdown (another one may still be playing its close animation)
-  const menu = page.locator('.ant-select-dropdown').filter({ has: page.locator('#nav-theme_list') });
-  const option = menu.locator('.ant-select-item-option').first();
-  await option.waitFor();
-  // wait for the open animation (it fades in) before measuring and taking the screenshot; polled here
-  // because the page's CSP forbids the eval that waitForFunction needs
-  for (let i = 0; i < 40 && (await menu.evaluate((el) => getComputedStyle(el).opacity)) !== '1'; i++) await page.waitForTimeout(50);
-  const ratio = await option.evaluate((el) => {
+// contrast between two computed colours, run in the page (CSP forbids the eval that waitForFunction needs)
+const contrastOf = async (locator, fg, bgLocator) =>
+  locator.evaluate((el, [fgProp, bgEl]) => {
     const rgb = (c) => c.match(/[\d.]+/g).slice(0, 3).map(Number);
     const lum = (c) => {
       const [r, g, b] = rgb(c).map((v) => ((v /= 255) <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
       return 0.2126 * r + 0.7152 * g + 0.0722 * b;
     };
-    const bg = getComputedStyle(el.closest('.ant-select-dropdown')).backgroundColor;
-    const [a, b] = [lum(getComputedStyle(el).color), lum(bg)].sort((x, y) => y - x);
+    const [a, b] = [lum(getComputedStyle(el)[fgProp]), lum(getComputedStyle(bgEl).backgroundColor)].sort((x, y) => y - x);
     return (a + 0.05) / (b + 0.05);
-  });
-  if (ratio < 4.5) throw new Error(`sidebar theme option contrast ${ratio.toFixed(2)} < 4.5`);
-  await shot('05e-sidebar-theme-menu-light');
+  }, [fg, await bgLocator.elementHandle()]);
+const themeSwitch = page.getByLabel('主選單').getByRole('switch', { name: '深色主題' });
+{
+  await page.getByLabel('主選單').getByLabel('語言').click();
+  // the language select's own dropdown (another one may still be playing its close animation)
+  const menu = page.locator('.ant-select-dropdown').filter({ has: page.locator('#nav-locale_list') });
+  const option = menu.locator('.ant-select-item-option').first();
+  await option.waitFor();
+  // wait for the open animation (it fades in) before measuring and taking the screenshot
+  for (let i = 0; i < 40 && (await menu.evaluate((el) => getComputedStyle(el).opacity)) !== '1'; i++) await page.waitForTimeout(50);
+  const ratio = await contrastOf(option, 'color', menu);
+  if (ratio < 4.5) throw new Error(`sidebar language option contrast ${ratio.toFixed(2)} < 4.5`);
   await page.keyboard.press('Escape');
+  if ((await themeSwitch.getAttribute('aria-checked')) !== 'false') throw new Error('theme switch should be off in the light theme');
+  const sun = themeSwitch.locator('.anticon-sun');
+  if ((await contrastOf(sun, 'color', themeSwitch)) < 3) throw new Error('sun icon contrast < 3');
+  await shot('05e-sidebar-theme-switch-light');
 }
 
 step('dark theme + English');
-await pick(page.getByLabel('主選單').getByLabel('主題'), '深色');
+await themeSwitch.click();
+if ((await themeSwitch.getAttribute('aria-checked')) !== 'true') throw new Error('theme switch should be on in the dark theme');
+if ((await contrastOf(themeSwitch.locator('.anticon-moon'), 'color', themeSwitch)) < 3) throw new Error('moon icon contrast < 3');
 await pick(page.getByLabel('主選單').getByLabel('語言'), 'English');
 await page.getByLabel('Main menu').getByRole('link', { name: 'Dashboard' }).click();
 await page.getByRole('heading', { name: 'Dashboard' }).waitFor();
@@ -291,7 +318,7 @@ await shot('06-dashboard-dark-en');
 await page.reload();
 await page.getByRole('heading', { name: 'Dashboard' }).waitFor();
 if ((await page.evaluate(() => document.documentElement.dataset.theme)) !== 'dark') throw new Error('theme not persisted');
-await page.getByLabel('Main menu').getByRole('link', { name: 'Settings' }).click();
+await nav('Settings', 'System', page, 'Main menu');
 await page.getByRole('heading', { name: 'E-mail settings' }).waitFor();
 await shot('06b-settings-dark-en');
 await page.getByRole('button', { name: 'Sign out' }).click();
@@ -315,7 +342,7 @@ await p2.getByLabel('確認新密碼').fill('Vendor-UI-Passw0rd!');
 await p2.getByRole('button', { name: '變更密碼' }).click();
 await p2.getByRole('heading', { name: '儀表板' }).waitFor();
 // The vendor is assigned nothing, so the list is empty and admin pages are absent.
-if (await p2.getByRole('link', { name: '使用者' }).count()) throw new Error('vendor sees admin nav');
+if (await p2.getByLabel('主選單').getByRole('menuitem', { name: /使用者管理|工單設定|系統相關/ }).count()) throw new Error('vendor sees admin nav');
 
 step('mobile viewport');
 await p2.setViewportSize({ width: 390, height: 844 });

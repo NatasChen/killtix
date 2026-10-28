@@ -4,7 +4,7 @@ import { verifyPassword } from '../src/server/auth/crypto.js';
 import { currentTotp } from '../src/server/auth/totp.js';
 import { users } from '../src/server/db/schema.js';
 import { seed } from '../src/server/db/seed.js';
-import { ADMIN_PASSWORD, createTestContext, STRONG_PASSWORD, type TestContext } from './helpers.js';
+import { ADMIN_PASSWORD, createTestContext, databaseAt, STRONG_PASSWORD, type TestContext } from './helpers.js';
 
 let ctx: TestContext;
 beforeAll(async () => {
@@ -193,5 +193,34 @@ describe('two-factor authentication', () => {
     expect(enable.body.stage).toBe('full');
     expect((await client.get('/api/v1/tickets')).status).toBe(200);
     await admin.patch('/api/v1/admin/settings', { '2faEnforced': false });
+  });
+});
+
+describe('theme preference', () => {
+  it('stores light or dark, starts at light and no longer accepts "system"', async () => {
+    const user = await ctx.createUser('theme@example.com', 'agent');
+    const client = await ctx.login('theme@example.com');
+    expect((await client.get('/api/v1/auth/me')).body.user.theme).toBe('light');
+    expect((await client.patch('/api/v1/auth/me', { theme: 'dark' })).body.user.theme).toBe('dark');
+    expect((await client.patch('/api/v1/auth/me', { theme: 'system' })).status).toBe(400);
+    const [row] = await ctx.db.select({ theme: users.theme }).from(users).where(eq(users.id, user.id));
+    expect(row.theme).toBe('dark');
+  });
+
+  it('moves users who followed the system theme to light when upgrading', async () => {
+    const db = await databaseAt('0004_drop_users_team_id');
+    try {
+      await db.query(`insert into roles (key, name) values ('agent', 'Agent')`);
+      await db.query(
+        `insert into users (email, display_name, role_key, theme) values ('s@example.com', 's', 'agent', 'system'), ('d@example.com', 'd', 'agent', 'dark')`,
+      );
+      await db.upgrade();
+      expect((await db.query('select email, theme from users order by email')).map((r) => [r.email, r.theme])).toEqual([
+        ['d@example.com', 'dark'],
+        ['s@example.com', 'light'],
+      ]);
+    } finally {
+      await db.close();
+    }
   });
 });

@@ -110,6 +110,12 @@ describe('palette (FR-5.4)', () => {
       expect(contrast(fg, p.nav.bg), `${fg} on nav in ${theme}`).toBeGreaterThanOrEqual(3);
     }
   });
+
+  it.each(THEMES)('keeps the sidebar theme switch and its sun/moon icon visible in the %s theme', (theme, p) => {
+    // non-text UI (WCAG 1.4.11): the track against the sidebar, the icon and handle against the track
+    expect(contrast(p.themeSwitch.track, p.nav.bg), theme).toBeGreaterThanOrEqual(3);
+    expect(contrast(p.themeSwitch.icon, p.themeSwitch.track), theme).toBeGreaterThanOrEqual(3);
+  });
 });
 
 describe('Ant Design theme (FR-5.4)', () => {

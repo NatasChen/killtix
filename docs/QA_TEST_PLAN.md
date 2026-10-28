@@ -623,14 +623,15 @@
 | REG-I18N-001 | zh-TW / en-US 切換 | AC-I18N-01 | 切換語系 | 全站字串生效；無硬編碼殘留 | ✅ | P0 |
 | REG-I18N-002 | 缺字回退 en-US | AC-I18N-01 | 刪除某 zh-TW key | 顯示 en-US 值；不顯示原始 key | ✅ | P0 |
 | REG-I18N-003 | 新增 ja-JP 無需重編譯 | AC-I18N-02 | 匯入字典檔 | 語系可選；字串生效 | ⚠️ | P1 |
-| REG-THEME-001 | Light/Dark/System 切換 | AC-THEME-01 | 切換三模式 | 即時生效；偏好持久化 | ✅ | P0 |
+| REG-THEME-001 | Light/Dark 切換 | AC-THEME-01 | 側邊欄主題開關（`scripts/ui-e2e.sh`）；`tests/auth.test.ts` | 即時生效；偏好持久化；預設淺色；API 不接受 `system`，升級時 `system` 改為 `light` | ✅ | P0 |
 | REG-THEME-002 | 無 FOUC | AC-THEME-01 | 重新載入頁面（Dark） | 無白閃；`data-theme` 於首屏前套用 | ⚠️ | P1 |
 | REG-THEME-003 | WCAG AA 對比度 | AC-THEME-01 | axe-core 掃描 | 無 contrast 違規（≥ 4.5:1） | ✅ | P1 |
 | REG-THEME-004 | 優先度 badge 色彩與對比 | AC-THEME-02 | 檢查 `palette.ts` 兩種主題的色票（`tests/styles.test.ts`） | L3 有獨立的 accent 樣式；L1／L2 為中性灰；所有 badge 在淺色與深色下對比 ≥ 4.5:1 | ✅ | P1 |
 | REG-THEME-005 | 優先度 badge 目視確認 | AC-THEME-02 | `scripts/ui-e2e.sh` 截圖 | L1~L5 在兩種主題下可分辨、文字可讀 | ⚠️ | P2 |
 | REG-THEME-006 | 資料色與側邊欄對比 | AC-THEME-05 | 檢查 `palette.ts`（`tests/styles.test.ts`） | 狀態 badge 互不同色且不同於 L3～L5；sticker 與 `--nav-*` 變數在兩種主題達 AA（非文字 3:1） | ✅ | P1 |
 | REG-THEME-007 | Ant Design 主題 | AC-THEME-05 | 檢查 `antdTheme()` 的 token（`tests/styles.test.ts`）；`scripts/ui-e2e.sh` 走完主要流程 | antd 的主色、底色、文字、側邊欄色取自 `palette.ts`；兩種主題的主要按鈕文字 ≥ 4.5:1 | ✅ | P1 |
-| REG-THEME-008 | 側邊欄下拉選單在淺色主題可讀 | AC-THEME-05 | `scripts/ui-e2e.sh`：淺色主題展開側邊欄「主題」選單 | 選項文字與選單底色對比 ≥ 4.5:1（截圖 `05e-sidebar-theme-menu-light`） | ✅ | P1 |
+| REG-THEME-008 | 側邊欄控制項可讀 | AC-THEME-05 | `scripts/ui-e2e.sh`：淺色主題展開「語言」選單、檢查主題開關；切到深色再檢查 | 選項文字與選單底色 ≥ 4.5:1；太陽／月亮圖示對開關底色 ≥ 3:1（截圖 `05e-sidebar-theme-switch-light`） | ✅ | P1 |
+| REG-THEME-009 | 側邊欄群組摺疊 | AC-THEME-05 | `scripts/ui-e2e.sh`：登入後「系統相關」為收合，點擊展開再收合；375px 寬的截圖 | 收合時看不到子項目，展開後可點；手機寬度收合側邊欄時沒有浮動子選單蓋住內容；廠商看不到任何管理群組 | ✅ | P1 |
 | REG-DASH-RWD-01 | 趨勢折線圖隨寬度縮放 | FR-3.5 | `scripts/ui-e2e.sh`：1360px 寬的儀表板 | 「新增與解決趨勢」圖寬度 ≥ 卡片內容寬度 90%；軸文字維持 11px | ✅ | P2 |
 | REG-DASH-RANGE-01 | 儀表板統計期間 | AC-REPORT-08 | `tests/dashboard.test.ts`（period）；`scripts/ui-e2e.sh`：選「近 7 天」 | 網址帶 `from`/`to`、標題顯示期間、趨勢 7 點；「期間新增」下鑽後清單的建立日期篩選相同 | ✅ | P1 |
 | REG-PERF-01 | 首頁載入大小 | FR-5（非功能） | `scripts/bundle-check.mjs`（`npm run validate`） | 首頁 JS ≤ 300 KB（gzip）；首頁不含只在管理頁使用的程式碼 | ✅ | P2 |

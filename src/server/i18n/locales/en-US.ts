@@ -63,7 +63,8 @@ const enUS: Record<string, string> = {
 
   // UI
   'ui.nav.main': 'Main menu', 'ui.nav.dashboard': 'Dashboard', 'ui.nav.tickets': 'Tickets', 'ui.nav.new_ticket': 'New ticket',
-  'ui.nav.admin': 'Administration', 'ui.nav.users': 'Users', 'ui.nav.teams': 'Teams', 'ui.nav.help_topics': 'Help topics',
+  'ui.nav.group.users': 'User management', 'ui.nav.group.catalog': 'Ticket settings', 'ui.nav.group.system': 'System',
+  'ui.nav.users': 'Users', 'ui.nav.teams': 'Teams', 'ui.nav.help_topics': 'Help topics',
   'ui.nav.sla_plans': 'SLA plans', 'ui.nav.forms': 'Forms & custom fields', 'ui.nav.canned': 'Canned responses', 'ui.nav.api_tokens': 'API tokens',
   'ui.nav.notifications': 'Notification log', 'ui.nav.settings': 'Settings', 'ui.nav.audit': 'Audit log', 'ui.nav.profile': 'Profile',
 
@@ -72,7 +73,7 @@ const enUS: Record<string, string> = {
   'ui.common.edit': 'Edit', 'ui.common.add': 'Add', 'ui.common.remove': 'Remove', 'ui.common.close': 'Close',
   'ui.common.copy': 'Copy', 'ui.common.total': '{n} total', 'ui.common.system': 'System', 'ui.common.theme': 'Theme',
   'ui.common.language': 'Language',
-  'ui.theme.system': 'System', 'ui.theme.light': 'Light', 'ui.theme.dark': 'Dark',
+  'ui.theme.light': 'Light', 'ui.theme.dark': 'Dark', 'ui.theme.dark_mode': 'Dark theme',
   'ui.locale.zh-TW': '繁體中文', 'ui.locale.en-US': 'English',
 
   'ui.role.super_admin': 'Super admin', 'ui.role.it_manager': 'IT manager', 'ui.role.agent': 'Agent',

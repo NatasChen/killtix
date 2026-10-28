@@ -9,14 +9,13 @@ import { BrandingProvider } from './branding';
 import { Layout } from './components/Layout';
 import { I18nProvider, useI18n } from './i18n';
 import { lazyPage } from './lazy';
-import { antdTheme, applyTheme, useThemeMode, watchSystemTheme } from './theme';
+import { antdTheme, applyTheme, useThemeMode } from './theme';
 import { Empty } from './components/common';
 // Self-hosted Google Noto fonts (bundled by Vite, same origin, so the CSP stays unchanged)
 import '@fontsource-variable/noto-sans-display';
 import '@fontsource-variable/noto-sans-tc';
 import './styles.css';
 
-watchSystemTheme();
 
 // Every page is its own chunk, loaded on first use: the first screen only downloads the shell, React and antd.
 const LoginPage = lazyPage(() => import('./pages/AuthPages'), 'LoginPage');

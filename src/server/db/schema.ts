@@ -77,7 +77,7 @@ export const users = pgTable(
     totpPendingSecret: varchar('totp_pending_secret', { length: 255 }),
     recoveryCodeHashes: jsonb('recovery_code_hashes').$type<string[]>().notNull().default([]),
     locale: varchar('locale', { length: 16 }).notNull().default('zh-TW'),
-    theme: varchar('theme', { length: 8 }).notNull().default('system'),
+    theme: varchar('theme', { length: 8 }).notNull().default('light'),
     telegramChatId: varchar('telegram_chat_id', { length: 64 }),
     lastLoginAt: tstz('last_login_at'),
     createdAt: createdAt(),
@@ -86,7 +86,7 @@ export const users = pgTable(
   (t) => [
     index('idx_users_role').on(t.roleKey),
     check('chk_users_email_lower', sql`${t.email} = lower(${t.email})`),
-    check('chk_users_theme', sql`${t.theme} in ('light','dark','system')`),
+    check('chk_users_theme', sql`${t.theme} in ('light','dark')`),
   ],
 );
 

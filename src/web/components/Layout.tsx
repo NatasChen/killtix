@@ -1,28 +1,68 @@
-import { Button, ConfigProvider, Flex, Layout as AntLayout, Menu, Select, Spin, theme as antdThemes, type MenuProps } from 'antd';
-import { Suspense, useState } from 'react';
+import {
+  ApiOutlined,
+  AppstoreOutlined,
+  AuditOutlined,
+  BellOutlined,
+  ClockCircleOutlined,
+  DashboardOutlined,
+  FileTextOutlined,
+  FolderOpenOutlined,
+  FormOutlined,
+  IdcardOutlined,
+  MessageOutlined,
+  MoonOutlined,
+  PlusCircleOutlined,
+  SettingOutlined,
+  SunOutlined,
+  TeamOutlined,
+  ToolOutlined,
+  UserOutlined,
+} from '@ant-design/icons';
+import { Button, ConfigProvider, Flex, Layout as AntLayout, Menu, Select, Spin, Switch, theme as antdThemes, type MenuProps } from 'antd';
+import { Suspense, useEffect, useState, type ComponentType, type CSSProperties } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { patch } from '../api';
 import { useAuth } from '../auth';
 import { Brand } from '../branding';
 import { useI18n } from '../i18n';
-import { applyTheme, currentThemePref, type ThemePref } from '../theme';
+import type { Mode } from '../palette';
+import { applyTheme, useThemeMode } from '../theme';
 import { usePalette } from './common';
 
 type NavTile = 'sky' | 'purple' | 'orange' | 'teal';
-type Item = { to: string; label: string; tile: NavTile; end?: boolean };
+type Icon = ComponentType<{ style?: CSSProperties }>;
+type Item = { to: string; label: string; icon: Icon; end?: boolean };
+type Group = { key: string; label: string; icon: Icon; tile: NavTile; items: Item[] };
+
+// Which admin groups are expanded is a per-browser convenience; storage may be unavailable.
+const OPEN_KEY = 'td-nav-open';
+const readOpen = (): string[] => {
+  try {
+    const v: unknown = JSON.parse(localStorage.getItem(OPEN_KEY) ?? '[]');
+    return Array.isArray(v) ? v.filter((k): k is string => typeof k === 'string') : [];
+  } catch {
+    return [];
+  }
+};
+const saveOpen = (keys: string[]) => {
+  try {
+    localStorage.setItem(OPEN_KEY, JSON.stringify(keys));
+  } catch {
+    /* storage unavailable: the groups just start closed next time */
+  }
+};
 
 export function Layout() {
   const { user, can, logout } = useAuth();
   const { t, locale, locales, setLocale } = useI18n();
   const { pathname } = useLocation();
   const p = usePalette();
-  const [theme, setTheme] = useState<ThemePref>(currentThemePref());
+  const mode = useThemeMode();
   // Phones start with the sidebar collapsed; deciding on the first render (not after antd measures the
   // breakpoint) avoids a frame where the expanded sidebar pushes the page wider than the screen.
   const [collapsed, setCollapsed] = useState(() => window.matchMedia('(max-width: 767.98px)').matches);
 
-  const changeTheme = (value: ThemePref) => {
-    setTheme(value);
+  const changeTheme = (value: Mode) => {
     applyTheme(value);
     void patch('/auth/me', { theme: value }).catch(() => undefined);
   };
@@ -33,35 +73,56 @@ export function Layout() {
   const isAdmin = can('admin:users');
   const canCatalog = can('catalog:manage');
 
-  // A colour tile per nav group: tickets (sky), catalog (purple), system admin (orange), records (teal).
+  // Everyday pages stay at the top level; admin pages sit in collapsible groups, each with its own icon
+  // colour: users (orange), ticket settings (purple), system (teal). Empty groups are not shown.
   const work: Item[] = [
-    { to: '/', label: t('ui.nav.dashboard'), tile: 'sky', end: true },
-    { to: '/tickets', label: t('ui.nav.tickets'), tile: 'sky', end: true },
-    ...(can('ticket:create') ? [{ to: '/tickets/new', label: t('ui.nav.new_ticket'), tile: 'sky' as const }] : []),
+    { to: '/', label: t('ui.nav.dashboard'), icon: DashboardOutlined, end: true },
+    { to: '/tickets', label: t('ui.nav.tickets'), icon: FileTextOutlined, end: true },
+    ...(can('ticket:create') ? [{ to: '/tickets/new', label: t('ui.nav.new_ticket'), icon: PlusCircleOutlined }] : []),
   ];
-  const admin: Item[] = [
-    ...(isAdmin ? [{ to: '/admin/users', label: t('ui.nav.users'), tile: 'orange' as const }] : []),
-    ...(canCatalog
-      ? [
-          { to: '/admin/teams', label: t('ui.nav.teams'), tile: 'purple' as const },
-          { to: '/admin/help-topics', label: t('ui.nav.help_topics'), tile: 'purple' as const },
-          { to: '/admin/sla-plans', label: t('ui.nav.sla_plans'), tile: 'purple' as const },
-          { to: '/admin/forms', label: t('ui.nav.forms'), tile: 'purple' as const },
-          { to: '/admin/canned-responses', label: t('ui.nav.canned'), tile: 'purple' as const },
-        ]
-      : []),
-    ...(isAdmin
-      ? [
-          { to: '/admin/api-tokens', label: t('ui.nav.api_tokens'), tile: 'orange' as const },
-          { to: '/admin/notifications', label: t('ui.nav.notifications'), tile: 'teal' as const },
-          { to: '/admin/settings', label: t('ui.nav.settings'), tile: 'orange' as const },
-          { to: '/admin/audit', label: t('ui.nav.audit'), tile: 'teal' as const },
-        ]
-      : []),
-  ];
-  const toItem = (i: Item) => ({
+  const groups: Group[] = [
+    {
+      key: 'users',
+      label: t('ui.nav.group.users'),
+      icon: UserOutlined,
+      tile: 'orange' as const,
+      items: [
+        ...(isAdmin ? [{ to: '/admin/users', label: t('ui.nav.users'), icon: IdcardOutlined }] : []),
+        ...(canCatalog ? [{ to: '/admin/teams', label: t('ui.nav.teams'), icon: TeamOutlined }] : []),
+      ],
+    },
+    {
+      key: 'catalog',
+      label: t('ui.nav.group.catalog'),
+      icon: AppstoreOutlined,
+      tile: 'purple' as const,
+      items: canCatalog
+        ? [
+            { to: '/admin/help-topics', label: t('ui.nav.help_topics'), icon: FolderOpenOutlined },
+            { to: '/admin/sla-plans', label: t('ui.nav.sla_plans'), icon: ClockCircleOutlined },
+            { to: '/admin/forms', label: t('ui.nav.forms'), icon: FormOutlined },
+            { to: '/admin/canned-responses', label: t('ui.nav.canned'), icon: MessageOutlined },
+          ]
+        : [],
+    },
+    {
+      key: 'system',
+      label: t('ui.nav.group.system'),
+      icon: SettingOutlined,
+      tile: 'teal' as const,
+      items: isAdmin
+        ? [
+            { to: '/admin/settings', label: t('ui.nav.settings'), icon: ToolOutlined },
+            { to: '/admin/notifications', label: t('ui.nav.notifications'), icon: BellOutlined },
+            { to: '/admin/audit', label: t('ui.nav.audit'), icon: AuditOutlined },
+            { to: '/admin/api-tokens', label: t('ui.nav.api_tokens'), icon: ApiOutlined },
+          ]
+        : [],
+    },
+  ].filter((g) => g.items.length);
+  const toItem = (i: Item, tile: NavTile) => ({
     key: i.to,
-    icon: <span aria-hidden style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 3, background: p.navTile[i.tile] }} />,
+    icon: <i.icon aria-hidden style={{ color: p.navTile[tile] }} />,
     label: (
       <NavLink to={i.to} end={i.end}>
         {i.label}
@@ -69,13 +130,35 @@ export function Layout() {
     ),
   });
   const items: MenuProps['items'] = [
-    ...work.map(toItem),
-    ...(admin.length ? [{ type: 'group' as const, key: 'admin', label: t('ui.nav.admin'), children: admin.map(toItem) }] : []),
+    ...work.map((i) => toItem(i, 'sky')),
+    ...groups.map((g) => ({
+      key: `group:${g.key}`,
+      icon: <g.icon aria-hidden style={{ color: p.navTile[g.tile] }} />,
+      label: g.label,
+      children: g.items.map((i) => toItem(i, g.tile)),
+    })),
   ];
   // The selected row is the longest nav path that prefixes the current location.
-  const selected = [...work, ...admin]
+  const selected = [...work, ...groups.flatMap((g) => g.items)]
     .filter((i) => (i.end ? pathname === i.to : pathname === i.to || pathname.startsWith(`${i.to}/`)))
     .sort((a, b) => b.to.length - a.to.length)[0]?.to;
+  const currentGroup = groups.find((g) => g.items.some((i) => i.to === selected))?.key;
+
+  // Several groups may be open at once; the group of the current page always opens.
+  const [openKeys, setOpenKeys] = useState<string[]>(() => {
+    const keys = readOpen();
+    return currentGroup && !keys.includes(`group:${currentGroup}`) ? [...keys, `group:${currentGroup}`] : keys;
+  });
+  useEffect(() => {
+    if (currentGroup) setOpenKeys((keys) => (keys.includes(`group:${currentGroup}`) ? keys : [...keys, `group:${currentGroup}`]));
+  }, [currentGroup]);
+  const changeOpen = (keys: string[]) => {
+    // antd closes every group when the sidebar collapses (below the breakpoint); keep the user's choice so the
+    // groups are as they were when it expands again
+    if (collapsed) return;
+    setOpenKeys(keys);
+    saveOpen(keys);
+  };
 
   // Footer controls sit on the indigo sidebar, so they get the dark algorithm and the nav colours. The
   // dropdowns need their own elevated background: the app theme's (white in light mode) would otherwise
@@ -107,29 +190,38 @@ export function Layout() {
         style={{ borderRight: `1px solid ${p.nav.divider}` }}>
         <nav aria-label={t('ui.nav.main')} style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
           <Brand on="dark" color={p.nav.text} />
-          <Menu theme="dark" mode="inline" selectedKeys={selected ? [selected] : []} items={items} style={{ borderInlineEnd: 'none' }} />
+          <Menu
+            theme="dark"
+            mode="inline"
+            selectedKeys={selected ? [selected] : []}
+            // a collapsed menu shows open groups as floating popups over the page, so none are open while collapsed
+            openKeys={collapsed ? [] : openKeys}
+            onOpenChange={changeOpen}
+            items={items}
+            style={{ borderInlineEnd: 'none' }}
+          />
           <ConfigProvider theme={navControls}>
             <div className="sidebar-footer" style={{ borderTop: `1px solid ${p.nav.divider}` }}>
               <NavLink to="/profile" style={{ color: p.nav.text, display: 'block' }}>
                 {user?.displayName}
                 <div style={{ color: p.nav.muted, fontSize: 12 }}>{t(`ui.role.${user?.role}`)}</div>
               </NavLink>
-              <div>
-                <label htmlFor="nav-theme" style={label}>
-                  {t('ui.common.theme')}
-                </label>
-                <Select
-                  id="nav-theme"
-                  value={theme}
-                  onChange={(v) => changeTheme(v)}
-                  style={{ width: '100%' }}
-                  options={[
-                    { value: 'system', label: t('ui.theme.system') },
-                    { value: 'light', label: t('ui.theme.light') },
-                    { value: 'dark', label: t('ui.theme.dark') },
-                  ].map((o) => ({ ...o, title: o.label }))}
-                />
-              </div>
+              <Flex justify="space-between" align="center">
+                <span style={{ ...label, marginBottom: 0 }}>
+                  {t('ui.common.theme')}: {t(`ui.theme.${mode}`)}
+                </span>
+                {/* off = light (sun), on = dark (moon); track, icon and handle colours come from the theme's palette */}
+                <ConfigProvider theme={{ components: { Switch: { handleBg: p.themeSwitch.icon } } }}>
+                  <Switch
+                    aria-label={t('ui.theme.dark_mode')}
+                    checked={mode === 'dark'}
+                    onChange={(dark) => changeTheme(dark ? 'dark' : 'light')}
+                    checkedChildren={<MoonOutlined style={{ color: p.themeSwitch.icon }} />}
+                    unCheckedChildren={<SunOutlined style={{ color: p.themeSwitch.icon }} />}
+                    style={{ background: p.themeSwitch.track }}
+                  />
+                </ConfigProvider>
+              </Flex>
               <div>
                 <label htmlFor="nav-locale" style={label}>
                   {t('ui.common.language')}

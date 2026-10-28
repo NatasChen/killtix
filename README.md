@@ -8,7 +8,7 @@ SOC、SIEM 等外部系統可以透過 API 自動開單。
 | 項目 | 內容 |
 | --- | --- |
 | 目前版本 | **v0.9.0**，2026-10-27 |
-| 狀態 | Docker 版可部署；103 個自動化測試、部署後 API 檢查與瀏覽器端到端測試皆通過 |
+| 狀態 | Docker 版可部署；107 個自動化測試、部署後 API 檢查與瀏覽器端到端測試皆通過 |
 | 本版重點 | 「團隊」頁可展開查看成員（角色、帳號狀態、處理中工單數）並直接加入或移除成員；系統管理員與 IT 服務主管可用 |
 | 尚未實作 | AD/LDAP、SAML、OIDC、SCIM、FIDO2、附件、SLA 營業時間（只支援 Docker 部署，Cloudflare 方案不做，見 DECISIONS D3） |
 | 完整變更 | [CHANGELOG.md](CHANGELOG.md) |
@@ -47,7 +47,7 @@ SOC、SIEM 等外部系統可以透過 API 自動開單。
 
 **外部 API**：API Token（權限範圍 `tickets:write` / `tickets:read`）、`Idempotency-Key` 防重複開單、每 Token 速率限制，規格見 [docs/openapi.json](docs/openapi.json)
 
-**介面**：繁體中文／English（所有文字來自 glossary 字典，可在系統設定中線上覆寫），淺色／深色／跟隨系統主題，支援手機寬度；系統管理員可上傳企業標誌（PNG，可另設深色背景版），顯示在登入頁與側邊欄
+**介面**：繁體中文／English（所有文字來自 glossary 字典，可在系統設定中線上覆寫），淺色／深色主題（側邊欄開關切換，預設淺色），支援手機寬度；系統管理員可上傳企業標誌（PNG，可另設深色背景版），顯示在登入頁與側邊欄
 
 ## 技術
 
