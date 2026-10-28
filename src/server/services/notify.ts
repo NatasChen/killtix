@@ -3,14 +3,14 @@ import nodemailer from 'nodemailer';
 import type { Deps } from '../context.js';
 import { notificationLogs, teamMembers, teams, users, type Ticket } from '../db/schema.js';
 import { can, ROLE_DEFINITIONS } from '../rbac.js';
-import { mailTransport, type MailTransport } from './settings.js';
+import { getSetting, mailTransport, notifyTransports, type MailTransport, type NotifyTransports } from './settings.js';
 
 export type Channel = 'email' | 'telegram' | 'teams';
 
 export interface Senders {
   email?: (to: string, subject: string, body: string) => Promise<void>;
   telegram?: (chatId: string, text: string) => Promise<void>;
-  teams?: (webhookUrl: string, title: string, text: string) => Promise<void>;
+  teams?: (title: string, text: string) => Promise<void>;
 }
 
 export type TicketEvent =
@@ -31,24 +31,24 @@ interface Message {
 
 const PRIORITY_KEYS = ['', 'ticket.priority.1', 'ticket.priority.2', 'ticket.priority.3', 'ticket.priority.4', 'ticket.priority.5'];
 
-function channelConfigured(deps: Deps, channel: Channel, email: MailTransport | null) {
-  const { config } = deps;
-  if (channel === 'email') return Boolean(email);
-  if (channel === 'telegram') return Boolean(config.telegramBotToken);
-  return Boolean(config.teamsWebhookUrl);
+function channelConfigured(channel: Channel, transports: NotifyTransports) {
+  if (channel === 'email') return Boolean(transports.email);
+  if (channel === 'telegram') return Boolean(transports.telegramBotToken);
+  return Boolean(transports.teamsWebhookUrl);
 }
 
 /** Inserts messages into the outbox. Duplicate (event, channel, recipient) rows are ignored. */
 export async function enqueue(deps: Deps, messages: Message[]) {
   if (!messages.length) return;
-  const email = await mailTransport(deps.db, deps.secretBox, deps.config);
+  const transports = await notifyTransports(deps.db, deps.secretBox);
   await deps.db
     .insert(notificationLogs)
     .values(
       messages.map((m) => ({
         ...m,
-        // Unconfigured channels are logged as skipped so the outbox shows what would have been sent.
-        status: channelConfigured(deps, m.channel, email) ? 'pending' : 'skipped',
+        // Logged even when not sent, so the outbox shows what would have gone out: 'disabled' while the
+        // master switch is off, 'skipped' for a channel that is not configured.
+        status: !transports.enabled ? 'disabled' : channelConfigured(m.channel, transports) ? 'pending' : 'skipped',
         nextAttemptAt: deps.clock(),
       })),
     )
@@ -138,7 +138,7 @@ export async function notifyTicketEvent(deps: Deps, event: TicketEvent) {
   await enqueue(deps, messages);
 }
 
-/** E-mail over SMTP (environment variables or the settings page) or the Resend HTTP API. */
+/** E-mail over SMTP or the Resend HTTP API (settings page). */
 function emailSender(mail: MailTransport): NonNullable<Senders['email']> {
   if (mail.kind === 'smtp') {
     const transport = nodemailer.createTransport({
@@ -162,14 +162,13 @@ function emailSender(mail: MailTransport): NonNullable<Senders['email']> {
   };
 }
 
-/** Built on every dispatch run: e-mail follows the current mail settings (DECISIONS D13). */
+/** Built on every dispatch run from the current settings page values (DECISIONS D13). */
 export async function defaultSenders(deps: Deps): Promise<Senders> {
-  const { config } = deps;
   const senders: Senders = {};
-  const mail = await mailTransport(deps.db, deps.secretBox, config);
-  if (mail) senders.email = emailSender(mail);
-  if (config.telegramBotToken) {
-    const token = config.telegramBotToken;
+  const { email, telegramBotToken, teamsWebhookUrl } = await notifyTransports(deps.db, deps.secretBox);
+  if (email) senders.email = emailSender(email);
+  if (telegramBotToken) {
+    const token = telegramBotToken;
     senders.telegram = async (chatId, text) => {
       const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
         method: 'POST',
@@ -180,8 +179,9 @@ export async function defaultSenders(deps: Deps): Promise<Senders> {
       if (!res.ok) throw new Error(`Telegram HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
     };
   }
-  if (config.teamsWebhookUrl) {
-    senders.teams = async (url, title, text) => {
+  if (teamsWebhookUrl) {
+    const url = teamsWebhookUrl;
+    senders.teams = async (title, text) => {
       // Adaptive Card payload: accepted by Teams Workflows (Power Automate) webhooks.
       const res = await fetch(url, {
         method: 'POST',
@@ -216,7 +216,7 @@ export async function defaultSenders(deps: Deps): Promise<Senders> {
  * on failure, with any secret masked in case a provider echoes it back.
  */
 export async function sendTestEmail(deps: Deps, to: string, locale: string): Promise<string | null> {
-  const mail = await mailTransport(deps.db, deps.secretBox, deps.config);
+  const mail = await mailTransport(deps.db, deps.secretBox);
   if (!mail) return deps.glossary.t(locale, 'error.mail_not_configured');
   try {
     await emailSender(mail)(to, deps.glossary.t(locale, 'notify.mail_test.subject'), deps.glossary.t(locale, 'notify.mail_test.body'));
@@ -228,9 +228,20 @@ export async function sendTestEmail(deps: Deps, to: string, locale: string): Pro
   }
 }
 
-/** Sends due outbox messages with exponential backoff; gives up after notifyMaxAttempts. */
+/**
+ * Sends due outbox messages with exponential backoff; gives up after notifyMaxAttempts. While the master switch
+ * is off nothing is sent: messages queued before it was turned off are marked 'disabled', so turning it back on
+ * does not deliver a backlog of stale notifications.
+ */
 export async function dispatchPending(deps: Deps, senders: Senders, batchSize = 20): Promise<number> {
   const { db, clock, config } = deps;
+  if (!(await getSetting(db, 'notify.enabled'))) {
+    await db
+      .update(notificationLogs)
+      .set({ status: 'disabled' })
+      .where(and(eq(notificationLogs.status, 'pending'), lte(notificationLogs.nextAttemptAt, clock())));
+    return 0;
+  }
   // Rows left in 'sending' by a crashed process are retried.
   await db
     .update(notificationLogs)
@@ -260,8 +271,8 @@ export async function dispatchPending(deps: Deps, senders: Senders, batchSize = 
         if (!senders.telegram) throw new Error('telegram channel not configured');
         await senders.telegram(msg.recipient, msg.body);
       } else if (msg.channel === 'teams') {
-        if (!senders.teams || !config.teamsWebhookUrl) throw new Error('teams channel not configured');
-        await senders.teams(config.teamsWebhookUrl, msg.subject, msg.body);
+        if (!senders.teams) throw new Error('teams channel not configured');
+        await senders.teams(msg.subject, msg.body);
       }
       await db
         .update(notificationLogs)

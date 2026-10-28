@@ -8,7 +8,7 @@ SOC、SIEM 等外部系統可以透過 API 自動開單。
 | 項目 | 內容 |
 | --- | --- |
 | 目前版本 | **v0.9.0**，2026-10-27 |
-| 狀態 | Docker 版可部署；107 個自動化測試、部署後 API 檢查與瀏覽器端到端測試皆通過 |
+| 狀態 | Docker 版可部署；111 個自動化測試、部署後 API 檢查與瀏覽器端到端測試皆通過 |
 | 本版重點 | 「團隊」頁可展開查看成員（角色、帳號狀態、處理中工單數）並直接加入或移除成員；系統管理員與 IT 服務主管可用 |
 | 尚未實作 | AD/LDAP、SAML、OIDC、SCIM、FIDO2、附件、SLA 營業時間（只支援 Docker 部署，Cloudflare 方案不做，見 DECISIONS D3） |
 | 完整變更 | [CHANGELOG.md](CHANGELOG.md) |
@@ -43,7 +43,7 @@ SOC、SIEM 等外部系統可以透過 API 自動開單。
 - 工單清單可依狀態、優先度、負責人、標籤、SLA、建立日期、自訂欄位、「超過 3 天未結案」篩選
 - CSV 匯出（含自訂欄位、Excel 可直接開啟中文、防公式注入）
 
-**通知**：Email、Telegram Bot、Microsoft Teams；outbox 佇列、失敗重試、可在介面查看與重送。Email 的寄信方式由系統管理員在「系統設定 → 郵件設定」選擇：沿用 `SMTP_*` 環境變數（預設）、介面填寫的 SMTP，或 Resend API；儲存後立即生效，密碼與 API Key 加密儲存、只寫不讀，並可寄送測試信
+**通知**：Email、Telegram Bot、Microsoft Teams；outbox 佇列、失敗重試、可在介面查看與重送。所有管道都由系統管理員在「系統設定」設定（不使用環境變數）：通知總開關（預設關閉）、Telegram Bot Token、Teams Webhook URL，以及 Email 的寄信方式（SMTP 或 Resend API）；儲存後立即生效，秘密加密儲存、只寫不讀，Email 可寄送測試信
 
 **外部 API**：API Token（權限範圍 `tickets:write` / `tickets:read`）、`Idempotency-Key` 防重複開單、每 Token 速率限制，規格見 [docs/openapi.json](docs/openapi.json)
 
@@ -84,7 +84,7 @@ docker compose logs app | grep -A4 "bootstrap administrator"   # 取得預設管
 
 - 想使用固定的初始密碼，在**第一次啟動前**於 `.env` 設定，例如 `BOOTSTRAP_ADMIN_PASSWORD=admin@password`（DECISIONS D1；初始密碼不檢查密碼政策，首次登入仍會強制改成符合政策的密碼）。資料庫已經有管理員時這個設定不會生效，請改用上面的 `reset-password`。
 - 想先看有資料的畫面（展示、測試）：`TD_PASSWORD='<改過的密碼>' python3 scripts/seed-sample-tickets.py http://localhost --psql "docker compose exec -T postgres psql -U ticketdesk -d ticketdesk"`
-  會建立 30 張範例工單（各種狀態、優先度、標籤，部分日期往前推，標籤 `sample`）。只用 Python 標準函式庫；Email 已設定時會停止，避免寄信給範例申請人。不要在正式環境執行。
+  會建立 30 張範例工單（各種狀態、優先度、標籤，部分日期往前推，標籤 `sample`）。只用 Python 標準函式庫；通知總開關開啟時會停止，避免寄信給範例申請人（預設關閉）。不要在正式環境執行。
 - 正式環境設定（TLS、反向代理、備份、通知管道）見 [docs/DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md)。
 
 ## API 範例（SOC 自動開單）

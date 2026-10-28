@@ -5,6 +5,7 @@ import { Choice, ErrorBanner, Field, PageHeader, useAction, useLoad } from '../.
 import { useI18n } from '../../i18n';
 import { LogoSettings } from './LogoSettings';
 import { MailSettingsCard } from './MailSettingsCard';
+import { NotifySettingsCard } from './NotifySettingsCard';
 import { sectionTitle, tableProps } from './shared';
 
 export function SettingsPage() {
@@ -50,6 +51,7 @@ export function SettingsPage() {
         <p className="small muted">{t('ui.settings.enforce_2fa_hint')}</p>
       </Card>
       <LogoSettings />
+      <NotifySettingsCard />
       <MailSettingsCard />
       <Card title={sectionTitle(t('ui.settings.glossary'))}>
         <p className="small muted">{t('ui.settings.glossary_hint')}</p>

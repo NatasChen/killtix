@@ -39,7 +39,7 @@ export function NotificationsPage() {
       key: 'retry',
       title: '',
       render: (_, n) =>
-        (n.status === 'dead' || n.status === 'skipped') && (
+        ['dead', 'skipped', 'disabled'].includes(n.status) && (
           <Button type="link" onClick={() => void action.run(async () => { await post(`/admin/notifications/${n.id}/retry`); await reload(); })}>
             {t('ui.notify.retry')}
           </Button>
@@ -57,7 +57,7 @@ export function NotificationsPage() {
               value={status}
               onChange={setStatus}
               empty={t('ui.common.all')}
-              options={['pending', 'sent', 'dead', 'skipped'].map((x) => ({ value: x, label: t(`ui.notify.${x}`) }))}
+              options={['pending', 'sent', 'dead', 'skipped', 'disabled'].map((x) => ({ value: x, label: t(`ui.notify.${x}`) }))}
               style={{ width: '100%' }}
             />
           </Field>

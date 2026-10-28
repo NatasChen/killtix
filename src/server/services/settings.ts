@@ -1,6 +1,5 @@
 import { eq, sql } from 'drizzle-orm';
 import type { SecretBox } from '../auth/crypto.js';
-import type { Config } from '../config.js';
 import type { DB } from '../db/client.js';
 import { systemSettings } from '../db/schema.js';
 
@@ -11,6 +10,8 @@ export const SETTING_DEFAULTS = {
   'jobs.aging_digest_last_run': '' as string,
   // Product name next to the logo on the sign-in page, the sidebar and the browser tab (DECISIONS D11).
   'branding.name': 'TicketDesk' as string,
+  // Master notification switch (DECISIONS D13): off until an administrator has set up the channels.
+  'notify.enabled': false as boolean,
 };
 export type SettingKey = keyof typeof SETTING_DEFAULTS;
 
@@ -38,9 +39,10 @@ async function writeSetting(db: DB, key: string, value: unknown, userId: number 
     });
 }
 
-// ------------------------------------------------------------------ mail settings (DECISIONS D13)
+// ------------------------------------------------------------------ notification channels (DECISIONS D13)
+// Every channel is configured on the settings page; there are no environment variables for them.
 
-export const MAIL_PROVIDERS = ['env', 'smtp', 'resend'] as const;
+export const MAIL_PROVIDERS = ['smtp', 'resend'] as const;
 export type MailProvider = (typeof MAIL_PROVIDERS)[number];
 
 const MAIL_KEY = 'mail.settings';
@@ -65,7 +67,6 @@ export interface MailSettingsView {
   resend: { from: string; hasApiKey: boolean; apiKeyInvalid: boolean };
   /** Where e-mail actually goes right now (null = e-mail is not configured, notifications are skipped). */
   effective: MailProvider | null;
-  env: { host: string; from: string };
 }
 
 /** The e-mail transport the senders use, with secrets decrypted; null when e-mail is not configured. */
@@ -74,7 +75,7 @@ export type MailTransport =
   | { kind: 'resend'; apiKey: string; from: string };
 
 const EMPTY: StoredMail = {
-  provider: 'env',
+  provider: 'smtp',
   smtp: { host: '', port: 587, secure: false, user: '', from: '' },
   resend: { from: '' },
 };
@@ -82,7 +83,10 @@ const EMPTY: StoredMail = {
 async function readMail(db: DB): Promise<StoredMail> {
   const [row] = await db.select().from(systemSettings).where(eq(systemSettings.key, MAIL_KEY));
   const stored = row?.value as Partial<StoredMail> | undefined;
-  return { ...EMPTY, ...stored, smtp: { ...EMPTY.smtp, ...stored?.smtp }, resend: { ...EMPTY.resend, ...stored?.resend } };
+  const mail = { ...EMPTY, ...stored, smtp: { ...EMPTY.smtp, ...stored?.smtp }, resend: { ...EMPTY.resend, ...stored?.resend } };
+  // 'env' (SMTP_* environment variables) was a provider before v0.10; such rows now count as SMTP, not configured.
+  if (!MAIL_PROVIDERS.includes(mail.provider)) mail.provider = 'smtp';
+  return mail;
 }
 
 /** Decrypts a stored secret; a value that no longer decrypts (APP_SECRET changed) counts as invalid, never as an error. */
@@ -95,11 +99,7 @@ function open(secretBox: SecretBox, boxed: string | undefined) {
   }
 }
 
-function toTransport(mail: StoredMail, secretBox: SecretBox, config: Config): MailTransport | null {
-  if (mail.provider === 'env') {
-    const s = config.smtp;
-    return s.host ? { kind: 'smtp', host: s.host, port: s.port, secure: s.secure, user: s.user ?? '', password: s.password, from: s.from } : null;
-  }
+function toTransport(mail: StoredMail, secretBox: SecretBox): MailTransport | null {
   if (mail.provider === 'smtp') {
     const password = open(secretBox, mail.smtp.password);
     if (!mail.smtp.host || !mail.smtp.from || password.invalid) return null;
@@ -110,11 +110,11 @@ function toTransport(mail: StoredMail, secretBox: SecretBox, config: Config): Ma
 }
 
 /** The current e-mail transport; read on every send so a saved change applies without a restart. */
-export async function mailTransport(db: DB, secretBox: SecretBox, config: Config): Promise<MailTransport | null> {
-  return toTransport(await readMail(db), secretBox, config);
+export async function mailTransport(db: DB, secretBox: SecretBox): Promise<MailTransport | null> {
+  return toTransport(await readMail(db), secretBox);
 }
 
-export async function getMailSettings(db: DB, secretBox: SecretBox, config: Config): Promise<MailSettingsView> {
+export async function getMailSettings(db: DB, secretBox: SecretBox): Promise<MailSettingsView> {
   const mail = await readMail(db);
   const password = open(secretBox, mail.smtp.password);
   const apiKey = open(secretBox, mail.resend.apiKey);
@@ -123,13 +123,12 @@ export async function getMailSettings(db: DB, secretBox: SecretBox, config: Conf
     provider: mail.provider,
     smtp: { ...smtp, hasPassword: Boolean(password.value), passwordInvalid: password.invalid },
     resend: { from: mail.resend.from, hasApiKey: Boolean(apiKey.value), apiKeyInvalid: apiKey.invalid },
-    effective: toTransport(mail, secretBox, config) ? mail.provider : null,
-    env: { host: config.smtp.host ?? '', from: config.smtp.from },
+    effective: toTransport(mail, secretBox) ? mail.provider : null,
   };
 }
 
 /** Saves the mail settings; a blank or missing secret keeps the stored one. */
-export async function saveMailSettings(db: DB, secretBox: SecretBox, config: Config, input: MailSettingsInput, userId: number | null) {
+export async function saveMailSettings(db: DB, secretBox: SecretBox, input: MailSettingsInput, userId: number | null) {
   const current = await readMail(db);
   const seal = (plain: string | undefined, stored: string | undefined) => (plain ? secretBox.encrypt(plain) : stored);
   const next: StoredMail = {
@@ -148,10 +147,75 @@ export async function saveMailSettings(db: DB, secretBox: SecretBox, config: Con
     },
   };
   await writeSetting(db, MAIL_KEY, next, userId);
-  return getMailSettings(db, secretBox, config);
+  return getMailSettings(db, secretBox);
 }
 
 /** True when a Resend API key is stored and still decrypts (first-time Resend setup must supply one). */
 export async function hasResendKey(db: DB, secretBox: SecretBox) {
   return Boolean(open(secretBox, (await readMail(db)).resend.apiKey).value);
+}
+
+const CHANNELS_KEY = 'notify.channels';
+
+/** Stored row; both values are secretBox ciphertext (a Teams workflow URL carries its own signature). */
+interface StoredChannels {
+  telegram: { botToken?: string };
+  teams: { webhookUrl?: string };
+}
+
+/** A new value replaces the stored one, null removes it, a missing or blank one keeps it. */
+export interface ChannelSettingsInput {
+  telegram?: { botToken?: string | null };
+  teams?: { webhookUrl?: string | null };
+}
+
+export interface ChannelSettingsView {
+  telegram: { hasBotToken: boolean; botTokenInvalid: boolean };
+  teams: { hasWebhookUrl: boolean; webhookUrlInvalid: boolean };
+}
+
+async function readChannels(db: DB): Promise<StoredChannels> {
+  const [row] = await db.select().from(systemSettings).where(eq(systemSettings.key, CHANNELS_KEY));
+  const stored = row?.value as Partial<StoredChannels> | undefined;
+  return { telegram: { ...stored?.telegram }, teams: { ...stored?.teams } };
+}
+
+export async function getChannelSettings(db: DB, secretBox: SecretBox): Promise<ChannelSettingsView> {
+  const channels = await readChannels(db);
+  const token = open(secretBox, channels.telegram.botToken);
+  const url = open(secretBox, channels.teams.webhookUrl);
+  return {
+    telegram: { hasBotToken: Boolean(token.value), botTokenInvalid: token.invalid },
+    teams: { hasWebhookUrl: Boolean(url.value), webhookUrlInvalid: url.invalid },
+  };
+}
+
+export async function saveChannelSettings(db: DB, secretBox: SecretBox, input: ChannelSettingsInput, userId: number | null) {
+  const current = await readChannels(db);
+  const seal = (plain: string | null | undefined, stored: string | undefined) =>
+    plain === null ? undefined : plain ? secretBox.encrypt(plain) : stored;
+  const next: StoredChannels = {
+    telegram: { botToken: seal(input.telegram?.botToken, current.telegram.botToken) },
+    teams: { webhookUrl: seal(input.teams?.webhookUrl, current.teams.webhookUrl) },
+  };
+  await writeSetting(db, CHANNELS_KEY, next, userId);
+  return getChannelSettings(db, secretBox);
+}
+
+/** Everything the outbox needs, decrypted; read on every enqueue and dispatch so changes apply without a restart. */
+export interface NotifyTransports {
+  enabled: boolean;
+  email: MailTransport | null;
+  telegramBotToken: string | undefined;
+  teamsWebhookUrl: string | undefined;
+}
+
+export async function notifyTransports(db: DB, secretBox: SecretBox): Promise<NotifyTransports> {
+  const channels = await readChannels(db);
+  return {
+    enabled: await getSetting(db, 'notify.enabled'),
+    email: await mailTransport(db, secretBox),
+    telegramBotToken: open(secretBox, channels.telegram.botToken).value,
+    teamsWebhookUrl: open(secretBox, channels.teams.webhookUrl).value,
+  };
 }

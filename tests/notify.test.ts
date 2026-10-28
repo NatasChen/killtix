@@ -1,8 +1,9 @@
 import { and, eq } from 'drizzle-orm';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { notificationLogs, tickets } from '../src/server/db/schema.js';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { auditLogs, notificationLogs, systemSettings, tickets } from '../src/server/db/schema.js';
 import { agingDigest, scanSla } from '../src/server/services/jobs.js';
-import { dispatchPending, type Senders } from '../src/server/services/notify.js';
+import { defaultSenders, dispatchPending, enqueue, type Senders } from '../src/server/services/notify.js';
+import { saveChannelSettings, saveMailSettings, setSetting } from '../src/server/services/settings.js';
 import { createTestContext, type TestContext } from './helpers.js';
 
 let ctx: TestContext;
@@ -10,18 +11,20 @@ let admin: Awaited<ReturnType<TestContext['adminClient']>>;
 let agentId: number;
 
 beforeAll(async () => {
-  ctx = await createTestContext({
-    SMTP_HOST: 'smtp.test',
-    TELEGRAM_BOT_TOKEN: '123:abc',
-    TEAMS_WEBHOOK_URL: 'https://teams.test/webhook',
-    NOTIFY_MAX_ATTEMPTS: '3',
-  });
+  ctx = await createTestContext({ NOTIFY_MAX_ATTEMPTS: '3' });
+  // every channel is set up on the settings page (DECISIONS D13); the master switch starts off
+  await saveMailSettings(ctx.db, ctx.deps.secretBox, { provider: 'smtp', smtp: { host: 'smtp.test', from: 'a@example.com' } }, null);
+  await saveChannelSettings(ctx.db, ctx.deps.secretBox, { telegram: { botToken: '123:abc' }, teams: { webhookUrl: 'https://teams.test/webhook' } }, null);
+  await setSetting(ctx.db, 'notify.enabled', true);
   admin = await ctx.adminClient();
   agentId = (await ctx.createUser('agent@example.com', 'agent', { telegramChatId: '4242', locale: 'en-US' })).id;
   await ctx.createUser('requester@example.com', 'end_user');
 });
 afterAll(async () => {
   await ctx.close();
+});
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 const outbox = (where?: ReturnType<typeof eq>) => ctx.db.select().from(notificationLogs).where(where);
@@ -83,12 +86,97 @@ describe('notification outbox', () => {
     const bare = await createTestContext();
     try {
       const a = await bare.adminClient();
+      expect((await a.patch('/api/v1/admin/settings', { notificationsEnabled: true })).body.notificationsEnabled).toBe(true);
       const t = (await a.post('/api/v1/tickets', { subject: 'no channels' })).body;
       const [row] = await bare.db.select().from(notificationLogs).where(eq(notificationLogs.eventId, `created:${t.id}`));
       expect(row.status).toBe('skipped');
     } finally {
       await bare.close();
     }
+  });
+});
+
+describe('master switch and channel settings (DECISIONS D13)', () => {
+  it('starts off: notifications are logged as disabled, never sent, and not sent later when switched on', async () => {
+    const fresh = await createTestContext();
+    try {
+      const a = await fresh.adminClient();
+      expect((await a.get('/api/v1/admin/settings')).body).toEqual({ '2faEnforced': false, notificationsEnabled: false });
+      await saveChannelSettings(fresh.db, fresh.deps.secretBox, { teams: { webhookUrl: 'https://teams.test/hook' } }, null);
+      const sent: string[] = [];
+      const senders: Senders = { teams: async (title) => void sent.push(title) };
+      const row = async (eventId: string) => (await fresh.db.select().from(notificationLogs).where(eq(notificationLogs.eventId, eventId)))[0];
+
+      const off = (await a.post('/api/v1/tickets', { subject: 'while off' })).body;
+      expect((await row(`created:${off.id}`)).status).toBe('disabled');
+
+      // queued while on, switched off before it went out: dropped as disabled, not delivered after switching back on
+      await a.patch('/api/v1/admin/settings', { notificationsEnabled: true });
+      const queued = (await a.post('/api/v1/tickets', { subject: 'queued' })).body;
+      expect((await row(`created:${queued.id}`)).status).toBe('pending');
+      await a.patch('/api/v1/admin/settings', { notificationsEnabled: false });
+      expect(await dispatchPending(fresh.deps, senders)).toBe(0);
+      expect((await row(`created:${queued.id}`)).status).toBe('disabled');
+      await a.patch('/api/v1/admin/settings', { notificationsEnabled: true });
+      await dispatchPending(fresh.deps, senders);
+      expect(sent).toEqual([]);
+
+      // an administrator can still send one on purpose
+      expect((await a.post(`/api/v1/admin/notifications/${(await row(`created:${queued.id}`)).id}/retry`)).status).toBe(200);
+      await dispatchPending(fresh.deps, senders);
+      expect(sent).toHaveLength(1);
+      expect((await row(`created:${queued.id}`)).status).toBe('sent');
+    } finally {
+      await fresh.close();
+    }
+  });
+
+  it('sends Telegram and Teams with the saved settings, and skips a removed channel', async () => {
+    const calls: { url: string; body: Record<string, unknown> }[] = [];
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+      calls.push({ url, body: JSON.parse(String(init.body)) });
+      return new Response('{}', { status: 200 });
+    });
+    await enqueue(ctx.deps, [
+      { eventId: 'channels-telegram', channel: 'telegram', recipient: '4242', subject: 'Hi', body: 'Hi\nlink' },
+      { eventId: 'channels-teams', channel: 'teams', recipient: 'default', subject: 'Title', body: 'Text' },
+    ]);
+    await dispatchPending(ctx.deps, await defaultSenders(ctx.deps), 100);
+    expect(calls.map((c) => c.url).sort()).toEqual(['https://api.telegram.org/bot123:abc/sendMessage', 'https://teams.test/webhook']);
+    expect(calls.find((c) => c.url.includes('telegram'))!.body).toMatchObject({ chat_id: '4242', text: 'Hi\nlink' });
+
+    expect((await admin.raw('PUT', '/api/v1/admin/settings/channels', { teams: { webhookUrl: null } })).body.teams.hasWebhookUrl).toBe(false);
+    await enqueue(ctx.deps, [{ eventId: 'channels-teams-removed', channel: 'teams', recipient: 'default', subject: 'T', body: 'x' }]);
+    const [removed] = await ctx.db.select().from(notificationLogs).where(eq(notificationLogs.eventId, 'channels-teams-removed'));
+    expect(removed.status).toBe('skipped');
+    await saveChannelSettings(ctx.db, ctx.deps.secretBox, { teams: { webhookUrl: 'https://teams.test/webhook' } }, null);
+  });
+
+  it('keeps Telegram and Teams secrets write-only, encrypted and out of the audit log', async () => {
+    const put = (body: unknown) => admin.raw('PUT', '/api/v1/admin/settings/channels', body);
+    for (const body of [
+      { telegram: { botToken: 'not a token' } },
+      { teams: { webhookUrl: 'http://teams.test/insecure' } },
+      { teams: { webhookUrl: 'not a url' } },
+      { slack: {} },
+    ]) {
+      expect((await put(body)).status, JSON.stringify(body)).toBe(400);
+    }
+    const saved = await put({ telegram: { botToken: '999:secret-token' } });
+    expect(saved.body).toEqual({ telegram: { hasBotToken: true, botTokenInvalid: false }, teams: { hasWebhookUrl: true, webhookUrlInvalid: false } });
+    expect((await put({ telegram: { botToken: '' } })).body.telegram.hasBotToken).toBe(true); // blank keeps it
+    const [row] = await ctx.db.select().from(systemSettings).where(eq(systemSettings.key, 'notify.channels'));
+    expect(JSON.stringify(row.value)).not.toMatch(/secret-token|teams\.test/);
+    expect(JSON.stringify((await admin.get('/api/v1/admin/settings/channels')).body)).not.toContain('secret');
+    const audits = await ctx.db.select().from(auditLogs).where(eq(auditLogs.action, 'admin.notify_channels_updated'));
+    expect(audits.length).toBeGreaterThan(0);
+    expect(JSON.stringify(audits)).not.toMatch(/secret-token|teams\.test/);
+
+    await ctx.createUser('channels-manager@example.com', 'it_manager');
+    const manager = await ctx.login('channels-manager@example.com');
+    expect((await manager.get('/api/v1/admin/settings/channels')).status).toBe(403);
+    expect((await manager.patch('/api/v1/admin/settings', { notificationsEnabled: false })).status).toBe(403);
+    await saveChannelSettings(ctx.db, ctx.deps.secretBox, { telegram: { botToken: '123:abc' } }, null);
   });
 });
 

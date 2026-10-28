@@ -258,11 +258,31 @@ await page.getByLabel('主選單').locator('.brand-name', { hasText: 'ACME 服�
 if ((await page.title()) !== 'ACME 服務台') throw new Error(`tab title not renamed: ${await page.title()}`);
 await shot('05b-settings-logo');
 
+step('admin: notification settings');
+{
+  const card = page.locator('.ant-card').filter({ has: page.getByRole('heading', { name: '通知設定' }) });
+  const enabled = card.getByRole('switch', { name: '啟用通知' });
+  // off by default, so nothing this run creates is ever sent
+  if ((await enabled.getAttribute('aria-checked')) !== 'false') throw new Error('notifications should start switched off');
+  await enabled.click();
+  await card.locator('.ant-switch-checked').waitFor();
+  await enabled.click();
+  await card.locator('.ant-switch-checked').waitFor({ state: 'detached' });
+  await card.getByLabel('Teams Webhook URL').fill('https://example.com/e2e-webhook');
+  await card.getByRole('button', { name: '儲存' }).click();
+  await card.getByRole('button', { name: '移除 Teams 設定' }).waitFor();
+  if ((await card.getByLabel('Teams Webhook URL').inputValue()) !== '') throw new Error('webhook URL was echoed back');
+  await shot('05c-settings-notify');
+  await card.getByRole('button', { name: '移除 Teams 設定' }).click();
+  await card.getByRole('button', { name: '移除 Teams 設定' }).waitFor({ state: 'detached' });
+}
+
 step('admin: mail settings');
-// No SMTP in this deployment: the test e-mail reports "not configured" without leaving the server.
+// No e-mail set up in this deployment: the test e-mail reports "not configured" without leaving the server.
 const mail = page.locator('.ant-card').filter({ has: page.getByRole('heading', { name: '郵件設定' }) });
 await mail.getByRole('button', { name: '寄送測試信' }).click();
 await mail.getByRole('status').getByText('測試信寄送失敗').waitFor();
+if (await mail.getByText('環境變數').count()) throw new Error('the environment-variable provider should be gone');
 await pick(page.getByLabel('寄信方式'), 'Resend');
 await page.getByLabel('Resend API Key').fill('re_e2e_not_a_real_key');
 await page.getByLabel('寄件者').fill('TicketDesk <no-reply@example.com>');
@@ -270,10 +290,7 @@ await mail.getByRole('button', { name: '儲存' }).click();
 await page.getByText('已設定（留空表示不變更）').waitFor();
 if ((await page.getByLabel('Resend API Key').inputValue()) !== '') throw new Error('API key was echoed back');
 await shot('05c-settings-mail');
-// back to the environment variables so later steps never call the real Resend API
-await pick(page.getByLabel('寄信方式'), '環境變數（SMTP）');
-await mail.getByRole('button', { name: '儲存' }).click();
-await page.getByText('目前使用環境變數設定，以下為唯讀資訊（不顯示密碼）。').waitFor();
+// notifications stay switched off, so later steps never call the real Resend API
 
 step('sidebar language menu and theme switch are readable in the light theme');
 if ((await page.evaluate(() => document.documentElement.dataset.theme)) !== 'light') throw new Error('expected the light theme');

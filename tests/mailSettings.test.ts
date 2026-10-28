@@ -4,7 +4,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import { createSecretBox } from '../src/server/auth/crypto.js';
 import { auditLogs, notificationLogs, systemSettings } from '../src/server/db/schema.js';
 import { defaultSenders, dispatchPending, enqueue } from '../src/server/services/notify.js';
-import { getMailSettings } from '../src/server/services/settings.js';
+import { getMailSettings, setSetting } from '../src/server/services/settings.js';
 import { createTestContext, type TestContext } from './helpers.js';
 
 let ctx: TestContext;
@@ -12,6 +12,7 @@ let admin: Awaited<ReturnType<TestContext['adminClient']>>;
 
 beforeAll(async () => {
   ctx = await createTestContext({ SMTP_HOST: 'smtp.env.test', SMTP_FROM: 'Env <env@example.com>' });
+  await setSetting(ctx.db, 'notify.enabled', true);
   admin = await ctx.adminClient();
 });
 afterAll(async () => {
@@ -47,19 +48,33 @@ function fakeSmtp() {
 }
 
 describe('mail settings', () => {
-  it('defaults to the SMTP environment variables', async () => {
+  it('starts unconfigured and ignores the old SMTP_* environment variables (DECISIONS D13)', async () => {
     const res = await getMail();
     expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ provider: 'env', effective: 'env', env: { host: 'smtp.env.test', from: 'Env <env@example.com>' } });
-    expect(res.body.smtp.hasPassword).toBe(false);
-    expect(res.body.resend.hasApiKey).toBe(false);
+    expect(res.body).toEqual({
+      provider: 'smtp',
+      effective: null,
+      smtp: { host: '', port: 587, secure: false, user: '', from: '', hasPassword: false, passwordInvalid: false },
+      resend: { from: '', hasApiKey: false, apiKeyInvalid: false },
+    });
+  });
+
+  it('treats a saved "environment variables" choice from before as not configured', async () => {
+    const legacy = await createTestContext({ SMTP_HOST: 'smtp.env.test' });
+    try {
+      await legacy.db.insert(systemSettings).values({ key: 'mail.settings', value: { provider: 'env' } });
+      const res = await (await legacy.adminClient()).get('/api/v1/admin/settings/email');
+      expect(res.body).toMatchObject({ provider: 'smtp', effective: null });
+    } finally {
+      await legacy.close();
+    }
   });
 
   it('is only for system administrators', async () => {
     await ctx.createUser('mail-manager@example.com', 'it_manager');
     const manager = await ctx.login('mail-manager@example.com');
     expect((await manager.get('/api/v1/admin/settings/email')).status).toBe(403);
-    expect((await manager.raw('PUT', '/api/v1/admin/settings/email', { provider: 'env' })).status).toBe(403);
+    expect((await manager.raw('PUT', '/api/v1/admin/settings/email', { provider: 'smtp' })).status).toBe(403);
     expect((await manager.post('/api/v1/admin/settings/email/test', { to: 'x@example.com' })).status).toBe(403);
   });
 
@@ -74,10 +89,11 @@ describe('mail settings', () => {
       { provider: 'resend', resend: { from } }, // first Resend setup needs the key
       { provider: 'resend', resend: { apiKey: 're_1', from: 'Name <bad>' } },
       { provider: 'sendgrid' },
+      { provider: 'env' },
     ]) {
       expect((await putMail(body)).status, JSON.stringify(body)).toBe(400);
     }
-    expect((await getMail()).body.provider).toBe('env');
+    expect((await getMail()).body.effective).toBeNull();
   });
 
   it('stores secrets encrypted, never returns them, and keeps them when left blank', async () => {
@@ -116,19 +132,20 @@ describe('mail settings', () => {
     const [log] = await ctx.db.select().from(notificationLogs).where(eq(notificationLogs.eventId, 'mail-resend'));
     expect(log.status).toBe('sent');
 
-    expect((await putMail({ provider: 'env' })).status).toBe(200);
+    // back to SMTP: the password saved earlier is kept
+    expect((await putMail({ provider: 'smtp', smtp: { host: 'smtp.ui.test', from: 'TicketDesk <no-reply@example.com>' } })).status).toBe(200);
     const sent = fakeSmtp();
-    await enqueue(ctx.deps, [{ eventId: 'mail-env', channel: 'email', recipient: 'to@example.com', subject: 'Hi', body: 'Text' }]);
+    await enqueue(ctx.deps, [{ eventId: 'mail-smtp', channel: 'email', recipient: 'to@example.com', subject: 'Hi', body: 'Text' }]);
     await dispatchPending(ctx.deps, await defaultSenders(ctx.deps));
     expect(sent).toHaveLength(1);
-    expect(sent[0].options).toMatchObject({ host: 'smtp.env.test' });
-    expect(sent[0].mail).toMatchObject({ from: 'Env <env@example.com>', to: 'to@example.com' });
+    expect(sent[0].options).toMatchObject({ host: 'smtp.ui.test', auth: { user: 'mailer', pass: 's3cr3t-password' } });
+    expect(sent[0].mail).toMatchObject({ from: 'TicketDesk <no-reply@example.com>', to: 'to@example.com' });
     expect(calls).toHaveLength(1);
   });
 
   it('treats secrets that no longer decrypt as not configured', async () => {
     await putMail(RESEND);
-    const view = await getMailSettings(ctx.db, createSecretBox('another-secret-another-secret-123456'), ctx.deps.config);
+    const view = await getMailSettings(ctx.db, createSecretBox('another-secret-another-secret-123456'));
     expect(view.resend).toMatchObject({ hasApiKey: false, apiKeyInvalid: true });
     expect(view.effective).toBeNull();
   });

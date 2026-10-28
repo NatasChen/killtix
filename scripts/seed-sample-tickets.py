@@ -16,9 +16,10 @@ tickets are moved 1–20 days into the past with SQL. Pass --psql with a command
     --psql "docker compose -p ticketdesk exec -T postgres psql -U ticketdesk -d ticketdesk"
 Without --psql the SQL is printed at the end so it can be run by hand.
 
-E-mail: tickets and replies queue notifications. To avoid mailing anyone, the script stops when e-mail is
-configured (Settings → E-mail settings shows a working provider) unless --allow-email is given. Set the
-provider to "Environment variables" with no SMTP_HOST before seeding a demo system.
+Notifications: tickets and replies queue notifications. To avoid messaging anyone, the script stops when
+notifications are switched on (Settings → Notifications) unless --allow-email is given. Leave the switch off
+(the default) while seeding a demo system; what is queued meanwhile is logged as "Notifications off" and is
+not sent later.
 """
 import argparse
 import getpass
@@ -126,7 +127,7 @@ def main():
     ap.add_argument("--count", type=int, default=30, choices=range(1, len(TICKETS) + 1), metavar="1-30")
     ap.add_argument("--psql", help="command that runs psql on the database, SQL on stdin (for backdating)")
     ap.add_argument("--seed", type=int, help="random seed, for a repeatable mix")
-    ap.add_argument("--allow-email", action="store_true", help="seed even though e-mail is configured")
+    ap.add_argument("--allow-email", action="store_true", help="seed even though notifications are switched on")
     args = ap.parse_args()
     rnd = random.Random(args.seed)
 
@@ -136,10 +137,9 @@ def main():
     if session.get("stage") != "full":
         sys.exit(f"sign-in is not complete (stage: {session.get('stage')}): change the password / set up 2FA in the web UI first")
 
-    mail = api.call("GET", "/admin/settings/email")
-    if mail.get("effective") and not args.allow_email:
-        sys.exit(f"e-mail is configured ({mail['effective']}): sample tickets would send real notifications. "
-                 "Switch Settings → E-mail settings to environment variables without SMTP_HOST, or pass --allow-email.")
+    if api.call("GET", "/admin/settings").get("notificationsEnabled") and not args.allow_email:
+        sys.exit("notifications are switched on: sample tickets would send real notifications. "
+                 "Turn off Settings → Notifications → Send notifications, or pass --allow-email.")
 
     topics = {t["slug"]: t for t in api.call("GET", "/help-topics")}
     catalog = api.call("GET", "/catalog")

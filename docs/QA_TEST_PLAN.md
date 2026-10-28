@@ -612,8 +612,10 @@
 | REG-NOTIFY-007 | 連續失敗 5 次告警 | FR-4.2 | 模擬 Teams 連續失敗 | 觸發 `notification.failed_alert` 給管理員 | ⚠️ | P1 |
 | REG-NOTIFY-008 | 重送 API | FR-4.2 | `POST /notifications/{id}/resend` | 新 `event_id`；重新入佇列 | ✅ | P1 |
 | REG-NOTIFY-009 | 郵件設定權限與秘密 | AC-MAIL-02 | `tests/mailSettings.test.ts`：IT 主管讀取／儲存／測試寄信；儲存 SMTP 密碼後讀取、留空再儲存；換 `APP_SECRET` 讀取 | 非系統管理員 403；回應與稽核不含密碼／API Key，DB 為密文，留空保留原值；無法解密時回報需重新輸入且不寄信 | ✅ | P0 |
-| REG-NOTIFY-010 | 切換寄信方式 | AC-MAIL-01 | 切到 `resend` 後 dispatch，再切回 `env`（假 `fetch`／假 SMTP） | 以正確 payload 呼叫 Resend；切回後改走 `SMTP_*`；不需重啟 | ✅ | P0 |
+| REG-NOTIFY-010 | 切換寄信方式 | AC-MAIL-01 | 切到 `resend` 後 dispatch，再切回 `smtp`（假 `fetch`／假 SMTP） | 以正確 payload 呼叫 Resend；切回後改走介面的 SMTP；不需重啟；`SMTP_*` 與舊的 `env` 設定都不採用 | ✅ | P0 |
 | REG-NOTIFY-011 | 測試寄信 | AC-MAIL-03 | 設定頁「寄送測試信」（`scripts/ui-e2e.sh`）；API 成功、失敗、第 6 次 | 頁面顯示成功或失敗原因（不含秘密）；同一分鐘第 6 次 429 | ✅ | P1 |
+| REG-NOTIFY-013 | 通知總開關 | AC-NOTIFY-03 | `tests/notify.test.ts`；`scripts/ui-e2e.sh` 系統設定「啟用通知」 | 預設關閉；關閉時記為 `disabled`、不發送、開啟後不補寄、可逐筆重送 | ✅ | P0 |
+| REG-NOTIFY-014 | Telegram／Teams 介面設定 | AC-NOTIFY-03 | `tests/notify.test.ts`（假 `fetch`）；e2e 儲存與移除 Teams 網址 | 依儲存的 token／網址發送；移除後 `skipped`；非 https 與格式錯誤 400；回應、DB、稽核不含原值；非系統管理員 403 | ✅ | P0 |
 | REG-NOTIFY-012 | 指派給團隊的通知 | FR-2.11 | 建立或改團隊、沒有負責人（`tests/teams.test.ts`） | 通知團隊中啟用、具內部權限的成員，不含操作者、廠商、一般使用者、停用者；有負責人時不寄團隊通知 | ✅ | P0 |
 
 ### 6.7 多語系與主題回歸（REG-I18N / REG-THEME）

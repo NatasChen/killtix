@@ -32,7 +32,16 @@ import { can, ROLE_DEFINITIONS } from '../rbac.js';
 import { audit } from '../services/audit.js';
 import { BRAND_NAME_MAX, deleteLogo, LOGO_MAX_BYTES, logoUrls, setLogo } from '../services/branding.js';
 import { sendTestEmail } from '../services/notify.js';
-import { getMailSettings, getSetting, hasResendKey, MAIL_PROVIDERS, saveMailSettings, setSetting } from '../services/settings.js';
+import {
+  getChannelSettings,
+  getMailSettings,
+  getSetting,
+  hasResendKey,
+  MAIL_PROVIDERS,
+  saveChannelSettings,
+  saveMailSettings,
+  setSetting,
+} from '../services/settings.js';
 import { idParam, parseJson, parseWith, publicUser, rateLimit, teamIdsFor } from './util.js';
 
 const ROLE_KEYS = ['super_admin', 'it_manager', 'agent', 'vendor', 'end_user'] as const;
@@ -71,6 +80,19 @@ const mailSettingsSchema = z
     if (v.provider === 'smtp' && !v.smtp?.from) required(['smtp', 'from']);
     if (v.provider === 'resend' && !v.resend?.from) required(['resend', 'from']);
   });
+/** Telegram and Teams secrets: a value replaces the stored one, null removes it, a missing or blank one keeps it. */
+const channelSettingsSchema = z
+  .object({
+    telegram: z
+      .object({ botToken: z.union([z.literal(''), z.string().trim().max(128).regex(/^\d+:[\w-]+$/, 'must look like 123456:ABC-def')]).nullable().optional() })
+      .strict()
+      .optional(),
+    teams: z
+      .object({ webhookUrl: z.union([z.literal(''), z.url({ protocol: /^https$/ }).max(2048)]).nullable().optional() })
+      .strict()
+      .optional(),
+  })
+  .strict();
 
 /** Postgres unique violations become 409 instead of 500. */
 async function unique<T>(work: () => Promise<T>): Promise<T> {
@@ -600,31 +622,43 @@ export const adminRoutes = new Hono<AppEnv>()
   })
 
   // ------------------------------------------------------------------ settings, glossary, outbox, audit
-  .get('/settings', manageSystem, async (c) =>
-    c.json({ '2faEnforced': await getSetting(c.var.deps.db, 'security.2fa_enforced') }),
-  )
+  .get('/settings', manageSystem, async (c) => {
+    const { db } = c.var.deps;
+    return c.json({
+      '2faEnforced': await getSetting(db, 'security.2fa_enforced'),
+      notificationsEnabled: await getSetting(db, 'notify.enabled'),
+    });
+  })
   .patch('/settings', manageSystem, async (c) => {
+    const { db } = c.var.deps;
     const auth = authOf(c);
-    const body = await parseJson(c, z.object({ '2faEnforced': z.boolean() }).strict());
-    await setSetting(c.var.deps.db, 'security.2fa_enforced', body['2faEnforced'], auth.user.id);
+    const body = await parseJson(
+      c,
+      z
+        .object({ '2faEnforced': z.boolean().optional(), notificationsEnabled: z.boolean().optional() })
+        .strict()
+        .refine((v) => Object.keys(v).length > 0, 'nothing to update'),
+    );
+    if (body['2faEnforced'] !== undefined) await setSetting(db, 'security.2fa_enforced', body['2faEnforced'], auth.user.id);
+    if (body.notificationsEnabled !== undefined) await setSetting(db, 'notify.enabled', body.notificationsEnabled, auth.user.id);
     await audit(c, 'admin.settings_updated', undefined, body);
-    return c.json(body);
+    return c.json({ '2faEnforced': await getSetting(db, 'security.2fa_enforced'), notificationsEnabled: await getSetting(db, 'notify.enabled') });
   })
 
-  // ------------------------------------------------------------------ mail settings (DECISIONS D13)
+  // ------------------------------------------------------------------ notification channels (DECISIONS D13)
   // Secrets are write-only: responses and audit entries only say whether one is set.
   .get('/settings/email', manageSystem, async (c) => {
-    const { db, secretBox, config } = c.var.deps;
-    return c.json(await getMailSettings(db, secretBox, config));
+    const { db, secretBox } = c.var.deps;
+    return c.json(await getMailSettings(db, secretBox));
   })
   .put('/settings/email', manageSystem, async (c) => {
-    const { db, secretBox, config } = c.var.deps;
+    const { db, secretBox } = c.var.deps;
     const auth = authOf(c);
     const body = await parseJson(c, mailSettingsSchema);
     if (body.provider === 'resend' && !body.resend?.apiKey && !(await hasResendKey(db, secretBox))) {
       throw badRequest('resend.apiKey: required');
     }
-    const view = await saveMailSettings(db, secretBox, config, body, auth.user.id);
+    const view = await saveMailSettings(db, secretBox, body, auth.user.id);
     await audit(c, 'admin.mail_settings_updated', undefined, { provider: body.provider });
     return c.json(view);
   })
@@ -636,6 +670,20 @@ export const adminRoutes = new Hono<AppEnv>()
     await audit(c, error ? 'admin.mail_test_failed' : 'admin.mail_test_sent', undefined, { to });
     // A delivery failure is a result to show on the page, not a server error.
     return c.json(error ? { ok: false, error } : { ok: true });
+  })
+  .get('/settings/channels', manageSystem, async (c) => {
+    const { db, secretBox } = c.var.deps;
+    return c.json(await getChannelSettings(db, secretBox));
+  })
+  .put('/settings/channels', manageSystem, async (c) => {
+    const { db, secretBox } = c.var.deps;
+    const auth = authOf(c);
+    const body = await parseJson(c, channelSettingsSchema);
+    const view = await saveChannelSettings(db, secretBox, body, auth.user.id);
+    // only which channel changed and how, never the values
+    const change = (v: string | null | undefined) => (v === null ? 'removed' : v ? 'set' : undefined);
+    await audit(c, 'admin.notify_channels_updated', undefined, { telegram: change(body.telegram?.botToken), teams: change(body.teams?.webhookUrl) });
+    return c.json(view);
   })
 
   // Logo upload as base64 JSON (see services/branding.ts for the PNG checks); the read side is routes/branding.ts.
@@ -704,7 +752,7 @@ export const adminRoutes = new Hono<AppEnv>()
     const [row] = await c.var.deps.db
       .update(notificationLogs)
       .set({ status: 'pending', attempts: 0, nextAttemptAt: c.var.deps.clock() })
-      .where(and(eq(notificationLogs.id, idParam(c)), or(eq(notificationLogs.status, 'dead'), eq(notificationLogs.status, 'skipped'))))
+      .where(and(eq(notificationLogs.id, idParam(c)), inArray(notificationLogs.status, ['dead', 'skipped', 'disabled'])))
       .returning();
     if (!row) throw notFound();
     return c.json(row);

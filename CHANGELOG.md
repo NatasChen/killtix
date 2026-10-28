@@ -6,10 +6,14 @@
 
 ### Added
 - docker compose 新增 `nginx` 服務（`nginx:1.30-alpine`，設定 `deploy/nginx/default.conf`）：監聽 HTTP（`HTTP_BIND`/`HTTP_PORT`，預設 `0.0.0.0:80`）並轉送到 `app:8080`，以用戶端位址覆寫 `X-Forwarded-For`；`scripts/validate.sh` 新增 `nginx -t` 檢查（DECISIONS D19）。TLS 尚未內建。
+- 通知總開關（「系統設定 → 通知設定 → 啟用通知」，`notificationsEnabled`），**預設關閉**：關閉時通知記為「通知已停用」（`disabled`）、不發送，重新開啟後不補寄，可在通知紀錄逐筆重送。
+- Telegram Bot Token 與 Teams Webhook URL 改在「通知設定」填寫（`GET/PUT /admin/settings/channels`），加密儲存、只寫不讀，可移除；寫入稽核 `admin.notify_channels_updated`（不含值）。
 - 側邊欄的管理頁分成可摺疊的「使用者管理」「工單設定」「系統相關」三個群組，目前頁面的群組自動展開，展開狀態記在瀏覽器；每個項目改用圖示（Ant Design Icons，依群組著色）取代色塊。
 
 ### Changed
 - 主題改為側邊欄的太陽／月亮開關，只有淺色與深色，預設淺色，取消「跟隨系統」（DECISIONS D20）。`PATCH /auth/me` 的 `theme` 不再接受 `system`；migration 0005／0006 把既有的 `system` 改為 `light` 並收緊 `chk_users_theme`。
+- 所有通知管道只在介面設定（DECISIONS D13）：移除 `SMTP_*`、`TELEGRAM_BOT_TOKEN`、`TEAMS_WEBHOOK_URL` 環境變數與郵件設定的「環境變數（SMTP）」選項；先前存成 `env` 的郵件設定視為未設定。`scripts/seed-sample-tickets.py` 改為在通知開啟時停止。
+  **升級時**：在「系統設定」重新填寫 Email／Telegram／Teams，寄出測試信後再開啟「啟用通知」。
 - app 不再對主機發布連接埠，只有 nginx 連得到；`APP_BIND`、`APP_PORT` 移除。compose 的預設值 `TRUST_PROXY` 改為 `true`、`APP_URL` 改為 `http://localhost`。
   **升級時**：把 `.env` 的 `APP_BIND`/`APP_PORT` 換成 `HTTP_BIND`/`HTTP_PORT`，`TRUST_PROXY` 設為 `true`（否則稽核日誌記錄的是 nginx 的位址），`APP_URL` 改成經 nginx 的網址；原本指向 `127.0.0.1:8080` 的外部反向代理改指向 nginx 的埠。
 

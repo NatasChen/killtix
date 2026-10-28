@@ -7,11 +7,10 @@ import { useI18n } from '../../i18n';
 import { sectionTitle } from './shared';
 
 type MailSettings = {
-  provider: 'env' | 'smtp' | 'resend';
+  provider: 'smtp' | 'resend';
   smtp: { host: string; port: number; secure: boolean; user: string; from: string; hasPassword: boolean; passwordInvalid: boolean };
   resend: { from: string; hasApiKey: boolean; apiKeyInvalid: boolean };
-  effective: 'env' | 'smtp' | 'resend' | null;
-  env: { host: string; from: string };
+  effective: 'smtp' | 'resend' | null;
 };
 
 export function MailSettingsCard() {
@@ -21,7 +20,7 @@ export function MailSettingsCard() {
   const testAction = useAction();
   const mail = useLoad(() => get<MailSettings>('/admin/settings/email'), []);
   const view = mail.data;
-  const blank = { provider: 'env' as MailSettings['provider'], smtpHost: '', smtpPort: '587', smtpSecure: false, smtpUser: '', smtpPassword: '', smtpFrom: '', resendApiKey: '', resendFrom: '' };
+  const blank = { provider: 'smtp' as MailSettings['provider'], smtpHost: '', smtpPort: '587', smtpSecure: false, smtpUser: '', smtpPassword: '', smtpFrom: '', resendApiKey: '', resendFrom: '' };
   const [form, setForm] = useState(blank);
   const [testTo, setTestTo] = useState(me?.email ?? '');
   const [testResult, setTestResult] = useState<{ ok: boolean; text: string } | null>(null);
@@ -54,7 +53,7 @@ export function MailSettingsCard() {
           from: form.smtpFrom,
           ...(form.smtpPassword ? { password: form.smtpPassword } : {}),
         };
-      } else if (form.provider === 'resend') {
+      } else {
         body.resend = { from: form.resendFrom, ...(form.resendApiKey ? { apiKey: form.resendApiKey } : {}) };
       }
       mail.setData(await put<MailSettings>('/admin/settings/email', body));
@@ -67,7 +66,7 @@ export function MailSettingsCard() {
       setTestResult({ ok: res.ok, text: res.error ?? testTo });
     });
 
-  const providerOptions = (['env', 'smtp', 'resend'] as const).map((p) => ({ value: p, label: t(`ui.settings.mail.provider.${p}`) }));
+  const providerOptions = (['smtp', 'resend'] as const).map((p) => ({ value: p, label: t(`ui.settings.mail.provider.${p}`) }));
   const secretInvalid = (form.provider === 'smtp' && view?.smtp.passwordInvalid) || (form.provider === 'resend' && view?.resend.apiKeyInvalid);
 
   return (
@@ -97,25 +96,6 @@ export function MailSettingsCard() {
         </Row>
 
         {secretInvalid && <Alert type="warning" showIcon style={{ marginBottom: 12 }} title={t('ui.settings.mail.secret_invalid')} />}
-
-        {form.provider === 'env' && (
-          <Alert
-            type="info"
-            showIcon
-            style={{ marginBottom: 12 }}
-            title={t('ui.settings.mail.env_notice')}
-            description={
-              <Descriptions
-                size="small"
-                column={1}
-                items={[
-                  { label: t('ui.settings.mail.host'), children: view?.env.host || '—' },
-                  { label: t('ui.settings.mail.from'), children: view?.env.from || '—' },
-                ]}
-              />
-            }
-          />
-        )}
 
         {form.provider === 'smtp' && (
           <Row gutter={12}>

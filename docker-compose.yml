@@ -54,14 +54,6 @@ services:
       BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-admin@ticket.local}
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
       AGING_DIGEST_HOUR: ${AGING_DIGEST_HOUR:-9}
-      SMTP_HOST: ${SMTP_HOST:-}
-      SMTP_PORT: ${SMTP_PORT:-587}
-      SMTP_SECURE: ${SMTP_SECURE:-false}
-      SMTP_USER: ${SMTP_USER:-}
-      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
-      SMTP_FROM: ${SMTP_FROM:-TicketDesk <no-reply@ticket.local>}
-      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
-      TEAMS_WEBHOOK_URL: ${TEAMS_WEBHOOK_URL:-}
     # No published port: only nginx reaches the app (app:8080 on the internal network).
     networks: [internal]
 

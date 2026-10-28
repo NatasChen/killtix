@@ -58,7 +58,6 @@ scripts/init-env.sh
 | `BOOTSTRAP_ADMIN_EMAIL` | | 預設 `admin@ticket.local` |
 | `BOOTSTRAP_ADMIN_PASSWORD` | | 留空：首次啟動隨機產生並印在 log 一次。填入：使用指定密碼（例如 `admin@password`，DECISIONS D1；初始密碼不檢查密碼政策）。兩種情況首次登入都必須改成符合政策的密碼。只在資料庫還沒有管理員時生效 |
 | `TZ` / `DEFAULT_LOCALE` | | 預設 `Asia/Taipei` / `zh-TW` |
-| `SMTP_*`、`TELEGRAM_BOT_TOKEN`、`TEAMS_WEBHOOK_URL` | | 通知管道，留空即停用（通知紀錄會標示「未設定管道」）。Email 也可以在「系統設定 → 郵件設定」改用介面填寫的 SMTP 或 Resend，不需重新部署；`SMTP_*` 只在選「環境變數」時使用 |
 | `AGING_DIGEST_HOUR` | | 每天幾點（app 時區）之後發送「超過 3 天未結案」報告到 Teams，預設 9 |
 
 其他可調整項目（皆有預設值）：`BCRYPT_COST`（12）、`SESSION_TTL_HOURS`（12）、`LOGIN_MAX_FAILED_ATTEMPTS`（5）、
@@ -152,11 +151,17 @@ curl -X POST https://ticket.example.com/api/v1/tickets \
 
 ## 5. 通知管道
 
-| 管道 | 設定 | 收件者 |
+所有通知管道都在「系統設定」設定，**不使用環境變數**（DECISIONS D13）；儲存後立即生效，不需重新部署。
+「通知設定」的**啟用通知**開關預設關閉：關閉時不寄送任何通知，期間的通知在「通知紀錄」標示為「通知已停用」，重新開啟後也不會補寄（需要時可在通知紀錄逐筆重送）。
+設定好管道、寄出測試信確認後再開啟。
+
+| 管道 | 設定位置 | 收件者 |
 | --- | --- | --- |
-| Email | `SMTP_HOST`、`SMTP_PORT`、`SMTP_SECURE`、`SMTP_USER`、`SMTP_PASSWORD`、`SMTP_FROM` | 被指派者（指派、使用者回覆、SLA 逾時）、申請人（對外回覆） |
-| Telegram | `TELEGRAM_BOT_TOKEN`；使用者在「個人設定」填入自己的 Chat ID | 被指派者 |
-| Microsoft Teams | `TEAMS_WEBHOOK_URL`（Teams Workflows 的 webhook 網址，送出 Adaptive Card） | 頻道：新工單、SLA 逾時、每日 3 天積壓報告 |
+| Email | 「郵件設定」：SMTP（主機、連接埠、TLS、帳號、密碼、寄件者）或 Resend（API Key、寄件者），可寄送測試信 | 被指派者（指派、使用者回覆、SLA 逾時）、申請人（對外回覆） |
+| Telegram | 「通知設定」的 Bot Token；使用者在「個人設定」填入自己的 Chat ID | 被指派者 |
+| Microsoft Teams | 「通知設定」的 Webhook URL（Teams Workflows 的 https 網址，送出 Adaptive Card） | 頻道：新工單、SLA 逾時、每日 3 天積壓報告 |
+
+密碼、API Key、Bot Token 與 Webhook URL 以 `APP_SECRET` 加密存在資料庫，只寫不讀；更換 `APP_SECRET` 後需要重新輸入。
 
 回覆者取消勾選「寄送 Email 通知」時該則回覆不會發出任何通知；通知只包含該則回覆的內容。既有的內部備忘不會觸發通知。
 
@@ -203,6 +208,6 @@ docker compose exec app node dist/server/cli.js reset-password admin@ticket.loca
 - [ ] `.env` 中三組密鑰皆為隨機值，且 `.env` 未進版控
 - [ ] `APP_URL` 為 `https://`，nginx 前已終結 TLS，`TRUST_PROXY=true`；`docker compose ps` 只有 nginx 有對外連接埠
 - [ ] 視需求開啟「全域強制兩步驟驗證」
-- [ ] Email / Telegram / Teams 已測試（「通知紀錄」頁面顯示「已發送」）
+- [ ] Email / Telegram / Teams 已在「系統設定」設定並測試，「啟用通知」已開啟（「通知紀錄」頁面顯示「已發送」）
 - [ ] 已排程資料庫備份並演練還原
 - [ ] 已執行 `scripts/smoke.sh`（測試環境）確認流程正常

@@ -19,9 +19,6 @@ export interface Config {
   timezone: string;
   agingDigestHour: number;
   notifyMaxAttempts: number;
-  smtp: { host?: string; port: number; secure: boolean; user?: string; password?: string; from: string };
-  telegramBotToken: string | undefined;
-  teamsWebhookUrl: string | undefined;
   staticDir: string | undefined;
   migrationsDir: string;
 }
@@ -67,16 +64,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     timezone: env.TZ ?? 'Asia/Taipei',
     agingDigestHour: int(env.AGING_DIGEST_HOUR, 9),
     notifyMaxAttempts: int(env.NOTIFY_MAX_ATTEMPTS, 5),
-    smtp: {
-      host: empty(env.SMTP_HOST),
-      port: int(env.SMTP_PORT, 587),
-      secure: bool(env.SMTP_SECURE, false),
-      user: empty(env.SMTP_USER),
-      password: empty(env.SMTP_PASSWORD),
-      from: env.SMTP_FROM ?? 'TicketDesk <no-reply@ticket.local>',
-    },
-    telegramBotToken: empty(env.TELEGRAM_BOT_TOKEN),
-    teamsWebhookUrl: empty(env.TEAMS_WEBHOOK_URL),
     staticDir: empty(env.STATIC_DIR),
     migrationsDir: env.MIGRATIONS_DIR ?? new URL('../../../drizzle', import.meta.url).pathname,
   };

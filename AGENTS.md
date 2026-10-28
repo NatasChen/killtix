@@ -14,7 +14,7 @@
 | --- | --- |
 | 目前版本 | **0.9.0**（2026-10-27，git tag `v0.9.0`），見 [CHANGELOG.md](CHANGELOG.md) |
 | 支援部署 | Docker Compose（nginx + app + PostgreSQL 16 + Redis 7；只有 nginx 對主機開放 HTTP 埠，DECISIONS D19）。Cloudflare 方案已決定不做（DECISIONS D3） |
-| 測試狀態 | 107 個 Vitest 測試、`scripts/validate.sh`、`scripts/smoke.sh`（24 項）、`scripts/ui-e2e.sh` 全部通過 |
+| 測試狀態 | 111 個 Vitest 測試、`scripts/validate.sh`、`scripts/smoke.sh`（24 項）、`scripts/ui-e2e.sh` 全部通過 |
 | 未實作 | AD/LDAP、SAML、OIDC、SCIM、FIDO2、附件、SLA 營業時間、多副本背景工作 |
 | 待客戶確認 | 見 [specs/DECISIONS.md](specs/DECISIONS.md) 中標示 ⏳ 的項目（SSO 時程）；已決定：預設管理員密碼（D1：各部署以 `.env` 設定）、Cloudflare 不做（D3）、移除 `users.team_id`（D14） |
 | 下一步建議 | v1.1：SSO（`users.identity_provider` 已預留）→ 附件 → SLA 營業時間 |
@@ -94,7 +94,7 @@ src/server/
   services/tickets.ts 工單核心：建立（冪等）、篩選條件、詳情、狀態機、SLA 暫停、自訂欄位驗證、對話、關注者
   services/notify.ts  outbox：notifyTicketEvent（決定誰收到什麼）、enqueue、dispatchPending（重試/退避）、各管道發送
   services/jobs.ts    scanSla（逾時/即將逾時）、agingDigest（每日 3 天積壓報告）
-  services/settings.ts system_settings 讀寫：2FA 全域開關、digest 執行日、系統名稱、郵件設定（秘密以 secretBox 加密、只寫不讀，DECISIONS D13）
+  services/settings.ts system_settings 讀寫：2FA 全域開關、digest 執行日、系統名稱、通知總開關與所有通知管道（秘密以 secretBox 加密、只寫不讀，DECISIONS D13）
   services/branding.ts 企業標誌：PNG 檢查（檔頭、512 KB）、brand_logos 讀寫、帶版本的公開網址
   services/audit.ts   稽核日誌
   services/rateLimit.ts 記憶體 / Redis 固定視窗計數
@@ -112,7 +112,7 @@ src/web/
   styles.css          只放版面與首次繪製的底色，元件樣式來自 Ant Design
   pages/…             各頁面；Dashboard.tsx 分「目前狀態」與「期間統計」兩區（期間在網址 ?from=&to=，DECISIONS D16）
   pages/admin/        AdminRoutes.tsx 只放路由與 lazyPage()；每頁一個檔：UsersPage、CatalogPages（團隊／SLA／服務類別／回覆範本，
-                      皆為 Crud.tsx 的 CrudPage 設定）、FormsPage、ApiTokensPage、SettingsPage（LogoSettings、MailSettingsCard）、
+                      皆為 Crud.tsx 的 CrudPage 設定）、FormsPage、ApiTokensPage、SettingsPage（LogoSettings、NotifySettingsCard、MailSettingsCard）、
                       NotificationsPage、AuditPage；shared.tsx 放共用的 useOptions、OneTimeSecret、tableProps、sectionTitle；
                       TeamMembers.tsx 是團隊頁展開列的成員管理（CrudPage 的 expand，DECISIONS D18）
   public/theme-init.js 首次繪製前套用主題（CSP 不允許 inline script，所以是外部檔）
@@ -180,8 +180,10 @@ crewai_ticket_build.py CrewAI 迭代工具（PM → SAr → PG → UI 設計師 
 
 ### 新增通知事件或管道
 - 事件：在 `services/notify.ts` 的 `TicketEvent` 加型別，在 `notifyTicketEvent()` 決定收件者，字典加 `notify.<event>.subject/body/teams`。
-- 管道：`Channel` 型別、`channelConfigured()`、`defaultSenders()`、`dispatchPending()` 的分派；設定加到 `config.ts`。
-  Email 例外：寄信方式由系統設定決定（`settings.ts` 的 `mailTransport()`，每次寄信時讀取），`config.smtp` 只是 `env` 方式的值。
+- 管道：`Channel` 型別、`channelConfigured()`、`defaultSenders()`、`dispatchPending()` 的分派。管道的設定**不放環境變數**（DECISIONS D13）：
+  存在 `system_settings`，由 `settings.ts` 的 `notifyTransports()` 在每次 enqueue／dispatch 時讀取，秘密用 `secretBox` 加密、只寫不讀；
+  介面在 `pages/admin/NotifySettingsCard.tsx`（Email 在 `MailSettingsCard.tsx`）。
+- 總開關 `notify.enabled` 預設關閉：關閉時 `enqueue()` 記為 `disabled`、`dispatchPending()` 不發送。測試要先 `setSetting(db, 'notify.enabled', true)`。
 - 測試用 `dispatchPending(deps, fakeSenders)`，不要打真實外部服務。
 
 ### 新增前端頁面
@@ -226,7 +228,7 @@ crewai_ticket_build.py CrewAI 迭代工具（PM → SAr → PG → UI 設計師 
 
 | 指令 | 內容 | 需要 |
 | --- | --- | --- |
-| `npm test` | 107 個單元/整合測試（PGlite） | Node |
+| `npm test` | 111 個單元/整合測試（PGlite） | Node |
 | `TEST_DATABASE_URL=postgres://… npm test` | 同上，改用真實 PostgreSQL + 正式驅動 | 一個 Postgres（見下） |
 | `npm run validate` | 型別、schema/migration 一致、測試、文件中的測試數、建置、首頁 JS 大小（bundle-check）、OpenAPI JSON、Markdown 連結、compose 與 nginx 設定 | Node（Docker 可選） |
 | `scripts/smoke.sh <url> <預設管理員密碼>` | 部署後 API 端到端 24 項（會改管理員密碼為 `Smoke-Test-Passw0rd!`） | 執行中的系統 |
