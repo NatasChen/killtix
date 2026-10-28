@@ -177,6 +177,7 @@ npm run dev:web             # 前端 on :5173（代理 /api 到 :8080）
 | [specs/DECISIONS.md](specs/DECISIONS.md) | 與原始規格不同的實作決策（含待客戶確認事項） |
 | [CHANGELOG.md](CHANGELOG.md) | 版本紀錄 |
 | [AGENTS.md](AGENTS.md) | 接手指南（給 AI Agent 與開發者） |
+| [LICENSE](LICENSE) | 授權條款（AGPL-3.0） |
 
 ## 安全注意事項
 
@@ -203,3 +204,12 @@ npm run dev:web             # 前端 on :5173（代理 /api 到 :8080）
 | v1.1 | AD/LDAP、SAML、OIDC、SCIM、FIDO2；附件；SLA 營業時間 |
 | 待定 | 背景工作獨立服務化、Slack 通知 |
 
+## 授權
+
+Copyright (C) 2026 TicketDesk contributors
+
+本專案以 [GNU Affero General Public License v3.0](LICENSE)（`AGPL-3.0-only`）授權：可以自由使用、修改與散布，
+但散布本程式或其修改版時必須以相同授權提供完整原始碼。AGPL 的額外要求（第 13 條）：**修改後透過網路提供他人使用**
+（例如對外開放的工單系統），也必須讓這些使用者能取得修改後的原始碼。只在內部原樣部署、未修改程式時不受影響。
+
+本程式不提供任何擔保，詳見 [LICENSE](LICENSE)。第三方套件各依其授權（MIT、BSD、Apache-2.0、OFL-1.1 等）。
