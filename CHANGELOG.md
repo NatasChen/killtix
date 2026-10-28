@@ -5,7 +5,7 @@
 ## [Unreleased]
 
 ### Added
-- 開源授權：GNU Affero General Public License v3.0（`AGPL-3.0-only`）。新增 `LICENSE`，`package.json`、OpenAPI `info.license` 與 README 標示授權；Docker 映像內附 `LICENSE`。
+- 開源授權：GNU Affero General Public License v3.0（`AGPL-3.0-or-later`）。新增 `LICENSE`，`package.json`、OpenAPI `info.license` 與 README 標示授權；Docker 映像內附 `LICENSE`。
 - docker compose 新增 `nginx` 服務（`nginx:1.30-alpine`，設定 `deploy/nginx/default.conf`）：監聽 HTTP（`HTTP_BIND`/`HTTP_PORT`，預設 `0.0.0.0:80`）並轉送到 `app:8080`，以用戶端位址覆寫 `X-Forwarded-For`；`scripts/validate.sh` 新增 `nginx -t` 檢查（DECISIONS D19）。TLS 尚未內建。
 - API Token 開單可指定團隊：`POST /tickets` 新增 `team`（團隊名稱，不分大小寫）與 `teamId`（擇一），覆寫服務類別的預設團隊並通知團隊成員；新增 `GET /api/v1/teams`（`tickets:write`）列出團隊。Token 仍不能指定負責人（DECISIONS D21）。OpenAPI 同步更新。
 - 通知總開關（「系統設定 → 通知設定 → 啟用通知」，`notificationsEnabled`），**預設關閉**：關閉時通知記為「通知已停用」（`disabled`）、不發送，重新開啟後不補寄，可在通知紀錄逐筆重送。

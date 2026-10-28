@@ -206,10 +206,22 @@ npm run dev:web             # 前端 on :5173（代理 /api 到 :8080）
 
 ## 授權
 
-Copyright (C) 2026 TicketDesk contributors
+Copyright (C) 2026 NatasChen <faway.chen@gmail.com>
 
-本專案以 [GNU Affero General Public License v3.0](LICENSE)（`AGPL-3.0-only`）授權：可以自由使用、修改與散布，
-但散布本程式或其修改版時必須以相同授權提供完整原始碼。AGPL 的額外要求（第 13 條）：**修改後透過網路提供他人使用**
-（例如對外開放的工單系統），也必須讓這些使用者能取得修改後的原始碼。只在內部原樣部署、未修改程式時不受影響。
+本專案以 [GNU Affero General Public License](LICENSE) 第 3 版或（由您選擇）任何更新的版本授權（`AGPL-3.0-or-later`）：
+可以自由使用、修改與散布，但散布本程式或其修改版時必須以相同授權提供完整原始碼。AGPL 的額外要求（第 13 條）：
+**修改後透過網路提供他人使用**（例如對外開放的工單系統），也必須讓這些使用者能取得修改後的原始碼。只在內部原樣部署、未修改程式時不受影響。
 
 本程式不提供任何擔保，詳見 [LICENSE](LICENSE)。第三方套件各依其授權（MIT、BSD、Apache-2.0、OFL-1.1 等）。
+
+```
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published
+by the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+```
