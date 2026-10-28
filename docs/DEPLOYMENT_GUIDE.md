@@ -6,9 +6,13 @@
 
 ```
             瀏覽器 / SOC 系統
-                   │  HTTPS（由反向代理終結 TLS）
+                   │  HTTP :80（HTTPS 需另外在前面終結 TLS，見第 3 節）
                    ▼
    ┌───────────────────────────────┐
+   │ nginx（唯一對主機開放的服務）   │
+   └──────────────┬────────────────┘
+                  │ app:8080（internal network）
+   ┌──────────────▼────────────────┐
    │ app（Node 24，單一容器）        │
    │  • Hono REST API  /api/v1/*    │
    │  • React 前端（靜態檔）         │
@@ -25,14 +29,15 @@
 - **資料庫結構**由 app 啟動時自動執行 migration（`drizzle/` 目錄）建立與升級，不需手動執行 SQL。
 - **種子資料**（角色、預設 SLA、服務類別、預設管理員）每次啟動都會執行，但具冪等性：既有資料不會被覆寫，已改過的密碼不會被重設。
 - **通知**採 outbox 模式：事件先寫入 `notification_logs`，背景工作每 5 秒發送一次；失敗時以指數退避重試，超過 `NOTIFY_MAX_ATTEMPTS` 次標記為失敗，可在「通知紀錄」頁面重送。
-- PostgreSQL 與 Redis **不對主機開放連接埠**，只有 app 能存取。
+- 只有 nginx 對主機開放連接埠（`HTTP_PORT`，預設 80）。app、PostgreSQL 與 Redis **都不對主機開放**：app 只有 nginx 連得到，資料庫與 Redis 只有 app 能存取。
 
 ## 2. 首次部署
 
 ### 2.1 前置需求
 
 - Docker Engine 24+ 與 Docker Compose v2
-- 一個網域與 TLS 憑證（正式環境），以及反向代理（Nginx、Caddy、Traefik 等）
+- 主機的 80 埠（或 `HTTP_PORT` 指定的埠）未被占用
+- 正式環境：一個網域與 TLS 憑證，以及在內建 nginx 前面終結 TLS 的元件（第 3 節）
 
 ### 2.2 設定環境變數
 
@@ -47,9 +52,9 @@ scripts/init-env.sh
 | `APP_SECRET` | ✅ | ≥ 32 字元。用來加密 2FA 金鑰，**部署後不可更換**，否則已啟用的 2FA 會失效 |
 | `POSTGRES_PASSWORD` | ✅ | 資料庫密碼 |
 | `REDIS_PASSWORD` | ✅ | Redis 密碼 |
-| `APP_URL` | | 使用者開啟的網址，用於通知中的連結。以 `https://` 開頭時自動啟用 Secure Cookie 與 HSTS |
-| `APP_BIND` / `APP_PORT` | | 對外綁定位址與連接埠，預設 `127.0.0.1:8080`（只給本機的反向代理使用） |
-| `TRUST_PROXY` | | 在反向代理之後設為 `true`，才會採用 `X-Forwarded-For` 作為用戶端 IP（影響登入速率限制與稽核日誌） |
+| `APP_URL` | | 使用者開啟的網址，用於通知中的連結，預設 `http://localhost`；`HTTP_PORT` 不是 80 時要帶埠號。以 `https://` 開頭時自動啟用 Secure Cookie 與 HSTS |
+| `HTTP_BIND` / `HTTP_PORT` | | 內建 nginx 對外的綁定位址與連接埠（HTTP），預設 `0.0.0.0:80`。app 本身不對主機開放 |
+| `TRUST_PROXY` | | compose 預設 `true`：採用 nginx 設定的 `X-Forwarded-For` 作為用戶端 IP（影響登入速率限制與稽核日誌）。nginx 以用戶端位址**覆寫**這個標頭，用戶端自帶的值不會被採用。設為 `false` 時記錄的會是 nginx 容器的位址 |
 | `BOOTSTRAP_ADMIN_EMAIL` | | 預設 `admin@ticket.local` |
 | `BOOTSTRAP_ADMIN_PASSWORD` | | 留空：首次啟動隨機產生並印在 log 一次。填入：使用指定密碼（例如 `admin@password`，DECISIONS D1；初始密碼不檢查密碼政策）。兩種情況首次登入都必須改成符合政策的密碼。只在資料庫還沒有管理員時生效 |
 | `TZ` / `DEFAULT_LOCALE` | | 預設 `Asia/Taipei` / `zh-TW` |
@@ -63,7 +68,7 @@ scripts/init-env.sh
 
 ```bash
 docker compose up -d --build --wait
-docker compose ps                 # 三個服務都應為 healthy
+docker compose ps                 # 四個服務（nginx、app、postgres、redis）都應為 healthy
 docker compose logs app | grep -A4 "bootstrap administrator"
 ```
 
@@ -94,8 +99,8 @@ docker compose logs app | grep -A4 "bootstrap administrator"
 ### 2.5 驗證部署
 
 ```bash
-curl -fsS http://localhost:8080/healthz     # {"status":"ok"}
-scripts/smoke.sh http://localhost:8080 '<預設管理員密碼>'
+curl -fsS http://localhost/healthz          # {"status":"ok"}（經 nginx）
+scripts/smoke.sh http://localhost '<預設管理員密碼>'
 ```
 
 `smoke.sh` 會實際走完改密、開單、不通知的回覆、狀態轉換、API Token 冪等開單、3 天篩選、CSV 匯出等流程（共 24 項檢查）。
@@ -103,19 +108,28 @@ scripts/smoke.sh http://localhost:8080 '<預設管理員密碼>'
 
 ## 3. 反向代理與 TLS
 
-app 只監聽 HTTP，正式環境請在前面放反向代理。Caddy 範例：
+compose 內建 nginx（`nginx:1.30-alpine`，設定檔 `deploy/nginx/default.conf`），監聽 HTTP 並轉送到 `app:8080`：
+
+- 以用戶端位址覆寫 `X-Forwarded-For`（不是附加），app 在 `TRUST_PROXY=true` 時採用它的第一個值。
+- `client_max_body_size 2m`（標誌上傳以 base64 JSON 傳送，512 KB 的 PNG 約 700 KB）。
+- 每次請求經 Docker DNS 解析 `app`，app 容器重建、IP 改變後不需要重啟 nginx。
+- CSP、HSTS 等安全標頭由 app 送出，nginx 不另外加。
+
+**TLS 目前不在內建 nginx 中處理**。正式環境請在它前面放一個終結 TLS 的元件，並把 nginx 綁在本機（`HTTP_BIND=127.0.0.1`、`HTTP_PORT=8081`），例如 Caddy：
 
 ```
 ticket.example.com {
-    reverse_proxy 127.0.0.1:8080
+    reverse_proxy 127.0.0.1:8081
 }
 ```
+
+前面多一層代理時，nginx 看到的用戶端位址是那一層（本例為主機本身），稽核日誌的 IP 也會是它；
+要記錄真實用戶端 IP，需在 `deploy/nginx/default.conf` 加上 `set_real_ip_from` / `real_ip_header`（nginx realip 模組）。
 
 並在 `.env` 設定：
 
 ```
 APP_URL=https://ticket.example.com
-TRUST_PROXY=true
 ```
 
 ## 4. 外部系統（SOC）串接
@@ -187,7 +201,7 @@ docker compose exec app node dist/server/cli.js reset-password admin@ticket.loca
 
 - [ ] 預設管理員已改密，並已另外建立具名的管理員帳號
 - [ ] `.env` 中三組密鑰皆為隨機值，且 `.env` 未進版控
-- [ ] `APP_URL` 為 `https://`，反向代理已設定 TLS，`TRUST_PROXY=true`
+- [ ] `APP_URL` 為 `https://`，nginx 前已終結 TLS，`TRUST_PROXY=true`；`docker compose ps` 只有 nginx 有對外連接埠
 - [ ] 視需求開啟「全域強制兩步驟驗證」
 - [ ] Email / Telegram / Teams 已測試（「通知紀錄」頁面顯示「已發送」）
 - [ ] 已排程資料庫備份並演練還原

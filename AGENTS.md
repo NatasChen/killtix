@@ -13,7 +13,7 @@
 | 項目 | 內容 |
 | --- | --- |
 | 目前版本 | **0.9.0**（2026-10-27，git tag `v0.9.0`），見 [CHANGELOG.md](CHANGELOG.md) |
-| 支援部署 | Docker Compose（app + PostgreSQL 16 + Redis 7）。Cloudflare 方案已決定不做（DECISIONS D3） |
+| 支援部署 | Docker Compose（nginx + app + PostgreSQL 16 + Redis 7；只有 nginx 對主機開放 HTTP 埠，DECISIONS D19）。Cloudflare 方案已決定不做（DECISIONS D3） |
 | 測試狀態 | 103 個 Vitest 測試、`scripts/validate.sh`、`scripts/smoke.sh`（24 項）、`scripts/ui-e2e.sh` 全部通過 |
 | 未實作 | AD/LDAP、SAML、OIDC、SCIM、FIDO2、附件、SLA 營業時間、多副本背景工作 |
 | 待客戶確認 | 見 [specs/DECISIONS.md](specs/DECISIONS.md) 中標示 ⏳ 的項目（SSO 時程）；已決定：預設管理員密碼（D1：各部署以 `.env` 設定）、Cloudflare 不做（D3）、移除 `users.team_id`（D14） |
@@ -117,6 +117,7 @@ src/web/
                       TeamMembers.tsx 是團隊頁展開列的成員管理（CrudPage 的 expand，DECISIONS D18）
   public/theme-init.js 首次繪製前套用主題（CSP 不允許 inline script，所以是外部檔）
 drizzle/              自動產生的 migration，不要手改
+deploy/nginx/         compose 的 nginx 設定：HTTP 轉送到 app:8080、覆寫 X-Forwarded-For（validate.sh 以 `nginx -t` 檢查）
 tests/                Vitest：helpers.ts（測試環境工廠）、auth / tickets / teams / dashboard / notify / i18n 測試；e2e/ui.mjs（瀏覽器）
 scripts/              init-env.sh（建立 .env、只填空白密鑰）、validate.sh、smoke.sh、ui-e2e.sh、check-links.mjs、
                       bundle-check.mjs（首頁 JS ≤ 300 KB gzip、首頁不含管理頁程式碼）、
@@ -227,7 +228,7 @@ crewai_ticket_build.py CrewAI 迭代工具（PM → SAr → PG → UI 設計師 
 | --- | --- | --- |
 | `npm test` | 103 個單元/整合測試（PGlite） | Node |
 | `TEST_DATABASE_URL=postgres://… npm test` | 同上，改用真實 PostgreSQL + 正式驅動 | 一個 Postgres（見下） |
-| `npm run validate` | 型別、schema/migration 一致、測試、文件中的測試數、建置、首頁 JS 大小（bundle-check）、OpenAPI JSON、Markdown 連結、compose 設定 | Node（Docker 可選） |
+| `npm run validate` | 型別、schema/migration 一致、測試、文件中的測試數、建置、首頁 JS 大小（bundle-check）、OpenAPI JSON、Markdown 連結、compose 與 nginx 設定 | Node（Docker 可選） |
 | `scripts/smoke.sh <url> <預設管理員密碼>` | 部署後 API 端到端 24 項（會改管理員密碼為 `Smoke-Test-Passw0rd!`） | 執行中的系統 |
 | `scripts/ui-e2e.sh <url> <管理員密碼>` | 瀏覽器操作主要流程、截圖到 `tests/e2e/shots/` | Docker |
 
@@ -243,12 +244,12 @@ TEST_DATABASE_URL=postgres://postgres:test@127.0.0.1:55432/postgres npm test
 ```bash
 cat > /tmp/td.env <<EOF
 APP_URL=http://localhost:18080
-APP_PORT=18080
+HTTP_PORT=18080
 APP_SECRET=$(openssl rand -base64 48 | tr -d '\n')
 POSTGRES_PASSWORD=$(openssl rand -hex 16)
 REDIS_PASSWORD=$(openssl rand -hex 16)
 EOF
-docker compose --env-file /tmp/td.env -p tdtest up -d --build --wait   # --wait：等到 app 健康檢查通過才返回
+docker compose --env-file /tmp/td.env -p tdtest up -d --build --wait   # --wait：等到 app 與 nginx 健康檢查通過才返回
 PW=$(docker compose -p tdtest logs app | grep -oP 'password: \K\S+')
 scripts/smoke.sh http://localhost:18080 "$PW"
 scripts/ui-e2e.sh http://localhost:18080 'Smoke-Test-Passw0rd!'
@@ -289,6 +290,9 @@ docker compose --env-file /tmp/td.env -p tdtest down -v
 13. **頁面延遲載入後，舊頁面會留到新頁面的程式下載完**（React Router 以 transition 導覽）：e2e 點連結後要先等新頁面的標題
     （`getByRole('heading', …).waitFor()`）再操作，否則 `getByLabel()` 可能抓到舊頁面上同名的元素（曾抓到儀表板的「服務類別」圖表）。
 14. **Playwright 的 `waitForFunction` 在本系統不能用**：它需要 eval，CSP（`script-src 'self'`）會擋下。改用 locator 或以 `evaluate` 輪詢。
+15. **nginx 的 `X-Forwarded-For` 必須覆寫，不能附加**：`clientIp()` 在 `TRUST_PROXY=true` 時取第一個值；改成 `$proxy_add_x_forwarded_for`
+    會讓用戶端自帶的標頭成為第一個值，可偽造登入速率限制與稽核日誌的 IP。app 不對主機開放連接埠，除錯請用
+    `docker compose exec app wget -qO- http://127.0.0.1:8080/healthz` 或經 nginx。
 
 ---
 

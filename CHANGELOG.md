@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+### Added
+- docker compose 新增 `nginx` 服務（`nginx:1.30-alpine`，設定 `deploy/nginx/default.conf`）：監聽 HTTP（`HTTP_BIND`/`HTTP_PORT`，預設 `0.0.0.0:80`）並轉送到 `app:8080`，以用戶端位址覆寫 `X-Forwarded-For`；`scripts/validate.sh` 新增 `nginx -t` 檢查（DECISIONS D19）。TLS 尚未內建。
+
+### Changed
+- app 不再對主機發布連接埠，只有 nginx 連得到；`APP_BIND`、`APP_PORT` 移除。compose 的預設值 `TRUST_PROXY` 改為 `true`、`APP_URL` 改為 `http://localhost`。
+  **升級時**：把 `.env` 的 `APP_BIND`/`APP_PORT` 換成 `HTTP_BIND`/`HTTP_PORT`，`TRUST_PROXY` 設為 `true`（否則稽核日誌記錄的是 nginx 的位址），`APP_URL` 改成經 nginx 的網址；原本指向 `127.0.0.1:8080` 的外部反向代理改指向 nginx 的埠。
+
 ## [0.9.0] - 2026-10-27
 
 系統名稱可自訂，上傳標誌後名稱不再消失。沒有資料表、環境變數或部署變更。

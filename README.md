@@ -58,10 +58,10 @@ SOC、SIEM 等外部系統可以透過 API 自動開單。
 | 快取 | Redis 7（速率限制） |
 | 前端 | React 19、React Router、Vite |
 | 測試 | Vitest + PGlite（程序內 PostgreSQL），可切換為真實 PostgreSQL |
-| 部署 | Docker Compose（app + postgres + redis） |
+| 部署 | Docker Compose（nginx + app + postgres + redis） |
 
 ```
-瀏覽器 / SOC ──HTTPS──▶ 反向代理 ──▶ app 容器（API + 前端 + 背景工作）
+瀏覽器 / SOC ──HTTP :80──▶ nginx ──▶ app 容器（API + 前端 + 背景工作）
                                         ├──▶ PostgreSQL（資料、通知佇列）
                                         └──▶ Redis（速率限制）
 ```
@@ -74,7 +74,7 @@ docker compose up -d --build --wait
 docker compose logs app | grep -A4 "bootstrap administrator"   # 取得預設管理員的一次性密碼
 ```
 
-開啟 <http://localhost:8080>，以 `admin@ticket.local` 與 log 中的密碼登入，依畫面指示改密。
+開啟 <http://localhost>（內建 nginx，預設 80 埠；可用 `.env` 的 `HTTP_PORT` 修改），以 `admin@ticket.local` 與 log 中的密碼登入，依畫面指示改密。
 
 - 一次性密碼**只在第一次建立資料庫時**印出。容器重建（`down` / `up`）後 log 裡就沒有了；忘記或錯過時，用維運指令重設：
   `docker compose exec app node dist/server/cli.js reset-password admin@ticket.local`（會印出新的一次性密碼，登入後須改密）。
@@ -83,14 +83,14 @@ docker compose logs app | grep -A4 "bootstrap administrator"   # 取得預設管
 - `APP_SECRET` 與 `POSTGRES_PASSWORD` 在首次啟動後**不要再更改**（前者會讓已啟用的 2FA 失效，後者會讓 app 連不上既有資料庫）。
 
 - 想使用固定的初始密碼，在**第一次啟動前**於 `.env` 設定，例如 `BOOTSTRAP_ADMIN_PASSWORD=admin@password`（DECISIONS D1；初始密碼不檢查密碼政策，首次登入仍會強制改成符合政策的密碼）。資料庫已經有管理員時這個設定不會生效，請改用上面的 `reset-password`。
-- 想先看有資料的畫面（展示、測試）：`TD_PASSWORD='<改過的密碼>' python3 scripts/seed-sample-tickets.py http://localhost:8080 --psql "docker compose exec -T postgres psql -U ticketdesk -d ticketdesk"`
+- 想先看有資料的畫面（展示、測試）：`TD_PASSWORD='<改過的密碼>' python3 scripts/seed-sample-tickets.py http://localhost --psql "docker compose exec -T postgres psql -U ticketdesk -d ticketdesk"`
   會建立 30 張範例工單（各種狀態、優先度、標籤，部分日期往前推，標籤 `sample`）。只用 Python 標準函式庫；Email 已設定時會停止，避免寄信給範例申請人。不要在正式環境執行。
 - 正式環境設定（TLS、反向代理、備份、通知管道）見 [docs/DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md)。
 
 ## API 範例（SOC 自動開單）
 
 ```bash
-curl -X POST http://localhost:8080/api/v1/tickets \
+curl -X POST http://localhost/api/v1/tickets \
   -H "Authorization: Bearer $TICKETDESK_TOKEN" \
   -H "Content-Type: application/json" \
   -H "Idempotency-Key: SOC-2026-0001" \
@@ -142,6 +142,7 @@ npm run dev:web             # 前端 on :5173（代理 /api 到 :8080）
 │   └── cli.ts             維運指令（重設密碼）
 ├── src/web/               前端（React）
 ├── drizzle/               資料庫 migration（自動產生）
+├── deploy/nginx/          compose 內建 nginx 的設定（HTTP 轉送到 app）
 ├── tests/                 Vitest 測試
 ├── scripts/               init-env.sh（產生 .env 密鑰）、validate.sh（品質檢查）、smoke.sh（部署後 API 檢查）、ui-e2e.sh（瀏覽器測試）、seed-sample-tickets.py（範例工單）
 ├── docs/                  PRD、部署指南、QA 測試計畫、OpenAPI

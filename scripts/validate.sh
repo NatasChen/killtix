@@ -53,6 +53,9 @@ node scripts/check-links.mjs
 if command -v docker >/dev/null && docker info >/dev/null 2>&1; then
   step "docker compose file is valid"
   APP_SECRET=x POSTGRES_PASSWORD=x REDIS_PASSWORD=x docker compose --env-file /dev/null config -q
+  step "nginx config is valid"
+  nginx_image=$(APP_SECRET=x POSTGRES_PASSWORD=x REDIS_PASSWORD=x docker compose --env-file /dev/null config --images | grep '^nginx:')
+  docker run --rm -v "$PWD/deploy/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro" --entrypoint nginx "$nginx_image" -t -q
 else
   step "docker compose check skipped (docker not available)"
 fi

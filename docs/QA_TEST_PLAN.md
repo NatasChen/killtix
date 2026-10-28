@@ -650,6 +650,7 @@
 | REG-DEPLOY-006 | Queues 通知 | AC-DEPLOY-02 | 觸發測試通知 | `notification_logs.status='sent'` | ✅ | P0 |
 | REG-DEPLOY-007 | Cron Triggers | AC-DEPLOY-02 | 等待/手動觸發 | SLA 掃描與積壓報表執行 | ⚠️ | P1 |
 | REG-DEPLOY-008 | 雙軌 API 契約一致 | FR-6.3 | 對兩軌執行 Schemathesis | 皆符合 `src/api_spec.json`；無 schema 偏差 | ✅ | P0 |
+| REG-DEPLOY-009 | nginx 前端代理（D19） | FR-6.1 | `up --wait` 後經 `HTTP_PORT` 執行 `smoke.sh`、`ui-e2e.sh`；`ss -ltn` 檢查主機埠；登入時自帶 `X-Forwarded-For: 6.6.6.6` | 全部通過；主機只開 `HTTP_PORT`、無 8080；稽核 IP 不是 6.6.6.6 | ✅ | P0 |
 
 ### 6.9 安全標頭與傳輸回歸（REG-SEC）
 

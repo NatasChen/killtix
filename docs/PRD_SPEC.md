@@ -499,6 +499,7 @@ Email 的寄信方式由系統管理員在「系統設定 → 郵件設定」選
 - 需提供 `.env.example`（DB 連線、JWT Secret、SMTP、Telegram、Teams、2FA 設定）。
 - 啟動後首次登入即使用 Bootstrap Admin；系統須於登入頁與文件明確提示「首次登入必須改密」。
 - 需提供健康檢查 (`/healthz`)、資料持久化 Volume、備份與還原指令。
+- （DECISIONS D19）compose 另含 `nginx`：唯一對主機開放的服務（HTTP，`HTTP_PORT` 預設 80），轉送到 `app:8080`；app 不對主機發布連接埠。TLS 暫不內建。
 
 #### FR-6.2 方案 B：Cloudflare 邊緣網路（P0）
 > **不做**（2026-10-26，DECISIONS D3）：只支援方案 A（Docker）。以下保留原始需求供參考，相關驗收條件 AC-DEPLOY-02 不適用。
