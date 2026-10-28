@@ -12,7 +12,7 @@
 
 | 項目 | 內容 |
 | --- | --- |
-| 目前版本 | **0.9.0**（2026-10-27，git tag `v0.9.0`），見 [CHANGELOG.md](CHANGELOG.md) |
+| 目前版本 | **0.10.0**（2026-10-28，git tag `v0.10.0`），見 [CHANGELOG.md](CHANGELOG.md) |
 | 支援部署 | Docker Compose（nginx + app + PostgreSQL 16 + Redis 7；只有 nginx 對主機開放 HTTP 埠，DECISIONS D19）。Cloudflare 方案已決定不做（DECISIONS D3） |
 | 測試狀態 | 113 個 Vitest 測試、`scripts/validate.sh`、`scripts/smoke.sh`（24 項）、`scripts/ui-e2e.sh` 全部通過 |
 | 未實作 | AD/LDAP、SAML、OIDC、SCIM、FIDO2、附件、SLA 營業時間、多副本背景工作 |

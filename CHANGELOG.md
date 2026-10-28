@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-28
+
+前面加上 nginx，通知改在介面設定並加上總開關，側邊欄與主題開關改版，API 開單可指定團隊，以 AGPL-3.0-or-later 開源。
+**有部署與資料表變更**：升級前依下方 Changed 的「升級時」調整 `.env`（`HTTP_BIND`/`HTTP_PORT`、`TRUST_PROXY=true`、`APP_URL`），
+升級後在「系統設定」重新填寫通知管道再開啟「啟用通知」；migration 0005／0006 會在啟動時自動套用。
+
 ### Added
 - 開源授權：GNU Affero General Public License v3.0（`AGPL-3.0-or-later`）。新增 `LICENSE`，`package.json`、OpenAPI `info.license` 與 README 標示授權；Docker 映像內附 `LICENSE`。
 - docker compose 新增 `nginx` 服務（`nginx:1.30-alpine`，設定 `deploy/nginx/default.conf`）：監聽 HTTP（`HTTP_BIND`/`HTTP_PORT`，預設 `0.0.0.0:80`）並轉送到 `app:8080`，以用戶端位址覆寫 `X-Forwarded-For`；`scripts/validate.sh` 新增 `nginx -t` 檢查（DECISIONS D19）。TLS 尚未內建。
