@@ -3,7 +3,8 @@ import { Hono } from 'hono';
 import { authOf, guard } from '../auth/session.js';
 import type { AppEnv } from '../context.js';
 import { cannedResponses, customFields, helpTopics, slaPlans, tags, teams, teamMembers, ticketForms, users } from '../db/schema.js';
-import { isStaff } from '../rbac.js';
+import { forbidden } from '../errors.js';
+import { can, isStaff } from '../rbac.js';
 
 /** Read-only lookups used to build forms and filters. */
 export const catalogRoutes = new Hono<AppEnv>()
@@ -49,6 +50,13 @@ export const catalogRoutes = new Hono<AppEnv>()
           })),
       })),
     );
+  })
+
+  // Team names and ids for routing a new ticket (`team` / `teamId`): API tokens, and people who may assign.
+  .get('/teams', guard({ tokenScope: 'tickets:write' }), async (c) => {
+    const auth = authOf(c);
+    if (auth.via !== 'token' && !can(auth.permissions, 'ticket:assign')) throw forbidden();
+    return c.json(await c.var.deps.db.select({ id: teams.id, name: teams.name }).from(teams).orderBy(asc(teams.name)));
   })
 
   .get('/catalog', guard(), async (c) => {

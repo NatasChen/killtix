@@ -505,6 +505,14 @@
 | API-FLT-021 | 篩選參數注入 | — | `?aging_gt_days=3;DROP TABLE tickets--`、`?status=open' OR '1'='1` | `400`；無 SQL 執行；DB 完好 | ✅ | P0 |
 | API-FLT-022 | 大量資料效能 | `qa-perf`（10 萬筆） | `GET /tickets?aging_gt_days=3&per_page=25` | P95 ≤ 500ms；查詢計畫使用 `idx_tickets_status_created`（`EXPLAIN` 驗證，無 Seq Scan） | ✅ | P0 |
 
+### 5.3 開單時指定團隊與 Tag（API-ROUTE）
+
+| ID | 標題 | 前置條件 | 步驟 | 預期結果 | 自動化 | 優先級 |
+| --- | --- | --- | --- | --- | --- | --- |
+| API-ROUTE-001 | 依名稱或 ID 指定團隊 | `T-SOC`（`tickets:write`） | `GET /teams`；`POST /tickets` 帶 `team`（不分大小寫）或 `teamId`、`tags`（`tests/tickets.test.ts`） | 工單在該團隊、團隊成員收到通知；覆寫服務類別的預設團隊；新 tag 自動建立 | ✅ | P0 |
+| API-ROUTE-002 | 不可指定負責人與錯誤輸入 | 同上 | 帶 `assigneeId`；不存在的團隊；同時帶 `team` 與 `teamId` | `403`；`400`；`400` | ✅ | P0 |
+| API-ROUTE-003 | 團隊清單與指定團隊的權限 | 唯讀 Token、一般使用者 | 唯讀 Token `GET /teams`；一般使用者 `GET /teams`、開單帶 `team` | 皆 `403`；有 `ticket:assign` 的人員可讀 | ✅ | P1 |
+
 ---
 
 ## 6. 系統回歸測試矩陣（REG）

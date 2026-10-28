@@ -108,6 +108,25 @@
           }
         }
       }
+    },
+    "/teams": {
+      "get": {
+        "summary": "List teams",
+        "description": "Requires scope `tickets:write`. Use `name` as `team` (or `id` as `teamId`) when opening tickets. A token can route a ticket to a team but cannot choose an assignee.",
+        "responses": {
+          "200": {
+            "description": "Teams, by name",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "type": "object", "properties": { "id": { "type": "integer" }, "name": { "type": "string" } } }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -143,7 +162,9 @@
             "properties": { "email": { "type": "string", "format": "email" }, "name": { "type": "string" } },
             "description": "Person the ticket is about; created as an end user if unknown. Defaults to the token's own client user."
           },
-          "tags": { "type": "array", "items": { "type": "string", "maxLength": 64 }, "maxItems": 20 },
+          "team": { "type": "string", "maxLength": 128, "description": "Team name (case-insensitive) to route the ticket to; overrides the help topic's default team. Give team or teamId, not both; an unknown team is 400. See GET /teams" },
+          "teamId": { "type": "integer", "description": "Team id, alternative to team (stays valid when the team is renamed)" },
+          "tags": { "type": "array", "items": { "type": "string", "maxLength": 64 }, "maxItems": 20, "description": "Tag names; unknown tags are created. The help topic's automatic tags are added as well" },
           "customFields": { "type": "object", "additionalProperties": true, "description": "Keyed by custom field key of the help topic's form" },
           "externalId": { "type": "string", "maxLength": 255, "description": "Alternative to the Idempotency-Key header" }
         }

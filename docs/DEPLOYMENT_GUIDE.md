@@ -142,8 +142,11 @@ curl -X POST https://ticket.example.com/api/v1/tickets \
   -H "Content-Type: application/json" \
   -H "Idempotency-Key: SOC-2026-0001" \
   -d '{"subject":"[SOC] 疑似勒索軟體","helpTopic":"security-incident","priority":5,
-       "requester":{"email":"soc@example.com"},"tags":["ransomware"]}'
+       "requester":{"email":"soc@example.com"},"team":"資安組","tags":["ransomware"]}'
 ```
+
+- `team`（團隊名稱，不分大小寫）或 `teamId` 指定工單進哪個團隊，省略時用服務類別的預設團隊；可用的團隊用 `GET /api/v1/teams` 查詢。團隊改名後舊名稱會回 400，需要穩定時用 `teamId`。Token 不能指定負責人。
+- `tags` 不存在的會自動建立，服務類別的自動標籤也會加上。
 
 - 相同的 `Idempotency-Key` 重送會回傳同一張工單（HTTP 200，標頭 `Idempotent-Replayed: true`），不會重複開單。
 - 每個 Token 預設每分鐘 60 次，超過回 `429` 並附 `Retry-After`。

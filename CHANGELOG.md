@@ -6,6 +6,7 @@
 
 ### Added
 - docker compose 新增 `nginx` 服務（`nginx:1.30-alpine`，設定 `deploy/nginx/default.conf`）：監聽 HTTP（`HTTP_BIND`/`HTTP_PORT`，預設 `0.0.0.0:80`）並轉送到 `app:8080`，以用戶端位址覆寫 `X-Forwarded-For`；`scripts/validate.sh` 新增 `nginx -t` 檢查（DECISIONS D19）。TLS 尚未內建。
+- API Token 開單可指定團隊：`POST /tickets` 新增 `team`（團隊名稱，不分大小寫）與 `teamId`（擇一），覆寫服務類別的預設團隊並通知團隊成員；新增 `GET /api/v1/teams`（`tickets:write`）列出團隊。Token 仍不能指定負責人（DECISIONS D21）。OpenAPI 同步更新。
 - 通知總開關（「系統設定 → 通知設定 → 啟用通知」，`notificationsEnabled`），**預設關閉**：關閉時通知記為「通知已停用」（`disabled`）、不發送，重新開啟後不補寄，可在通知紀錄逐筆重送。
 - Telegram Bot Token 與 Teams Webhook URL 改在「通知設定」填寫（`GET/PUT /admin/settings/channels`），加密儲存、只寫不讀，可移除；寫入稽核 `admin.notify_channels_updated`（不含值）。
 - 側邊欄的管理頁分成可摺疊的「使用者管理」「工單設定」「系統相關」三個群組，目前頁面的群組自動展開，展開狀態記在瀏覽器；每個項目改用圖示（Ant Design Icons，依群組著色）取代色塊。

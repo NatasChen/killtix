@@ -293,6 +293,39 @@ describe('SOC integration via API token', () => {
     expect((await soc.get(`/api/v1/tickets/${first.body.id}`)).status).toBe(200);
   });
 
+  it('routes a ticket to a team by name or id and notifies its members, but cannot pick an assignee', async () => {
+    const soc = ctx.tokenClient(token);
+    const teams = await soc.get('/api/v1/teams');
+    expect(teams.status).toBe(200);
+    expect(teams.body).toEqual(expect.arrayContaining([{ id: ids.team, name: 'Service Desk' }, { id: ids.otherTeam, name: 'Network' }]));
+
+    const byName = await soc.post('/api/v1/tickets', { subject: '[SOC] phishing wave', team: 'service desk', tags: ['phishing'] });
+    expect(byName.status).toBe(201);
+    const detail = (await admin.get(`/api/v1/tickets/${byName.body.id}`)).body;
+    expect(detail.team).toEqual({ id: ids.team, name: 'Service Desk' });
+    expect(detail.tags).toEqual(['phishing']);
+    const mails = await ctx.db.select().from(notificationLogs).where(eq(notificationLogs.recipient, 'agent@example.com'));
+    expect(mails.some((m) => m.eventId.startsWith(`team_assigned:${byName.body.id}:`))).toBe(true);
+
+    // an explicit team wins over the help topic's default team
+    const byId = await soc.post('/api/v1/tickets', { subject: '[SOC] lateral movement', helpTopic: 'security-incident', teamId: ids.otherTeam });
+    expect((await admin.get(`/api/v1/tickets/${byId.body.id}`)).body.team.id).toBe(ids.otherTeam);
+
+    expect((await soc.post('/api/v1/tickets', { subject: 'x', team: 'No Such Team' })).status).toBe(400);
+    expect((await soc.post('/api/v1/tickets', { subject: 'x', teamId: 999_999 })).status).toBe(400);
+    expect((await soc.post('/api/v1/tickets', { subject: 'x', team: 'Network', teamId: ids.otherTeam })).status).toBe(400);
+    expect((await soc.post('/api/v1/tickets', { subject: 'x', team: 'Network', assigneeId: ids.agent })).status).toBe(403);
+  });
+
+  it('keeps team routing and the team list from people without ticket:assign and from read-only tokens', async () => {
+    const user = await ctx.login('user@example.com');
+    expect((await user.post('/api/v1/tickets', { subject: 'my own team', team: 'Network' })).status).toBe(403);
+    expect((await user.get('/api/v1/teams')).status).toBe(403);
+    expect((await admin.get('/api/v1/teams')).status).toBe(200);
+    const readOnly = (await admin.post('/api/v1/admin/api-tokens', { name: 'RO teams', scopes: ['tickets:read'] })).body.token;
+    expect((await ctx.tokenClient(readOnly).get('/api/v1/teams')).status).toBe(403);
+  });
+
   it('enforces token scopes and blocks non-ticket endpoints', async () => {
     const readOnly = (await admin.post('/api/v1/admin/api-tokens', { name: 'RO', scopes: ['tickets:read'] })).body.token;
     const ro = ctx.tokenClient(readOnly);

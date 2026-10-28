@@ -297,15 +297,17 @@ new ──▶ open ──▶ pending_user ──▶ open
 
 | 方法 | 路徑 | 說明 |
 | --- | --- | --- |
-| `POST` | `/api/v1/tickets` | 建立工單（支援 `external_id` 冪等鍵） |
+| `POST` | `/api/v1/tickets` | 建立工單（支援 `external_id` 冪等鍵；可帶 `tags`，以及 `team`（名稱）或 `teamId` 指定團隊） |
 | `GET` | `/api/v1/tickets` | 查詢列表（分頁、篩選、排序） |
 | `GET` | `/api/v1/tickets/{id}` | 取得單筆（含 thread） |
 | `PATCH` | `/api/v1/tickets/{id}` | 更新狀態/指派/優先級/Tag |
 | `POST` | `/api/v1/tickets/{id}/threads` | 新增回覆（`{ body, notify }`） |
 | `GET` | `/api/v1/reports/tickets` | 報表查詢與匯出 |
 | `GET` | `/api/v1/help-topics` | 取得服務類別清單 |
+| `GET` | `/api/v1/teams` | 取得團隊清單（`id`、`name`），供開單指定團隊 |
 | `POST` | `/api/v1/webhooks` | 註冊外部事件回呼（選用） |
 
+- **指定團隊（`[Unreleased]`，DECISIONS D21）**：API Token 開單可帶 `team`（名稱，不分大小寫）或 `teamId`（擇一），覆寫服務類別的預設團隊並通知團隊成員；不存在的團隊回 `400`。Token 仍不能指定負責人（`assigneeId` 需要 `ticket:assign`）。
 - **冪等性**：`POST /tickets` 支援 `Idempotency-Key` 標頭或 `external_id`，重複請求回傳原工單（`200`）而非建立新單。
 - **速率限制**：依 API Token 設定（預設 60 req/min，可調）；超限回傳 `429` 並附 `Retry-After`。
 - **錯誤格式**：RFC 7807 `application/problem+json`（`type`、`title`、`status`、`detail`、`instance`）。

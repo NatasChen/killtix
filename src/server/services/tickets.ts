@@ -195,15 +195,22 @@ export const createTicketSchema = z.object({
   requester: z.object({ email: z.email().max(255), name: z.string().trim().min(1).max(128).optional() }).optional(),
   externalId: z.string().trim().min(1).max(255).optional(),
   assigneeId: z.number().int().positive().optional(), // web form; needs ticket:assign
-  teamId: z.number().int().positive().optional(), // needs ticket:assign; default: the help topic's team
-});
+  // Team by id or by name (case-insensitive), not both; default: the help topic's team. Needs ticket:assign,
+  // except through an API token: external systems may route a ticket to a team, but not to a person.
+  teamId: z.number().int().positive().optional(),
+  team: z.string().trim().min(1).max(128).optional(),
+}).refine((v) => !(v.teamId && v.team), { path: ['team'], message: 'give team or teamId, not both' });
 export type CreateTicketInput = z.infer<typeof createTicketSchema>;
 
 const ASSIGNABLE_ROLES = ['super_admin', 'it_manager', 'agent', 'vendor'];
 
-async function assertTeamExists(db: DB, teamId: number) {
-  const [team] = await db.select({ id: teams.id }).from(teams).where(eq(teams.id, teamId));
-  if (!team) throw badRequest(undefined, { errors: [{ path: 'teamId', message: 'unknown team' }] });
+async function resolveTeamId(db: DB, input: { teamId?: number; team?: string }): Promise<number> {
+  const [team] = await db
+    .select({ id: teams.id })
+    .from(teams)
+    .where(input.teamId ? eq(teams.id, input.teamId) : sql`lower(${teams.name}) = lower(${input.team!})`);
+  if (!team) throw badRequest(undefined, { errors: [{ path: input.teamId ? 'teamId' : 'team', message: 'unknown team' }] });
+  return team.id;
 }
 
 /** Only active staff and vendor accounts can be assignees. */
@@ -282,9 +289,10 @@ export async function createTicket(
     if (!can(actor.permissions, 'ticket:assign')) throw forbidden();
     await assertAssignable(db, input.assigneeId);
   }
-  if (input.teamId) {
-    if (!can(actor.permissions, 'ticket:assign')) throw forbidden();
-    await assertTeamExists(db, input.teamId);
+  let teamId = topic?.defaultTeamId ?? null;
+  if (input.teamId || input.team) {
+    if (source !== 'api' && !can(actor.permissions, 'ticket:assign')) throw forbidden();
+    teamId = await resolveTeamId(db, input);
   }
 
   const now = clock();
@@ -311,7 +319,7 @@ export async function createTicket(
           formId,
           slaPlanId,
           requesterId,
-          teamId: input.teamId ?? topic?.defaultTeamId ?? null,
+          teamId,
           // assigned on creation: someone is already working on it, as when assigning later
           ...(input.assigneeId ? { assigneeId: input.assigneeId, status: 'open' as const } : {}),
           source,
@@ -857,7 +865,7 @@ export async function updateTicket(
   }
   if (input.teamId !== undefined && input.teamId !== ticket.teamId) {
     need('ticket:assign');
-    if (input.teamId) await assertTeamExists(db, input.teamId);
+    if (input.teamId) await resolveTeamId(db, { teamId: input.teamId });
     patch.teamId = input.teamId;
     events.push({ event: 'team', from: ticket.teamId, to: input.teamId });
   }
