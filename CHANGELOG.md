@@ -17,6 +17,7 @@
   **升級時**：在「系統設定」重新填寫 Email／Telegram／Teams，寄出測試信後再開啟「啟用通知」。
 - app 不再對主機發布連接埠，只有 nginx 連得到；`APP_BIND`、`APP_PORT` 移除。compose 的預設值 `TRUST_PROXY` 改為 `true`、`APP_URL` 改為 `http://localhost`。
   **升級時**：把 `.env` 的 `APP_BIND`/`APP_PORT` 換成 `HTTP_BIND`/`HTTP_PORT`，`TRUST_PROXY` 設為 `true`（否則稽核日誌記錄的是 nginx 的位址），`APP_URL` 改成經 nginx 的網址；原本指向 `127.0.0.1:8080` 的外部反向代理改指向 nginx 的埠。
+- 部署指南第 4 節補上完整的 API 開單說明：欄位表、最小範例、查詢服務類別與團隊、錯誤碼；README 的 API 範例連結過去。
 
 ## [0.9.0] - 2026-10-27
 

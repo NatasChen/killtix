@@ -107,6 +107,7 @@ curl -X POST http://localhost/api/v1/tickets \
 
 回應 `201 Created`，內容包含工單編號（如 `TCK-2026-000123`）與 SLA 期限。以相同的 `Idempotency-Key` 重送會回 `200` 與同一張工單。
 `team`（團隊名稱，或改用 `teamId`）可省略，省略時使用服務類別的預設團隊；可用的團隊以 `GET /api/v1/teams` 查詢。Token 不能指定負責人。
+完整欄位說明（優先度別名、自訂欄位、代開單、錯誤碼）、最小範例與查詢服務類別／團隊的方式，見 [部署指南第 4 節](docs/DEPLOYMENT_GUIDE.md#4-外部系統soc串接)。
 
 ## 開發
 
@@ -201,3 +202,4 @@ npm run dev:web             # 前端 on :5173（代理 /api 到 :8080）
 | v0.9.0 | ✅ 可自訂系統名稱，標誌與名稱並列（本版） |
 | v1.1 | AD/LDAP、SAML、OIDC、SCIM、FIDO2；附件；SLA 營業時間 |
 | 待定 | 背景工作獨立服務化、Slack 通知 |
+

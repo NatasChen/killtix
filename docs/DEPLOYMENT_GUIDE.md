@@ -134,21 +134,54 @@ APP_URL=https://ticket.example.com
 ## 4. 外部系統（SOC）串接
 
 1. 在「API Token」頁面建立 Token，勾選 `tickets:write`（開單）與 `tickets:read`（查詢）。Token 只會顯示一次。
-2. 呼叫範例：
+2. （選用）查詢服務類別與團隊：
+
+```bash
+# 服務類別：slug、名稱，以及該類別表單的自訂欄位（key、型別、是否必填、選項）
+curl -s https://ticket.example.com/api/v1/help-topics -H "Authorization: Bearer td_xxxxxxxx_..."
+# 團隊：id 與名稱
+curl -s https://ticket.example.com/api/v1/teams -H "Authorization: Bearer td_xxxxxxxx_..."
+```
+
+3. 建立工單：
 
 ```bash
 curl -X POST https://ticket.example.com/api/v1/tickets \
   -H "Authorization: Bearer td_xxxxxxxx_..." \
   -H "Content-Type: application/json" \
   -H "Idempotency-Key: SOC-2026-0001" \
-  -d '{"subject":"[SOC] 疑似勒索軟體","helpTopic":"security-incident","priority":5,
-       "requester":{"email":"soc@example.com"},"team":"資安組","tags":["ransomware"]}'
+  -d '{
+    "subject": "[SOC] EDR-0421 疑似勒索軟體行為",
+    "description": "主機 FIN-PC-023 於 09:12 偵測到大量檔案加密行為，已自動隔離。",
+    "priority": "critical",
+    "helpTopic": "security-incident",
+    "team": "資安組",
+    "tags": ["ransomware", "edr"],
+    "requester": { "email": "soc@example.com", "name": "SOC Bot" },
+    "customFields": { "host": "FIN-PC-023" }
+  }'
 ```
 
-- `team`（團隊名稱，不分大小寫）或 `teamId` 指定工單進哪個團隊，省略時用服務類別的預設團隊；可用的團隊用 `GET /api/v1/teams` 查詢。團隊改名後舊名稱會回 400，需要穩定時用 `teamId`。Token 不能指定負責人。
-- `tags` 不存在的會自動建立，服務類別的自動標籤也會加上。
+最小範例（只有 `subject` 必填）：`-d '{"subject":"印表機無法列印","helpTopic":"general"}'`
 
-- 相同的 `Idempotency-Key` 重送會回傳同一張工單（HTTP 200，標頭 `Idempotent-Replayed: true`），不會重複開單。
+| 欄位 | 說明 |
+| --- | --- |
+| `subject` | **必填**，1–512 字 |
+| `description` | 內文，最多 100,000 字 |
+| `priority` | 1–5 或別名 `lowest`／`low`／`normal`／`high`／`critical`，預設 3 |
+| `helpTopic`／`helpTopicId` | 服務類別（slug 或 id），決定 SLA、預設團隊與自動標籤 |
+| `team`／`teamId` | 團隊名稱（不分大小寫）或 id，擇一；省略時用服務類別的預設團隊。團隊改名後舊名稱會回 400，需要穩定時用 `teamId` |
+| `tags` | 最多 20 個、每個最多 64 字；不存在的會自動建立，服務類別的自動標籤也會加上 |
+| `requester`／`requesterId` | 代誰開單；省略時是建立 Token 的人。`requester.email` 沒有對應帳號時會建立外部的一般使用者 |
+| `customFields` | 以欄位 key 為鍵（見 `GET /help-topics` 的 `fields`），依該表單的必填、型別、選項與格式檢查；表單上沒有的 key 回 400 |
+| `externalId` | 外部系統的單號，與 `Idempotency-Key` 標頭作用相同（兩者都有時以標頭為準） |
+| `assigneeId` | Token **不可用**，會回 403；工單只能送到團隊，由團隊指派負責人 |
+
+- 成功回 `201` 與工單摘要（`id`、`number`、`status`、`priority`、`sla` 期限等）。
+- 相同的 `Idempotency-Key` 重送會回傳同一張工單（HTTP 200，標頭 `Idempotent-Replayed: true`），不會重複開單；逾時可以放心重試。
+- 錯誤為 RFC 7807（`application/problem+json`），`errors[].path` 指出欄位：
+  `400` 欄位格式錯誤、服務類別或團隊不存在、`team` 與 `teamId` 同時給、自訂欄位不符；`401` Token 錯誤、過期或已撤銷；
+  `403` Token 沒有所需範圍或帶了 `assigneeId`；`429` 超過速率限制。
 - 每個 Token 預設每分鐘 60 次，超過回 `429` 並附 `Retry-After`。
 - 完整規格：[docs/openapi.json](openapi.json)。
 
