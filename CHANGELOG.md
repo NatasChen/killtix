@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Changed
+- 部署指南新增「6.3 升級到新版本」（備份、切換版本、重新建置、確認 migration、外部系統、退版）；修正日常維運中的升級指令：映像由原始碼建置，`docker compose pull` 拿不到新程式，改為 `git checkout` 新版本後 `docker compose up -d --build --wait`。
+
 ## [0.12.0] - 2026-10-29
 
 團隊新增 TeamID，API 開單改以 `teamid` 指定團隊（issue #5）。

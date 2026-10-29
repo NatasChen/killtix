@@ -206,7 +206,7 @@ curl -X POST https://ticket.example.com/api/v1/tickets \
 ```bash
 docker compose logs -f app                 # JSON 格式的應用日誌
 docker compose restart app
-docker compose pull && docker compose up -d --build   # 升級：migration 會在啟動時自動執行
+git fetch --tags && git checkout vX.Y.Z && docker compose up -d --build --wait   # 升級，完整步驟見 6.3
 docker compose down                        # 停止（保留資料）
 docker compose down -v                     # ⚠️ 停止並刪除所有資料
 ```
@@ -224,6 +224,47 @@ docker compose start app
 ```
 
 請將備份排程化（例如每日 cron），並定期演練還原。Redis 只存速率限制計數，不需要備份。
+
+### 6.3 升級到新版本
+
+app 映像由原始碼建置（`build: .`），升級是把程式碼切到新版本再重新建置；只執行 `docker compose pull` 拿不到新程式。
+資料表的變更不需要手動處理：app 啟動時會先套用尚未執行的 migration（`drizzle/`），再開始服務。
+
+1. 先看 [CHANGELOG.md](../CHANGELOG.md) 中目前版本之後的每一版，標示 **升級時** 或 **不相容** 的項目要先準備
+   （例如 v0.10.0 的 `.env` 變更、v0.12.0 外部系統改用 `teamid`）。跨好幾版可以直接升到最新版，migration 會依序全部套用。
+2. 備份資料庫：
+
+   ```bash
+   docker compose exec -T postgres pg_dump -U ticketdesk -Fc ticketdesk > backup_before_upgrade_$(date +%F).dump
+   ```
+
+3. 取得新版本並重新建置、啟動（app 重新啟動期間服務會中斷數秒到數十秒）：
+
+   ```bash
+   git fetch --tags
+   git checkout vX.Y.Z            # 要升級的版本，例如 v0.12.0
+   docker compose up -d --build --wait
+   ```
+
+4. 確認 migration 成功、服務正常：
+
+   ```bash
+   docker compose logs app | grep -iE 'database migrated|error'
+   curl -fsS http://localhost/healthz      # 依 HTTP_PORT 調整
+   ```
+
+   migration 失敗時 app 不會啟動，日誌會有錯誤；資料庫維持在失敗前的狀態。
+5. 有不相容的 API 變更時，接著更新外部系統（見該版 CHANGELOG）。在外部系統改好之前，用舊格式的請求會失敗，
+   最好把升級與外部系統的修改排在同一個維護時段。
+
+migration 沒有自動退版。要退回舊版時，用第 2 步的備份還原（6.1），再切回舊版本重新建置：
+
+```bash
+docker compose stop app
+docker compose exec -T postgres pg_restore -U ticketdesk -d ticketdesk --clean --if-exists < backup_before_upgrade_YYYY-MM-DD.dump
+git checkout vX.Y.W              # 原本的版本
+docker compose up -d --build --wait
+```
 
 ### 6.2 忘記管理員密碼 / 帳號被鎖定
 
