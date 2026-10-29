@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-29
+
+團隊新增 TeamID，API 開單改以 `teamid` 指定團隊（issue #5）。
+**不相容的 API 變更**：`POST /tickets` 的 `team`／`teamId` 移除，外部系統升級前要改送 `teamid`（見下方 Changed 的「升級時」）；migration 0007 會在啟動時自動套用。
+
 ### Added
 - 團隊 TeamID（issue #5，DECISIONS D23）：32 個小寫英文字母或數字、全系統唯一，在「團隊」頁建立或編輯時填入（大寫轉小寫），留空由系統產生，表格中可複製；修改寫入稽核 `admin.team_teamid_changed`。migration 0007 替既有團隊各產生一個，啟動時自動套用。工單詳情的 `team` 新增 `teamid`。
 
