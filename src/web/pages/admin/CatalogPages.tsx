@@ -1,3 +1,4 @@
+import { Typography } from 'antd';
 import { useI18n } from '../../i18n';
 import { CrudPage } from './Crud';
 import { useOptions } from './shared';
@@ -15,11 +16,21 @@ export function TeamsPage() {
       path="/admin/teams"
       columns={[
         { label: t('ui.admin.name'), render: (r: any) => r.name },
+        // external systems route tickets by this code, so it can be copied
+        {
+          label: t('ui.admin.teamid'),
+          render: (r: any) => (
+            <Typography.Text className="mono nowrap" copyable={{ text: r.teamid }}>
+              {r.teamid}
+            </Typography.Text>
+          ),
+        },
         { label: t('ui.admin.description'), render: (r: any) => r.description },
         { label: t('ui.admin.members'), render: (r: any) => r.memberCount },
       ]}
       fields={[
         { key: 'name', label: t('ui.admin.name'), type: 'text', required: true },
+        { key: 'teamid', label: t('ui.admin.teamid'), type: 'text', extra: t('ui.admin.teamid_hint') },
         { key: 'description', label: t('ui.admin.description'), type: 'textarea' },
       ]}
       // expand a team to see its members and add or remove them

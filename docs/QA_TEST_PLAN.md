@@ -509,9 +509,9 @@
 
 | ID | 標題 | 前置條件 | 步驟 | 預期結果 | 自動化 | 優先級 |
 | --- | --- | --- | --- | --- | --- | --- |
-| API-ROUTE-001 | 依名稱或 ID 指定團隊 | `T-SOC`（`tickets:write`） | `GET /teams`；`POST /tickets` 帶 `team`（不分大小寫）或 `teamId`、`tags`（`tests/tickets.test.ts`） | 工單在該團隊、團隊成員收到通知；覆寫服務類別的預設團隊；新 tag 自動建立 | ✅ | P0 |
-| API-ROUTE-002 | 不可指定負責人與錯誤輸入 | 同上 | 帶 `assigneeId`；不存在的團隊；同時帶 `team` 與 `teamId` | `403`；`400`；`400` | ✅ | P0 |
-| API-ROUTE-003 | 團隊清單與指定團隊的權限 | 唯讀 Token、一般使用者 | 唯讀 Token `GET /teams`；一般使用者 `GET /teams`、開單帶 `team` | 皆 `403`；有 `ticket:assign` 的人員可讀 | ✅ | P1 |
+| API-ROUTE-001 | 依 TeamID 指定團隊 | `T-SOC`（`tickets:write`） | `GET /teams`（`teamid`、`name`）；`POST /tickets` 帶 `teamid`（大寫亦可）、`tags`（`tests/tickets.test.ts`） | 工單在該團隊、團隊成員收到通知；覆寫服務類別的預設團隊；新 tag 自動建立 | ✅ | P0 |
+| API-ROUTE-002 | 不可指定負責人與錯誤輸入 | 同上 | 帶 `assigneeId`；不存在或格式錯誤的 `teamid`；帶已移除的 `team` 或 `teamId` | `403`；`400`；`400`（`errors[].path` 指出欄位） | ✅ | P0 |
+| API-ROUTE-003 | 團隊清單與指定團隊的權限 | 唯讀 Token、一般使用者 | 唯讀 Token `GET /teams`；一般使用者 `GET /teams`、開單帶 `teamid` | 皆 `403`；有 `ticket:assign` 的人員可讀 | ✅ | P1 |
 
 ---
 
@@ -572,7 +572,8 @@
 | REG-TICKET-015 | 附件病毒掃描狀態 | FR-1.7 | 上傳測試惡意樣本 | `scan_status='infected'`；不可下載 | ⚠️ | P1 |
 | REG-TICKET-016 | 新增工單時指派 | FR-2.10 | 系統管理員開單並指定工程師；一般使用者帶 `assigneeId`；指派給一般使用者 | 工單為 `open`、負責人正確並通知負責人；一般使用者 `403`；不可指派的對象 `400` | ✅ | P1 |
 | REG-TICKET-017 | 回覆的通知勾選 | AC-TICKET-04 | 回覆 `notify:false`，再以預設值回覆 | 第一則不產生任何通知；第二則通知申請人且只含該則內容 | ✅ | P0 |
-| REG-TICKET-018 | 建立時指定團隊、認領 | FR-2.11 | `POST /tickets` 帶 `teamId`；成員 `PATCH {assigneeId: 自己}`；e2e「我來處理」 | 只有團隊時維持「新建立」；一般使用者 403、不存在的團隊 400；認領後負責人為自己、狀態「處理中」 | ✅ | P1 |
+| REG-TICKET-018 | 建立時指定團隊、認領 | FR-2.11 | `POST /tickets` 帶 `teamid`；成員 `PATCH {assigneeId: 自己}`；e2e「我來處理」 | 只有團隊時維持「新建立」；一般使用者 403、不存在的團隊 400；認領後負責人為自己、狀態「處理中」 | ✅ | P1 |
+| REG-TICKET-022 | 團隊 TeamID | D23 | `tests/teams.test.ts`（TeamID）：不填、自訂大寫、重複、格式錯誤、修改；0006 結構放入團隊後升級 | 不填時產生 32 碼小寫英數；大寫轉小寫；重複 `409`；格式錯誤 `400`；修改寫入稽核 `admin.team_teamid_changed`；升級後既有團隊各有不同的 TeamID | ✅ | P0 |
 | REG-TICKET-019 | 依團隊篩選 | FR-2.11 | `GET /tickets?teamId=mine`；e2e 清單「團隊」篩選 | 只回傳自己任一團隊的工單；沒有團隊時為空 | ✅ | P1 |
 | REG-TICKET-020 | 團隊成員回填與移除 `users.team_id` | FR-2.11 | `tests/teams.test.ts` 的 upgrade 測試：0002 結構放入舊資料 → 套用其餘 migration | v0.4 資料寫入 `team_members`；v0.5／v0.6 已移出的成員不會加回；欄位與旗標已刪除 | ✅ | P1 |
 | REG-TICKET-021 | 團隊頁管理成員 | FR-2.12 | `tests/teams.test.ts`（team members on the teams page）；`scripts/ui-e2e.sh`：展開團隊、加入、移除 | 成員狀態正確、候選名單正確、可見範圍立即反映、權限 403、稽核紀錄；畫面成員數同步 | ✅ | P1 |

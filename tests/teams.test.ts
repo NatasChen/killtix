@@ -6,12 +6,19 @@ import { createTestContext, databaseAt, type TestContext } from './helpers.js';
 let ctx: TestContext;
 let admin: Awaited<ReturnType<TestContext['adminClient']>>;
 const team = { desk: 0, network: 0 };
+// TeamID per team id: new tickets are routed by TeamID (DECISIONS D23)
+const teamid = new Map<number, string>();
+const newTeam = async (client: typeof admin, name: string) => {
+  const body = (await client.post('/api/v1/admin/teams', { name })).body;
+  teamid.set(body.id, body.teamid);
+  return body.id as number;
+};
 
 beforeAll(async () => {
   ctx = await createTestContext();
   admin = await ctx.adminClient();
-  team.desk = (await admin.post('/api/v1/admin/teams', { name: 'Desk' })).body.id;
-  team.network = (await admin.post('/api/v1/admin/teams', { name: 'Network' })).body.id;
+  team.desk = await newTeam(admin, 'Desk');
+  team.network = await newTeam(admin, 'Network');
 });
 afterAll(async () => {
   await ctx.close();
@@ -23,7 +30,7 @@ const user = async (email: string, role: string, teamIds: number[] = []) => {
   return u;
 };
 const ticketFor = async (teamId: number, extra: Record<string, unknown> = {}) =>
-  (await admin.post('/api/v1/tickets', { subject: `for team ${teamId}`, teamId, ...extra })).body;
+  (await admin.post('/api/v1/tickets', { subject: `for team ${teamId}`, teamid: teamid.get(teamId), ...extra })).body;
 const teamMail = async (ticketId: number) =>
   (await ctx.db.select().from(notificationLogs).where(like(notificationLogs.eventId, `team_assigned:${ticketId}:%`)))
     .map((r) => r.recipient)
@@ -124,12 +131,13 @@ describe('team visibility (SQL scope, 404 when hidden)', () => {
   it('filters the list by teamId=mine', async () => {
     const fresh = await createTestContext();
     const a = await fresh.adminClient();
-    const desk = (await a.post('/api/v1/admin/teams', { name: 'Desk' })).body.id;
-    const network = (await a.post('/api/v1/admin/teams', { name: 'Network' })).body.id;
+    // another database: its team ids repeat the shared context's, so this test keeps its own TeamIDs
+    const desk = (await a.post('/api/v1/admin/teams', { name: 'Desk' })).body;
+    const network = (await a.post('/api/v1/admin/teams', { name: 'Network' })).body;
     const agent = await fresh.createUser('mine@example.com', 'agent');
-    await a.patch(`/api/v1/admin/users/${agent.id}`, { teamIds: [desk] });
-    const mine = (await a.post('/api/v1/tickets', { subject: 'desk', teamId: desk })).body;
-    await a.post('/api/v1/tickets', { subject: 'network', teamId: network });
+    await a.patch(`/api/v1/admin/users/${agent.id}`, { teamIds: [desk.id] });
+    const mine = (await a.post('/api/v1/tickets', { subject: 'desk', teamid: desk.teamid })).body;
+    await a.post('/api/v1/tickets', { subject: 'network', teamid: network.teamid });
     await a.post('/api/v1/tickets', { subject: 'no team' });
 
     const client = await fresh.login('mine@example.com');
@@ -141,21 +149,63 @@ describe('team visibility (SQL scope, 404 when hidden)', () => {
   });
 });
 
+describe('TeamID (DECISIONS D23)', () => {
+  const VALID = /^[a-z0-9]{32}$/;
+
+  it('is generated when not given, lower-cased when given, unique, and audited when changed', async () => {
+    const generated = (await admin.post('/api/v1/admin/teams', { name: 'TeamID auto' })).body;
+    expect(generated.teamid).toMatch(VALID);
+    expect(generated.teamid).not.toBe(teamid.get(team.desk));
+
+    const code = '0B53939BF14E4D4D98D79C1DE67D6E18';
+    const given = await admin.post('/api/v1/admin/teams', { name: 'TeamID given', teamid: code });
+    expect(given.status).toBe(201);
+    expect(given.body.teamid).toBe(code.toLowerCase());
+    expect((await admin.post('/api/v1/admin/teams', { name: 'TeamID clash', teamid: code.toLowerCase() })).status).toBe(409);
+    for (const bad of ['abc', 'g'.repeat(31), `${'a'.repeat(31)}-`, 'a'.repeat(33)]) {
+      expect((await admin.post('/api/v1/admin/teams', { name: `TeamID ${bad}`, teamid: bad })).status, bad).toBe(400);
+    }
+
+    const changed = await admin.patch(`/api/v1/admin/teams/${generated.id}`, { teamid: 'c'.repeat(32) });
+    expect(changed.body.teamid).toBe('c'.repeat(32));
+    expect((await admin.patch(`/api/v1/admin/teams/${generated.id}`, { teamid: code.toLowerCase() })).status).toBe(409);
+    const logged = await ctx.db
+      .select()
+      .from(auditLogs)
+      .where(and(eq(auditLogs.action, 'admin.team_teamid_changed'), eq(auditLogs.targetId, String(generated.id))));
+    expect(logged.map((r) => r.detail)).toEqual([{ from: generated.teamid, to: 'c'.repeat(32) }]);
+  });
+
+  it('is generated for every existing team when upgrading', async () => {
+    const db = await databaseAt('0006_users_theme_light_only');
+    try {
+      await db.query(`insert into teams (name) values ('Desk'), ('Network'), ('Lab')`);
+      await db.upgrade();
+      const codes = (await db.query('select teamid from teams')).map((r) => r.teamid as string);
+      expect(codes).toHaveLength(3);
+      for (const c of codes) expect(c).toMatch(VALID);
+      expect(new Set(codes).size).toBe(3);
+    } finally {
+      await db.close();
+    }
+  });
+});
+
 describe('assigning a ticket to a team', () => {
   it('needs ticket:assign and an existing team; a team alone keeps the ticket new', async () => {
-    const created = await admin.post('/api/v1/tickets', { subject: 'team only', teamId: team.desk });
+    const created = await admin.post('/api/v1/tickets', { subject: 'team only', teamid: teamid.get(team.desk) });
     expect(created.status).toBe(201);
     const detail = (await admin.get(`/api/v1/tickets/${created.body.number}`)).body;
     expect(detail).toMatchObject({ status: 'new', assignee: null, team: { id: team.desk } });
 
     await user('requester-x@example.com', 'end_user');
     const requester = await ctx.login('requester-x@example.com');
-    expect((await requester.post('/api/v1/tickets', { subject: 'x', teamId: team.desk })).status).toBe(403);
-    expect((await admin.post('/api/v1/tickets', { subject: 'x', teamId: 999999 })).status).toBe(400);
+    expect((await requester.post('/api/v1/tickets', { subject: 'x', teamid: teamid.get(team.desk) })).status).toBe(403);
+    expect((await admin.post('/api/v1/tickets', { subject: 'x', teamid: '0'.repeat(32) })).status).toBe(400);
   });
 
   it('notifies the internal, active team members except the one assigning', async () => {
-    const ops = (await admin.post('/api/v1/admin/teams', { name: 'Operations' })).body.id;
+    const ops = await newTeam(admin, 'Operations');
     await user('lead@example.com', 'agent', [ops]);
     await user('peer@example.com', 'agent', [ops]);
     await user('manager@example.com', 'it_manager', [ops]);
@@ -165,7 +215,7 @@ describe('assigning a ticket to a team', () => {
     await ctx.db.update(users).set({ isActive: false }).where(eq(users.id, inactive.id));
 
     const lead = await ctx.login('lead@example.com');
-    const ticket = (await lead.post('/api/v1/tickets', { subject: 'router down', teamId: ops })).body;
+    const ticket = (await lead.post('/api/v1/tickets', { subject: 'router down', teamid: teamid.get(ops) })).body;
     expect(await teamMail(ticket.id)).toEqual(['manager@example.com', 'peer@example.com']);
 
     // With an assignee only the assignee is told.
@@ -190,7 +240,7 @@ describe('assigning a ticket to a team', () => {
 
 describe('team members on the teams page (DECISIONS D18)', () => {
   it('lists members with their current state and the users that can still be added', async () => {
-    const ops = (await admin.post('/api/v1/admin/teams', { name: 'Members Ops' })).body.id;
+    const ops = await newTeam(admin, 'Members Ops');
     const busy = await user('tm-ops-agent@example.com', 'agent', [ops]);
     await user('tm-ops-vendor@example.com', 'vendor', [ops]);
     const gone = await user('tm-ops-gone@example.com', 'agent', [ops]);
@@ -216,7 +266,7 @@ describe('team members on the teams page (DECISIONS D18)', () => {
   });
 
   it('adds and removes members (visibility follows at once), rejects bad users and needs catalog:manage', async () => {
-    const lab = (await admin.post('/api/v1/admin/teams', { name: 'Members Lab' })).body.id;
+    const lab = await newTeam(admin, 'Members Lab');
     const agent = await user('tm-lab-agent@example.com', 'agent');
     const ticket = await ticketFor(lab);
     const client = await ctx.login('tm-lab-agent@example.com');

@@ -8,7 +8,7 @@ SOC、SIEM 等外部系統可以透過 API 自動開單。
 | 項目 | 內容 |
 | --- | --- |
 | 目前版本 | **v0.11.0**，2026-10-29 |
-| 狀態 | Docker 版可部署；122 個自動化測試、部署後 API 檢查與瀏覽器端到端測試皆通過 |
+| 狀態 | Docker 版可部署；124 個自動化測試、部署後 API 檢查與瀏覽器端到端測試皆通過 |
 | 本版重點 | 側邊欄可收合成圖示列、主內容區獨立捲動；儀表板可拖曳移動、調整卡片大小，內容依卡片大小調整，版面保存在瀏覽器 |
 | 尚未實作 | AD/LDAP、SAML、OIDC、SCIM、FIDO2、附件、SLA 營業時間（只支援 Docker 部署，Cloudflare 方案不做，見 DECISIONS D3） |
 | 完整變更 | [CHANGELOG.md](CHANGELOG.md) |
@@ -101,13 +101,13 @@ curl -X POST http://localhost/api/v1/tickets \
     "helpTopic": "security-incident",
     "priority": 5,
     "requester": { "email": "soc@example.com", "name": "SOC Bot" },
-    "team": "資安組",
+    "teamid": "0b53939bf14e4d4d98d79c1de67d6e18",
     "tags": ["ransomware", "edr"]
   }'
 ```
 
 回應 `201 Created`，內容包含工單編號（如 `TCK-2026-000123`）與 SLA 期限。以相同的 `Idempotency-Key` 重送會回 `200` 與同一張工單。
-`team`（團隊名稱，或改用 `teamId`）可省略，省略時使用服務類別的預設團隊；可用的團隊以 `GET /api/v1/teams` 查詢。Token 不能指定負責人。
+`teamid`（團隊的 TeamID，在「團隊」頁或以 `GET /api/v1/teams` 查詢）可省略，省略時使用服務類別的預設團隊。Token 不能指定負責人。
 完整欄位說明（優先度別名、自訂欄位、代開單、錯誤碼）、最小範例與查詢服務類別／團隊的方式，見 [部署指南第 4 節](docs/DEPLOYMENT_GUIDE.md#4-外部系統soc串接)。
 
 ## 開發

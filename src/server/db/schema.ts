@@ -47,12 +47,22 @@ export const roles = pgTable('roles', {
   createdAt: createdAt(),
 });
 
-export const teams = pgTable('teams', {
-  id: serial('id').primaryKey(),
-  name: varchar('name', { length: 128 }).notNull().unique(),
-  description: text('description'),
-  createdAt: createdAt(),
-});
+export const teams = pgTable(
+  'teams',
+  {
+    id: serial('id').primaryKey(),
+    name: varchar('name', { length: 128 }).notNull().unique(),
+    // TeamID: the code external systems route tickets by (`teamid`, DECISIONS D23); 32 lower-case letters and
+    // digits, generated when not given (the default also fills existing teams when the column is added).
+    teamid: varchar('teamid', { length: 32 })
+      .notNull()
+      .unique()
+      .default(sql`replace(gen_random_uuid()::text, '-', '')`),
+    description: text('description'),
+    createdAt: createdAt(),
+  },
+  (t) => [check('chk_teams_teamid', sql`${t.teamid} ~ '^[a-z0-9]{32}$'`)],
+);
 
 export const users = pgTable(
   'users',

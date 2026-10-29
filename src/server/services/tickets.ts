@@ -183,6 +183,15 @@ function yearIn(timezone: string, date: Date): string {
 // ---------------------------------------------------------------------------
 // Create
 // ---------------------------------------------------------------------------
+/** A team's TeamID (DECISIONS D23): 32 lower-case letters and digits; upper case is accepted and lowered. */
+export const teamidSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .regex(/^[a-z0-9]{32}$/, '32 letters and digits');
+// replaced by teamid (v0.12.0): rejected rather than ignored, so an integration still sending them notices
+const replacedByTeamid = z.never({ error: 'replaced by teamid' }).optional();
+
 export const createTicketSchema = z.object({
   subject: z.string().trim().min(1).max(512),
   description: z.string().max(100_000).default(''),
@@ -195,21 +204,24 @@ export const createTicketSchema = z.object({
   requester: z.object({ email: z.email().max(255), name: z.string().trim().min(1).max(128).optional() }).optional(),
   externalId: z.string().trim().min(1).max(255).optional(),
   assigneeId: z.number().int().positive().optional(), // web form; needs ticket:assign
-  // Team by id or by name (case-insensitive), not both; default: the help topic's team. Needs ticket:assign,
-  // except through an API token: external systems may route a ticket to a team, but not to a person.
-  teamId: z.number().int().positive().optional(),
-  team: z.string().trim().min(1).max(128).optional(),
-}).refine((v) => !(v.teamId && v.team), { path: ['team'], message: 'give team or teamId, not both' });
+  // Team by its TeamID; default: the help topic's team. Needs ticket:assign, except through an API token:
+  // external systems may route a ticket to a team, but not to a person.
+  teamid: teamidSchema.optional(),
+  team: replacedByTeamid,
+  teamId: replacedByTeamid,
+});
 export type CreateTicketInput = z.infer<typeof createTicketSchema>;
 
 const ASSIGNABLE_ROLES = ['super_admin', 'it_manager', 'agent', 'vendor'];
 
-async function resolveTeamId(db: DB, input: { teamId?: number; team?: string }): Promise<number> {
+/** A team by its id (the web ticket page) or its TeamID (creating a ticket); 400 when there is none. */
+async function resolveTeamId(db: DB, by: { id: number } | { teamid: string }): Promise<number> {
+  const byId = 'id' in by;
   const [team] = await db
     .select({ id: teams.id })
     .from(teams)
-    .where(input.teamId ? eq(teams.id, input.teamId) : sql`lower(${teams.name}) = lower(${input.team!})`);
-  if (!team) throw badRequest(undefined, { errors: [{ path: input.teamId ? 'teamId' : 'team', message: 'unknown team' }] });
+    .where(byId ? eq(teams.id, by.id) : eq(teams.teamid, by.teamid));
+  if (!team) throw badRequest(undefined, { errors: [{ path: byId ? 'teamId' : 'teamid', message: 'unknown team' }] });
   return team.id;
 }
 
@@ -290,9 +302,9 @@ export async function createTicket(
     await assertAssignable(db, input.assigneeId);
   }
   let teamId = topic?.defaultTeamId ?? null;
-  if (input.teamId || input.team) {
+  if (input.teamid) {
     if (source !== 'api' && !can(actor.permissions, 'ticket:assign')) throw forbidden();
-    teamId = await resolveTeamId(db, input);
+    teamId = await resolveTeamId(db, { teamid: input.teamid });
   }
 
   const now = clock();
@@ -760,7 +772,7 @@ export async function ticketDetail(deps: Deps, actor: Actor, ticket: Ticket) {
     requester: requester ?? null,
     assignee: assignee ?? null,
     helpTopic: topic ? { id: topic.id, slug: topic.slug, name: topic.name } : null,
-    team: team ? { id: team.id, name: team.name } : null,
+    team: team ? { id: team.id, name: team.name, teamid: team.teamid } : null,
     slaPlan: slaPlan ? { id: slaPlan.id, name: slaPlan.name } : null,
     tags: (await tagsFor(db, [ticket.id])).get(ticket.id) ?? [],
     customFields: fields.map(({ field, value }) => ({
@@ -865,7 +877,7 @@ export async function updateTicket(
   }
   if (input.teamId !== undefined && input.teamId !== ticket.teamId) {
     need('ticket:assign');
-    if (input.teamId) await resolveTeamId(db, { teamId: input.teamId });
+    if (input.teamId) await resolveTeamId(db, { id: input.teamId });
     patch.teamId = input.teamId;
     events.push({ event: 'team', from: ticket.teamId, to: input.teamId });
   }

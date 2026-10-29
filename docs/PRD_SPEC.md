@@ -297,7 +297,7 @@ new ──▶ open ──▶ pending_user ──▶ open
 
 | 方法 | 路徑 | 說明 |
 | --- | --- | --- |
-| `POST` | `/api/v1/tickets` | 建立工單（支援 `external_id` 冪等鍵；可帶 `tags`，以及 `team`（名稱）或 `teamId` 指定團隊） |
+| `POST` | `/api/v1/tickets` | 建立工單（支援 `external_id` 冪等鍵；可帶 `tags`，以及 `teamid`（團隊的 TeamID）指定團隊） |
 | `GET` | `/api/v1/tickets` | 查詢列表（分頁、篩選、排序） |
 | `GET` | `/api/v1/tickets/{id}` | 取得單筆（含 thread） |
 | `PATCH` | `/api/v1/tickets/{id}` | 更新狀態/指派/優先級/Tag |
@@ -307,7 +307,8 @@ new ──▶ open ──▶ pending_user ──▶ open
 | `GET` | `/api/v1/teams` | 取得團隊清單（`id`、`name`），供開單指定團隊 |
 | `POST` | `/api/v1/webhooks` | 註冊外部事件回呼（選用） |
 
-- **指定團隊（`[Unreleased]`，DECISIONS D21）**：API Token 開單可帶 `team`（名稱，不分大小寫）或 `teamId`（擇一），覆寫服務類別的預設團隊並通知團隊成員；不存在的團隊回 `400`。Token 仍不能指定負責人（`assigneeId` 需要 `ticket:assign`）。
+- **指定團隊（DECISIONS D21、D23）**：API Token 開單可帶 `teamid`（團隊的 TeamID），覆寫服務類別的預設團隊並通知團隊成員；不存在的 TeamID 回 `400`。Token 仍不能指定負責人（`assigneeId` 需要 `ticket:assign`）。
+- **TeamID（`[Unreleased]`，issue #5，DECISIONS D23）**：每個團隊有 TeamID：32 個小寫英文字母或數字、全系統唯一；建立團隊時可自行填入（大寫會轉小寫），留空由系統產生，可修改（寫入稽核）；升級時替既有團隊產生。`GET /teams` 回傳 `teamid` 與 `name`；工單詳情的 `team` 加上 `teamid`；工單上仍以團隊名稱呈現。原本的 `team`（名稱）與 `teamId`（系統編號）開單欄位移除，帶了回 `400`。
 - **冪等性**：`POST /tickets` 支援 `Idempotency-Key` 標頭或 `external_id`，重複請求回傳原工單（`200`）而非建立新單。
 - **速率限制**：依 API Token 設定（預設 60 req/min，可調）；超限回傳 `429` 並附 `Retry-After`。
 - **錯誤格式**：RFC 7807 `application/problem+json`（`type`、`title`、`status`、`detail`、`instance`）。
@@ -324,7 +325,7 @@ new ──▶ open ──▶ pending_user ──▶ open
 - **使用者可屬於多個團隊**：`team_members`（`team_id`、`user_id`，複合主鍵，皆 `on delete cascade`）。`users.team_id` 已移除（DECISIONS D14）：migration 0003 在刪欄位前把有值的使用者搬到 `team_members`（v0.5／v0.6 已在啟動時回填過的部署略過，管理員移除的成員不會被加回），0004 刪除欄位。
 - **API 欄位**：使用者的團隊欄位為 `teamIds: number[]`（使用者建立、更新、`/auth/me`、`/catalog` 的使用者清單）。
 - **可見範圍**：有 `ticket:read:team` 的使用者看得到 `tickets.team_id` 是自己任一團隊的工單，條件以 `exists (select 1 from team_members …)` 寫在查詢層（FR-4.1）。`vendor` 與 `end_user` 維持現狀：即使被加入團隊，仍只看得到被指派、自己開立或被加入關注的工單；看不到的工單回 `404`。
-- **新增工單可選團隊**：`tickets/new` 在「負責人」旁加「團隊」下拉選單，只有 `ticket:assign` 權限者看得到；`createTicketSchema` 新增選填 `teamId`，沒有 `ticket:assign` 回 `403`、團隊不存在回 `400`；未填時沿用服務類別的預設團隊。團隊與負責人可同時指定，也可只指定其中一個；只指定團隊時狀態維持 `new`。
+- **新增工單可選團隊**：`tickets/new` 在「負責人」旁加「團隊」下拉選單，只有 `ticket:assign` 權限者看得到；`createTicketSchema` 新增選填 `teamId`（v0.12.0 起改為 `teamid`，DECISIONS D23），沒有 `ticket:assign` 回 `403`、團隊不存在回 `400`；未填時沿用服務類別的預設團隊。團隊與負責人可同時指定，也可只指定其中一個；只指定團隊時狀態維持 `new`。
 - **指派給團隊的通知**：事件 `team_assigned`。觸發時機為工單建立時有團隊且沒有負責人，或更新時團隊改變且工單沒有負責人；收件者為該團隊所有啟用中、具 `ticket:read:team` 或 `ticket:read:all` 權限的成員（不含執行這個動作的人），廠商與一般使用者不會收到。已有負責人時不發這個通知（照舊只通知負責人）。
 - **認領（「我來處理」）**：工單詳情頁「負責人」欄位旁新增按鈕，條件為目前使用者有 `ticket:assign`、工單沒有負責人或負責人不是自己、工單未結案；按下後以既有的 `PATCH /tickets/{id}` 把負責人設為自己（狀態為 `new` 時改為 `open`，並通知負責人），不新增 API。
 - **清單篩選**：工單清單的篩選列加「團隊」（全部／我的團隊／各團隊名稱），清單加「團隊」欄；API 的 `teamId` 參數接受團隊編號或 `mine`（目前使用者的任一團隊；沒有團隊時結果為空）。

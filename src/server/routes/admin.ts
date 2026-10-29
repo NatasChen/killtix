@@ -32,6 +32,7 @@ import { can, ROLE_DEFINITIONS } from '../rbac.js';
 import { audit } from '../services/audit.js';
 import { BRAND_NAME_MAX, deleteLogo, LOGO_MAX_BYTES, logoUrls, setLogo } from '../services/branding.js';
 import { sendTestEmail } from '../services/notify.js';
+import { teamidSchema } from '../services/tickets.js';
 import {
   getChannelSettings,
   getMailSettings,
@@ -309,15 +310,23 @@ export const adminRoutes = new Hono<AppEnv>()
     return c.json(rows.map((t) => ({ ...t, memberCount: byTeam.get(t.id) ?? 0 })));
   })
   .post('/teams', manageCatalog, async (c) => {
-    const body = await parseJson(c, z.object({ name, description: z.string().max(2000).optional() }));
+    // without a teamid the database generates one
+    const body = await parseJson(c, z.object({ name, teamid: teamidSchema.optional(), description: z.string().max(2000).optional() }));
     const [row] = await unique(() => c.var.deps.db.insert(teams).values(body).returning());
     await audit(c, 'admin.team_created', { type: 'team', id: row.id });
     return c.json(row, 201);
   })
   .patch('/teams/:id', manageCatalog, async (c) => {
-    const body = await parseJson(c, z.object({ name: name.optional(), description: z.string().max(2000).nullable().optional() }).strict());
+    const body = await parseJson(
+      c,
+      z.object({ name: name.optional(), teamid: teamidSchema.optional(), description: z.string().max(2000).nullable().optional() }).strict(),
+    );
+    const [before] = await c.var.deps.db.select({ teamid: teams.teamid }).from(teams).where(eq(teams.id, idParam(c)));
+    if (!before) throw notFound();
     const [row] = await unique(() => c.var.deps.db.update(teams).set(body).where(eq(teams.id, idParam(c))).returning());
     if (!row) throw notFound();
+    // external systems route tickets by the TeamID, so a change is audited
+    if (body.teamid && body.teamid !== before.teamid) await audit(c, 'admin.team_teamid_changed', { type: 'team', id: row.id }, { from: before.teamid, to: row.teamid });
     return c.json(row);
   })
 
