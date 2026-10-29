@@ -43,20 +43,21 @@ export const useBranding = () => useContext(BrandingContext);
 /**
  * The brand mark at the top of the sidebar and the login card: two elements, the logo (the company logo when one
  * is uploaded, otherwise the TicketDesk icon) and the product name. `on` is the background it sits on: a dark
- * background uses the dark-background logo and falls back to the light one.
+ * background uses the dark-background logo and falls back to the light one. `compact` (the collapsed sidebar) shows
+ * the logo alone, scaled down to fit.
  */
-export function Brand({ on, color }: { on: 'light' | 'dark'; color?: string }) {
+export function Brand({ on, color, compact }: { on: 'light' | 'dark'; color?: string; compact?: boolean }) {
   const { t } = useI18n();
   const { logo, name } = useBranding();
   const src = on === 'dark' ? (logo.dark ?? logo.light) : logo.light;
   return (
-    <div className="brand" style={{ color }}>
+    <div className={compact ? 'brand compact' : 'brand'} style={{ color }}>
       {src ? (
         <img className="brand-logo" src={src} alt={t('ui.brand.logo_alt')} />
       ) : (
         <img src="/favicon.svg" width={22} height={22} alt="" />
       )}
-      <span className="brand-name">{name}</span>
+      {!compact && <span className="brand-name">{name}</span>}
     </div>
   );
 }

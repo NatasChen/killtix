@@ -642,6 +642,7 @@
 | REG-THEME-007 | Ant Design 主題 | AC-THEME-05 | 檢查 `antdTheme()` 的 token（`tests/styles.test.ts`）；`scripts/ui-e2e.sh` 走完主要流程 | antd 的主色、底色、文字、側邊欄色取自 `palette.ts`；兩種主題的主要按鈕文字 ≥ 4.5:1 | ✅ | P1 |
 | REG-THEME-008 | 側邊欄控制項可讀 | AC-THEME-05 | `scripts/ui-e2e.sh`：淺色主題展開「語言」選單、檢查主題開關；切到深色再檢查 | 選項文字與選單底色 ≥ 4.5:1；太陽／月亮圖示對開關底色 ≥ 3:1（截圖 `05e-sidebar-theme-switch-light`） | ✅ | P1 |
 | REG-THEME-009 | 側邊欄群組摺疊 | AC-THEME-05 | `scripts/ui-e2e.sh`：登入後「系統相關」為收合，點擊展開再收合；375px 寬的截圖 | 收合時看不到子項目，展開後可點；手機寬度收合側邊欄時沒有浮動子選單蓋住內容；廠商看不到任何管理群組 | ✅ | P1 |
+| REG-THEME-010 | 側邊欄收合與獨立捲動 | AC-THEME-05 | `scripts/ui-e2e.sh`：收合側邊欄、重新整理、從圖示列的浮動子選單進入稽核日誌、縮短視窗捲動內容區 | 收合為 64 像素且重新整理後保留；底部控制項以圖示可用；只有內容區捲動、側邊欄不動；換頁回到頂端（截圖 `02c-sidebar-rail`、`02d-independent-scroll`） | ✅ | P1 |
 | REG-DASH-RWD-01 | 趨勢折線圖隨寬度縮放 | FR-3.5 | `scripts/ui-e2e.sh`：1360px 寬的儀表板 | 「新增與解決趨勢」圖寬度 ≥ 卡片內容寬度 90%；軸文字維持 11px | ✅ | P2 |
 | REG-DASH-RANGE-01 | 儀表板統計期間 | AC-REPORT-08 | `tests/dashboard.test.ts`（period）；`scripts/ui-e2e.sh`：選「近 7 天」 | 網址帶 `from`/`to`、標題顯示期間、趨勢 7 點；「期間新增」下鑽後清單的建立日期篩選相同 | ✅ | P1 |
 | REG-PERF-01 | 首頁載入大小 | FR-5（非功能） | `scripts/bundle-check.mjs`（`npm run validate`） | 首頁 JS ≤ 300 KB（gzip）；首頁不含只在管理頁使用的程式碼 | ✅ | P2 |

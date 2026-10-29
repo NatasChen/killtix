@@ -8,7 +8,11 @@ import {
   FileTextOutlined,
   FolderOpenOutlined,
   FormOutlined,
+  GlobalOutlined,
   IdcardOutlined,
+  LogoutOutlined,
+  MenuFoldOutlined,
+  MenuUnfoldOutlined,
   MessageOutlined,
   MoonOutlined,
   PlusCircleOutlined,
@@ -18,8 +22,21 @@ import {
   ToolOutlined,
   UserOutlined,
 } from '@ant-design/icons';
-import { Button, ConfigProvider, Flex, Layout as AntLayout, Menu, Select, Spin, Switch, theme as antdThemes, type MenuProps } from 'antd';
-import { Suspense, useEffect, useState, type ComponentType, type CSSProperties } from 'react';
+import {
+  Button,
+  ConfigProvider,
+  Dropdown,
+  Flex,
+  Layout as AntLayout,
+  Menu,
+  Select,
+  Spin,
+  Switch,
+  Tooltip,
+  theme as antdThemes,
+  type MenuProps,
+} from 'antd';
+import { Suspense, useEffect, useRef, useState, type ComponentType, type CSSProperties } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { patch } from '../api';
 import { useAuth } from '../auth';
@@ -51,6 +68,23 @@ const saveOpen = (keys: string[]) => {
     /* storage unavailable: the groups just start closed next time */
   }
 };
+// Whether the desktop sidebar is collapsed to icons, likewise per browser.
+const RAIL_KEY = 'td-nav-collapsed';
+const readRail = () => {
+  try {
+    return localStorage.getItem(RAIL_KEY) === '1';
+  } catch {
+    return false;
+  }
+};
+const saveRail = (rail: boolean) => {
+  try {
+    localStorage.setItem(RAIL_KEY, rail ? '1' : '0');
+  } catch {
+    /* storage unavailable: the sidebar just starts expanded next time */
+  }
+};
+const PHONE = '(max-width: 767.98px)';
 
 export function Layout() {
   const { user, can, logout } = useAuth();
@@ -58,9 +92,33 @@ export function Layout() {
   const { pathname } = useLocation();
   const p = usePalette();
   const mode = useThemeMode();
-  // Phones start with the sidebar collapsed; deciding on the first render (not after antd measures the
-  // breakpoint) avoids a frame where the expanded sidebar pushes the page wider than the screen.
-  const [collapsed, setCollapsed] = useState(() => window.matchMedia('(max-width: 767.98px)').matches);
+  // Phones hide the sidebar entirely (antd's zero-width trigger opens it) and start with it hidden; wider screens
+  // collapse it to an icon rail with the toggle at its top, remembered per browser. Deciding on the first render
+  // (not after antd measures a breakpoint) avoids a frame where the expanded sidebar pushes the page wider than
+  // the screen, and keeping the two states apart means resizing the window never overrides the user's choice.
+  const [phone, setPhone] = useState(() => window.matchMedia(PHONE).matches);
+  const [hidden, setHidden] = useState(true);
+  const [rail, setRail] = useState(readRail);
+  useEffect(() => {
+    const mq = window.matchMedia(PHONE);
+    const onChange = () => setPhone(mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  const collapsed = phone ? hidden : rail;
+  const toggle = () => {
+    setPopupKeys([]);
+    if (phone) setHidden(!hidden);
+    else {
+      setRail(!rail);
+      saveRail(!rail);
+    }
+  };
+  // The page column scrolls on its own (styles.css .app-shell); a new page starts at its top.
+  const main = useRef<HTMLElement>(null);
+  useEffect(() => {
+    main.current?.scrollTo(0, 0);
+  }, [pathname]);
 
   const changeTheme = (value: Mode) => {
     applyTheme(value);
@@ -152,10 +210,12 @@ export function Layout() {
   useEffect(() => {
     if (currentGroup) setOpenKeys((keys) => (keys.includes(`group:${currentGroup}`) ? keys : [...keys, `group:${currentGroup}`]));
   }, [currentGroup]);
+  // The icon rail shows a group as a popup on hover; those popups are tracked apart from the inline groups, so
+  // collapsing (antd then reports every group closed) keeps the user's choice for when the sidebar expands again.
+  const [popupKeys, setPopupKeys] = useState<string[]>([]);
+  useEffect(() => setPopupKeys([]), [pathname]);
   const changeOpen = (keys: string[]) => {
-    // antd closes every group when the sidebar collapses (below the breakpoint); keep the user's choice so the
-    // groups are as they were when it expands again
-    if (collapsed) return;
+    if (collapsed) return setPopupKeys(keys);
     setOpenKeys(keys);
     saveOpen(keys);
   };
@@ -177,71 +237,111 @@ export function Layout() {
     },
   };
   const label = { display: 'block', color: p.nav.muted, fontSize: 12, marginBottom: 4 } as const;
+  const toggleLabel = t(collapsed ? 'ui.nav.expand' : 'ui.nav.collapse');
+  const themeSwitch = (
+    // off = light (sun), on = dark (moon); track, icon and handle colours come from the theme's palette
+    <ConfigProvider theme={{ components: { Switch: { handleBg: p.themeSwitch.icon } } }}>
+      <Switch
+        aria-label={t('ui.theme.dark_mode')}
+        checked={mode === 'dark'}
+        onChange={(dark) => changeTheme(dark ? 'dark' : 'light')}
+        checkedChildren={<MoonOutlined style={{ color: p.themeSwitch.icon }} />}
+        unCheckedChildren={<SunOutlined style={{ color: p.themeSwitch.icon }} />}
+        style={{ background: p.themeSwitch.track }}
+      />
+    </ConfigProvider>
+  );
+  const localeOptions = locales.map((l) => ({ value: l, label: t(`ui.locale.${l}`), title: t(`ui.locale.${l}`) }));
 
   return (
-    <AntLayout style={{ minHeight: '100vh' }}>
+    <AntLayout className="app-shell">
       <AntLayout.Sider
         width={220}
-        breakpoint="md"
-        collapsedWidth={0}
+        collapsedWidth={phone ? 0 : 64}
         collapsed={collapsed}
-        onCollapse={setCollapsed}
+        // phones keep antd's zero-width trigger beside the hidden sidebar; elsewhere the toggle sits in the sidebar
+        trigger={phone ? undefined : null}
+        onCollapse={setHidden}
         zeroWidthTriggerStyle={{ top: 8 }}
         style={{ borderRight: `1px solid ${p.nav.divider}` }}>
-        <nav aria-label={t('ui.nav.main')} style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-          <Brand on="dark" color={p.nav.text} />
+        <nav aria-label={t('ui.nav.main')} className="sidebar">
+          <ConfigProvider theme={navControls}>
+            <div className={collapsed ? 'sidebar-head rail' : 'sidebar-head'}>
+              <Brand on="dark" color={p.nav.text} compact={collapsed} />
+              <Tooltip title={toggleLabel} placement="right">
+                <Button
+                  type="text"
+                  aria-label={toggleLabel}
+                  aria-expanded={!collapsed}
+                  icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+                  onClick={toggle}
+                />
+              </Tooltip>
+            </div>
+          </ConfigProvider>
           <Menu
             theme="dark"
             mode="inline"
             selectedKeys={selected ? [selected] : []}
-            // a collapsed menu shows open groups as floating popups over the page, so none are open while collapsed
-            openKeys={collapsed ? [] : openKeys}
+            openKeys={collapsed ? popupKeys : openKeys}
             onOpenChange={changeOpen}
             items={items}
             style={{ borderInlineEnd: 'none' }}
           />
           <ConfigProvider theme={navControls}>
-            <div className="sidebar-footer" style={{ borderTop: `1px solid ${p.nav.divider}` }}>
-              <NavLink to="/profile" style={{ color: p.nav.text, display: 'block' }}>
-                {user?.displayName}
-                <div style={{ color: p.nav.muted, fontSize: 12 }}>{t(`ui.role.${user?.role}`)}</div>
-              </NavLink>
-              <Flex justify="space-between" align="center">
-                <span style={{ ...label, marginBottom: 0 }}>
-                  {t('ui.common.theme')}: {t(`ui.theme.${mode}`)}
-                </span>
-                {/* off = light (sun), on = dark (moon); track, icon and handle colours come from the theme's palette */}
-                <ConfigProvider theme={{ components: { Switch: { handleBg: p.themeSwitch.icon } } }}>
-                  <Switch
-                    aria-label={t('ui.theme.dark_mode')}
-                    checked={mode === 'dark'}
-                    onChange={(dark) => changeTheme(dark ? 'dark' : 'light')}
-                    checkedChildren={<MoonOutlined style={{ color: p.themeSwitch.icon }} />}
-                    unCheckedChildren={<SunOutlined style={{ color: p.themeSwitch.icon }} />}
-                    style={{ background: p.themeSwitch.track }}
-                  />
-                </ConfigProvider>
-              </Flex>
-              <div>
-                <label htmlFor="nav-locale" style={label}>
-                  {t('ui.common.language')}
-                </label>
-                <Select
-                  id="nav-locale"
-                  value={locale}
-                  onChange={(v) => changeLocale(v)}
-                  style={{ width: '100%' }}
-                  options={locales.map((l) => ({ value: l, label: t(`ui.locale.${l}`), title: t(`ui.locale.${l}`) }))}
-                />
+            {collapsed ? (
+              // icon rail: the same controls as icons, each named by its tooltip and aria-label
+              <div className="sidebar-footer rail" style={{ borderTop: `1px solid ${p.nav.divider}` }}>
+                <Tooltip title={user?.displayName} placement="right">
+                  <NavLink to="/profile" aria-label={t('ui.nav.profile')} style={{ color: p.nav.text, fontSize: 16 }}>
+                    <UserOutlined aria-hidden />
+                  </NavLink>
+                </Tooltip>
+                {themeSwitch}
+                <Dropdown
+                  trigger={['click']}
+                  placement="topLeft"
+                  menu={{
+                    items: localeOptions.map((o) => ({ key: o.value, label: o.label })),
+                    selectable: true,
+                    selectedKeys: [locale],
+                    onClick: ({ key }) => changeLocale(key),
+                  }}>
+                  <Tooltip title={t('ui.common.language')} placement="right">
+                    <Button type="text" aria-label={t('ui.common.language')} icon={<GlobalOutlined />} />
+                  </Tooltip>
+                </Dropdown>
+                <Tooltip title={t('ui.auth.logout')} placement="right">
+                  <Button type="text" aria-label={t('ui.auth.logout')} icon={<LogoutOutlined />} onClick={() => void logout()} />
+                </Tooltip>
               </div>
-              <Button block onClick={() => void logout()}>
-                {t('ui.auth.logout')}
-              </Button>
-            </div>
+            ) : (
+              <div className="sidebar-footer" style={{ borderTop: `1px solid ${p.nav.divider}` }}>
+                <NavLink to="/profile" style={{ color: p.nav.text, display: 'block' }}>
+                  {user?.displayName}
+                  <div style={{ color: p.nav.muted, fontSize: 12 }}>{t(`ui.role.${user?.role}`)}</div>
+                </NavLink>
+                <Flex justify="space-between" align="center">
+                  <span style={{ ...label, marginBottom: 0 }}>
+                    {t('ui.common.theme')}: {t(`ui.theme.${mode}`)}
+                  </span>
+                  {themeSwitch}
+                </Flex>
+                <div>
+                  <label htmlFor="nav-locale" style={label}>
+                    {t('ui.common.language')}
+                  </label>
+                  <Select id="nav-locale" value={locale} onChange={(v) => changeLocale(v)} style={{ width: '100%' }} options={localeOptions} />
+                </div>
+                <Button block onClick={() => void logout()}>
+                  {t('ui.auth.logout')}
+                </Button>
+              </div>
+            )}
           </ConfigProvider>
         </nav>
       </AntLayout.Sider>
-      <AntLayout.Content className="main">
+      <AntLayout.Content className="main" ref={main}>
         {/* pages are lazy chunks (main.tsx): the sidebar stays while the page's chunk downloads */}
         <Suspense
           fallback={
