@@ -67,6 +67,37 @@ code, .mono { font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, mono
 .bar-row .ant-progress { margin: 0; }
 .bar-row .num { text-align: right; }
 .bar-row > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+/* dashboard grid (react-grid-layout, Dashboard.tsx): each card fills its cell and is the container its content
+   adapts to. Colours come from palette.ts through --grid-* set on .dash-grid. In edit mode a handle (move) and
+   the resize corner show on every card. */
+.widget { height: 100%; display: flex; flex-direction: column; container: widget / size; }
+.widget > .ant-card-head { flex: none; }
+.widget > .ant-card-body { flex: 1; min-height: 0; overflow: auto; }
+.widget .ant-card-head-title h3 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.widget-handle { position: absolute; top: 8px; right: 8px; z-index: 1; padding: 2px 6px; border-radius: 6px; cursor: grab;
+  color: var(--grid-accent); background: var(--grid-handle-bg); touch-action: none; }
+.dash-grid .react-grid-placeholder { background: var(--grid-accent); opacity: 0.15; border-radius: 8px; }
+.dash-grid .react-grid-item > .react-resizable-handle { z-index: 1; touch-action: none; }
+.dash-grid .react-grid-item > .react-resizable-handle::after { border-color: var(--grid-accent); }
+.dash-grid.editing .react-grid-item > .react-resizable-handle { opacity: 1; }
+.dash-grid.editing .widget { outline: 1px dashed var(--grid-accent); outline-offset: -1px; }
+.chart-stack, .chart-fill { display: flex; flex-direction: column; height: 100%; }
+.chart-stack > .chart-svg { flex: 1 1 auto; min-height: 80px; }
+/* small cards keep the core numbers: tighter padding, no bar tracks or legends, a smaller KPI */
+@container widget (max-width: 240px) {
+  .widget > .ant-card-head { padding: 0 16px; }
+  .widget > .ant-card-body { padding: 12px 16px; }
+  .bar-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .bar-row .ant-progress { display: none; }
+}
+@container widget (max-height: 300px) {
+  .widget .chart-legend { display: none; }
+}
+@container widget (max-height: 120px) {
+  .kpi > .ant-card-body { padding: 10px 16px; }
+  .kpi .ant-statistic-title { margin-bottom: 0; }
+  .kpi .ant-statistic-content { font-size: 20px; }
+}
 /* SVG charts scale with their viewBox and never exceed the card */
 .chart-svg { display: block; width: 100%; height: auto; margin: 0 auto; }
 .donut { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 16px; }

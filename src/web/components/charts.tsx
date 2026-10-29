@@ -100,7 +100,8 @@ export function Columns({ title, data }: { title: string; data: Datum[] }) {
   const band = W / data.length;
   const width = band * 0.6;
   return (
-    <div>
+    // .chart-stack: in a fixed-size dashboard card the columns shrink to leave room for the legend
+    <div className="chart-stack">
       {/* capped so a wide card does not blow the columns and labels up; centred by .chart-svg */}
       <svg className="chart-svg" style={{ maxWidth: 400 }} viewBox={`0 0 ${W} ${H}`} role="img" aria-label={describe(title, data)}>
         <line x1="0" x2={W} y1={top + plot} y2={top + plot} stroke={p.hairline} />
@@ -138,29 +139,37 @@ export function LineChart({
   createdLabel,
   resolvedLabel,
   tip,
+  fill,
 }: {
   title: string;
   points: TrendPoint[];
   createdLabel: string;
   resolvedLabel: string;
   tip: (p: TrendPoint) => string;
+  /** take the height of a fixed-size parent (a dashboard card) instead of a fixed 220px */
+  fill?: boolean;
 }) {
   const p = usePalette();
-  // The viewBox width follows the rendered width (1 unit = 1px), so the lines stretch across the card while
-  // the height and the 11px axis labels stay the same on any screen.
+  // The viewBox follows the rendered size (1 unit = 1px), so the lines stretch across the card while the 11px
+  // axis labels stay the same on any screen. With `fill` the height is what the card leaves above the legend.
   const box = useRef<HTMLDivElement>(null);
-  const [W, setW] = useState(480);
+  const legend = useRef<HTMLUListElement>(null);
+  const [[W, H], setSize] = useState([480, 220]);
   useLayoutEffect(() => {
     const el = box.current;
     if (!el) return;
-    const measure = () => setW(Math.max(240, Math.round(el.clientWidth)));
+    const measure = () => {
+      const below = legend.current?.offsetHeight ? legend.current.offsetHeight + 8 : 0; // the legend's top margin
+      const w = Math.max(240, Math.round(el.clientWidth));
+      const h = fill ? Math.max(120, Math.floor(el.clientHeight - below)) : 220;
+      setSize(([pw, ph]) => (pw === w && ph === h ? [pw, ph] : [w, h]));
+    };
     measure();
     if (typeof ResizeObserver === 'undefined') return;
     const observer = new ResizeObserver(measure);
     observer.observe(el);
     return () => observer.disconnect();
-  }, []);
-  const H = 220;
+  }, [fill]);
   const [L, R, T, B] = [34, 20, 12, 26]; // R leaves room for half of the last date label
   const pw = W - L - R;
   const ph = H - T - B;
@@ -178,7 +187,7 @@ export function LineChart({
   const labelEvery = Math.max(1, Math.ceil(N / 6));
   const label = `${title}: ${createdLabel} ${sum('created')}, ${resolvedLabel} ${sum('resolved')}`;
   return (
-    <div ref={box}>
+    <div ref={box} className={fill ? 'chart-fill' : undefined}>
       <svg className="chart-svg" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={label}>
         {[0, 1, 2, 3, 4].map((i) => (
           <g key={i}>
@@ -209,7 +218,7 @@ export function LineChart({
           </Tooltip>
         ))}
       </svg>
-      <ul className="chart-legend inline" aria-label={title}>
+      <ul ref={legend} className="chart-legend inline" aria-label={title}>
         <li>
           <svg width="22" height="10" aria-hidden>
             <line x1="0" x2="22" y1="5" y2="5" stroke={createdTone.solid} strokeWidth="2" />
