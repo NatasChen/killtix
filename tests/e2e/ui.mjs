@@ -295,6 +295,72 @@ await page.waitForURL(/[?&]from=\d{4}-\d{2}-\d{2}&to=\d{4}-\d{2}-\d{2}/);
   if ((await page.getByLabel('建立日期').inputValue()) !== from) throw new Error('created-date filter not shown');
 }
 
+step('dashboard layout: move and resize cards, adaptive content, kept after reload, re-flows, reset');
+await nav('儀表板');
+await page.getByRole('heading', { name: '目前狀態' }).waitFor();
+{
+  const cell = (id) => page.locator(`[data-widget="${id}"]`);
+  const box = (id) => cell(id).boundingBox();
+  const settle = () => page.waitForTimeout(400); // the grid animates moves for 200ms
+  const drag = async (from, dx, dy) => {
+    await from.scrollIntoViewIfNeeded();
+    const b = await from.boundingBox();
+    await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(b.x + b.width / 2 + dx, b.y + b.height / 2 + dy, { steps: 12 });
+    await page.mouse.up();
+    await settle();
+  };
+  await settle(); // the first width measurement also animates
+  const [aging0, priority0] = [await box('aging'), await box('priority')];
+  if (!(priority0.x > aging0.x + aging0.width - 1)) throw new Error('priority should start right of aging');
+  if (await cell('priority').locator('.widget-handle').count()) throw new Error('handles show outside edit mode');
+  await page.getByRole('button', { name: '自訂版面' }).click();
+  await page.getByText('拖曳卡片右上角的把手移動卡片').waitFor();
+  // move: priority onto aging's place, which pushes aging down
+  await drag(cell('priority').locator('.widget-handle'), aging0.x - priority0.x, 0);
+  const [aging1, priority1] = [await box('aging'), await box('priority')];
+  if (Math.abs(priority1.x - aging0.x) > 2 || !(aging1.y > priority1.y)) throw new Error(`move failed: priority ${JSON.stringify(priority1)}, aging ${JSON.stringify(aging1)}`);
+  // resize: priority wider and taller
+  await drag(cell('priority').locator('.react-resizable-handle'), 200, 150);
+  const priority2 = await box('priority');
+  if (!(priority2.width > priority1.width + 100 && priority2.height > priority1.height + 100)) throw new Error('resize failed');
+  // adaptive content: aging at its smallest drops the legend but keeps the chart, without overflowing the card
+  await drag(cell('aging').locator('.react-resizable-handle'), 100 - aging1.width, 100 - aging1.height);
+  const aging2 = await box('aging');
+  if (aging2.height > 260) throw new Error(`aging should shrink to its minimum, is ${aging2.height}px tall`);
+  if (await cell('aging').locator('.chart-legend').isVisible()) throw new Error('small card still shows the legend');
+  if (!(await cell('aging').getByRole('img', { name: /未結案天數/ }).isVisible())) throw new Error('small card lost its chart');
+  const scroll = await cell('aging').locator('.ant-card-body').evaluate((el) => el.scrollHeight - el.clientHeight);
+  if (scroll > 1) throw new Error(`small aging card overflows by ${scroll}px`);
+  await shot('05g-dashboard-edit');
+  await page.getByRole('button', { name: '完成' }).click();
+  // kept after a reload
+  await page.reload();
+  await page.getByRole('heading', { name: '目前狀態' }).waitFor();
+  await settle();
+  const priority3 = await box('priority');
+  if (Math.abs(priority3.x - priority2.x) > 2 || Math.abs(priority3.width - priority2.width) > 2) throw new Error('layout not kept after reload');
+  // a narrower page column re-flows the cards (here: the medium layout) without overflowing
+  await page.setViewportSize({ width: 820, height: 860 });
+  await settle();
+  if ((await overflowOf(page)) > 1) throw new Error('dashboard overflows at 820px');
+  const mainWidth = await page.locator('.main').evaluate((m) => m.clientWidth);
+  for (const id of ['aging', 'priority', 'open']) {
+    const b = await box(id);
+    if (b.x + b.width > (await page.locator('.main').boundingBox()).x + mainWidth + 1) throw new Error(`${id} sticks out at 820px`);
+  }
+  await page.setViewportSize({ width: 1360, height: 860 });
+  await settle();
+  // reset brings the default back
+  await page.getByRole('button', { name: '自訂版面' }).click();
+  await page.getByRole('button', { name: '還原預設版面' }).click();
+  await settle();
+  const priority4 = await box('priority');
+  if (Math.abs(priority4.x - priority0.x) > 2 || Math.abs(priority4.width - priority0.width) > 2) throw new Error('reset did not restore the default');
+  await page.getByRole('button', { name: '完成' }).click();
+}
+
 step('admin: company logo');
 await nav('系統設定', '系統相關');
 // draw a test logo in the page so the run needs no fixture file

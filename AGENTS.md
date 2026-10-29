@@ -14,7 +14,7 @@
 | --- | --- |
 | 目前版本 | **0.10.0**（2026-10-28，git tag `v0.10.0`），見 [CHANGELOG.md](CHANGELOG.md) |
 | 支援部署 | Docker Compose（nginx + app + PostgreSQL 16 + Redis 7；只有 nginx 對主機開放 HTTP 埠，DECISIONS D19）。Cloudflare 方案已決定不做（DECISIONS D3） |
-| 測試狀態 | 113 個 Vitest 測試、`scripts/validate.sh`、`scripts/smoke.sh`（24 項）、`scripts/ui-e2e.sh` 全部通過 |
+| 測試狀態 | 122 個 Vitest 測試、`scripts/validate.sh`、`scripts/smoke.sh`（24 項）、`scripts/ui-e2e.sh` 全部通過 |
 | 未實作 | AD/LDAP、SAML、OIDC、SCIM、FIDO2、附件、SLA 營業時間、多副本背景工作 |
 | 待客戶確認 | 見 [specs/DECISIONS.md](specs/DECISIONS.md) 中標示 ⏳ 的項目（SSO 時程）；已決定：預設管理員密碼（D1：各部署以 `.env` 設定）、Cloudflare 不做（D3）、移除 `users.team_id`（D14） |
 | 下一步建議 | v1.1：SSO（`users.identity_provider` 已預留）→ 附件 → SLA 營業時間 |
@@ -58,6 +58,7 @@
 | Email | nodemailer | 10.2.1 | |
 | 前端 | react / react-router-dom / vite | 19.3.1 / 7.18.4 / 8.3.5 | |
 | UI 元件 | antd / @ant-design/icons | 6.6.5 / 6.3.4 | **UI 一律用 Ant Design**；顏色在 `src/web/palette.ts`，經 `theme.ts` 的 `antdTheme()` 給 ConfigProvider |
+| 儀表板網格 | react-grid-layout | 2.3.0 | 只用在儀表板的拖曳與調整大小（DECISIONS D22）；Ant Design 沒有的功能才例外引入 |
 | 字型 | @fontsource-variable/noto-sans-display / noto-sans-tc | 5.3.0 / 5.3.0 | 自架 Google Noto 可變字型，見第 5 節「新增前端頁面」 |
 | 測試 | vitest | 5.0.5 | |
 
@@ -106,6 +107,7 @@ src/web/
   api.ts              fetch 包裝：自動帶 X-Requested-With、錯誤轉 ApiError、401/stage 錯誤觸發重新整理 auth
   auth.tsx / i18n.tsx / theme.ts   全域狀態；theme.ts 另有 useThemeMode() 與 antdTheme()（Ant Design 主題）
   branding.tsx        企業標誌網址與系統名稱（BrandingProvider，名稱也是分頁標題）與 <Brand>（標誌＋名稱兩個元素）：側邊欄用深色背景版，登入頁依主題選擇
+  dashboardLayout.ts  儀表板網格的預設版面、卡片尺寸上下限、瀏覽器中保存的版面（讀取時驗證，tests/dashboardLayout.test.ts）
   palette.ts          唯一的顏色來源：兩種主題的色票、tone()、狀態/優先度/SLA 對應的色相（tests/styles.test.ts 檢查對比）
   components/common.tsx 共用元件：Field（label 綁定控制項）、Choice（下拉選單）、PageHeader、各種 badge、ErrorBanner、useLoad/useAction
   components/charts.tsx 儀表板圖表（Donut、LineChart、Columns、TagCloud、Bars）：SVG 自繪、顏色只取自 palette.ts、viewBox 縮放、role="img" + aria-label
@@ -190,7 +192,9 @@ crewai_ticket_build.py CrewAI 迭代工具（PM → SAr → PG → UI 設計師 
 - 頁面放 `src/web/pages/`（管理頁放 `pages/admin/`，一頁一個檔，共用的小工具放 `shared.tsx`），在 `main.tsx`（一般）或
   `pages/admin/AdminRoutes.tsx`（管理）用 `lazyPage(() => import('./X'), 'XPage')` 註冊，**不要靜態 import 頁面**
   （`scripts/bundle-check.mjs` 會因首頁變大或含管理頁程式碼而失敗）。導覽在 `components/Layout.tsx`。
-- **UI 一律用 Ant Design 元件**（Card、Table、Form、Input、Select、Button、Tag、Alert…），不手刻 HTML 控制項，也不另加其他 UI 套件。
+- **UI 一律用 Ant Design 元件**（Card、Table、Form、Input、Select、Button、Tag、Alert…），不手刻 HTML 控制項。
+  只有 Ant Design 沒有的功能才可另加套件，且要先經維護者同意並記入 DECISIONS（目前只有儀表板網格 `react-grid-layout`，D22）；
+  套件的 CSS 若含 `data:` 資源或寫死的顏色，不要匯入那一份，改在 `styles.css` 用 `palette.ts` 的顏色重畫。
   表單欄位用 `common.tsx` 的 `<Field label>`（label 會綁定控制項，螢幕閱讀器與 e2e 的 `getByLabel()` 才找得到），下拉選單用 `<Choice>`；
   值放在元件 state，antd `Form` 只用來排版與送出。
 - 用 `useLoad()` 載入、`useAction()` 送出、`ErrorBanner` 顯示錯誤；送出按鈕同時設 `loading` 與 `disabled`（只有 loading 時點擊會被吞掉）。
@@ -228,7 +232,7 @@ crewai_ticket_build.py CrewAI 迭代工具（PM → SAr → PG → UI 設計師 
 
 | 指令 | 內容 | 需要 |
 | --- | --- | --- |
-| `npm test` | 113 個單元/整合測試（PGlite） | Node |
+| `npm test` | 122 個單元/整合測試（PGlite） | Node |
 | `TEST_DATABASE_URL=postgres://… npm test` | 同上，改用真實 PostgreSQL + 正式驅動 | 一個 Postgres（見下） |
 | `npm run validate` | 型別、schema/migration 一致、測試、文件中的測試數、建置、首頁 JS 大小（bundle-check）、OpenAPI JSON、Markdown 連結、compose 與 nginx 設定 | Node（Docker 可選） |
 | `scripts/smoke.sh <url> <預設管理員密碼>` | 部署後 API 端到端 24 項（會改管理員密碼為 `Smoke-Test-Passw0rd!`） | 執行中的系統 |
@@ -300,6 +304,8 @@ docker compose --env-file /tmp/td.env -p tdtest down -v
     手機（`matchMedia`）與桌面的收合狀態也分開：手機完全隱藏，桌面是圖示列並記在瀏覽器，縮放視窗不會改掉使用者的選擇。
 17. **頁面在 `.main` 內捲動，不是 window**（`.app-shell` 固定為視窗高度）：Playwright 的 `fullPage` 截圖只會拍到視窗高度，
     e2e 要用 `tests/e2e/ui.mjs` 的 `fullShot()`；檢查水平溢出也要看 `.main`（`overflowOf()`），因為它會裁掉溢出，只看 document 測不到。
+18. **react-grid-layout 的寬度與動畫**：`useContainerWidth()` 預設先以 1280px 排版，量到實際寬度後再以動畫移動每張卡片，手機上會短暫溢出、截圖錯位；
+    `Dashboard.tsx` 用 `measureBeforeMount: true`。e2e 量卡片位置前要等動畫（200ms）結束，拖曳前要先 `scrollIntoViewIfNeeded()`，視窗外的把手拖不到。
 
 ---
 
