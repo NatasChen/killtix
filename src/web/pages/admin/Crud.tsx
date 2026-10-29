@@ -12,6 +12,8 @@ export interface CrudField {
   required?: boolean;
   /** Only editable when creating. */
   createOnly?: boolean;
+  /** help text under the control */
+  extra?: ReactNode;
 }
 
 export interface CrudColumn<T> {
@@ -114,7 +116,7 @@ export function CrudPage<T extends Row>({
                 }
                 return (
                   <Col key={f.key} xs={24} sm={12} lg={f.type === 'textarea' ? 24 : 8}>
-                    <Field label={f.label}>
+                    <Field label={f.label} extra={f.extra}>
                       {f.type === 'textarea' ? (
                         <Input.TextArea required={f.required} disabled={disabled} autoSize={{ minRows: 3 }} value={String(value ?? '')} onChange={(e) => set(e.target.value)} />
                       ) : f.type === 'select' ? (

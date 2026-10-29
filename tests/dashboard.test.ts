@@ -170,7 +170,7 @@ describe('workload and byTeam', () => {
       // agent00: 3 open, agent01: 2, the other ten: 1 each; plus 2 unassigned; closed tickets never count
       const plan = [0, 0, 0, 1, 1, ...agents.slice(2).map((_, i) => i + 2)];
       for (const [i, who] of plan.entries()) await mk(ctx, admin, { assigneeId: agents[who].id, teamId: i % 3 === 0 ? deskTeam : i % 3 === 1 ? netTeam : null });
-      await mk(ctx, admin, {}, { teamId: deskTeam });
+      await mk(ctx, admin, { teamId: deskTeam });
       await mk(ctx, admin);
       await mk(ctx, admin, { assigneeId: agents[11].id, status: 'closed', resolvedAt: ctx.clock.now });
 
@@ -209,9 +209,9 @@ describe('dashboard visibility', () => {
       const vendor = await ctx.createUser('vendor@example.com', 'vendor');
       const user = await ctx.createUser('user@example.com', 'end_user');
 
-      await mk(ctx, admin, {}, { teamId: mine });
-      await mk(ctx, admin, {}, { teamId: mine });
-      await mk(ctx, admin, {}, { teamId: other });
+      await mk(ctx, admin, { teamId: mine });
+      await mk(ctx, admin, { teamId: mine });
+      await mk(ctx, admin, { teamId: other });
       await mk(ctx, admin, { assigneeId: vendor.id });
       await mk(ctx, admin, { requesterId: user.id });
       await mk(ctx, admin);

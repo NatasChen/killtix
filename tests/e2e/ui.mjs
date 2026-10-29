@@ -220,6 +220,16 @@ step('teams page: expand a team, see its members and their state, add and remove
 await nav('團隊', '使用者管理');
 await page.getByRole('heading', { name: '團隊', exact: true }).waitFor();
 const netTeamRow = page.getByRole('row').filter({ hasText: NET }).first();
+// TeamID (DECISIONS D23): generated for a team created without one; one typed in upper case is stored in lower case
+await netTeamRow.getByText(/^[a-z0-9]{32}$/).waitFor();
+{
+  const TEAMID = `e2e${RUN}`.padEnd(32, '0');
+  await page.getByRole('button', { name: '新增', exact: true }).first().click();
+  await page.getByLabel('名稱', { exact: true }).fill(`E2E TeamID ${RUN}`);
+  await page.getByLabel('TeamID', { exact: true }).fill(TEAMID.toUpperCase());
+  await page.getByRole('button', { name: '儲存', exact: true }).click();
+  await page.getByRole('row').filter({ hasText: `E2E TeamID ${RUN}` }).getByText(TEAMID, { exact: true }).waitFor();
+}
 await netTeamRow.getByRole('button', { name: '展開列' }).click();
 const members = page.getByRole('region', { name: `${NET} 的成員` });
 // the vendor added on the users page is listed, with the note that team membership shows them nothing

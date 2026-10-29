@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+### Added
+- 團隊 TeamID（issue #5，DECISIONS D23）：32 個小寫英文字母或數字、全系統唯一，在「團隊」頁建立或編輯時填入（大寫轉小寫），留空由系統產生，表格中可複製；修改寫入稽核 `admin.team_teamid_changed`。migration 0007 替既有團隊各產生一個，啟動時自動套用。工單詳情的 `team` 新增 `teamid`。
+
+### Changed
+- **不相容**：API 開單以 `teamid`（團隊的 TeamID）指定團隊，移除 `team`（名稱）與 `teamId`（系統編號），帶了回 400；`GET /api/v1/teams` 改為回傳 `teamid` 與 `name`。網頁的新增工單一併改用 TeamID。
+  **升級時**：外部系統改用 `teamid`，值從「團隊」頁或 `GET /api/v1/teams` 取得。
+
 ## [0.11.0] - 2026-10-29
 
 側邊欄可收合成圖示列、主內容區獨立捲動，儀表板可拖曳、調整大小並保存版面（issue #2）。沒有資料表、API、環境變數或部署變更。

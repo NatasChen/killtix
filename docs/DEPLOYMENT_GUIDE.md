@@ -139,7 +139,7 @@ APP_URL=https://ticket.example.com
 ```bash
 # 服務類別：slug、名稱，以及該類別表單的自訂欄位（key、型別、是否必填、選項）
 curl -s https://ticket.example.com/api/v1/help-topics -H "Authorization: Bearer td_xxxxxxxx_..."
-# 團隊：id 與名稱
+# 團隊：TeamID 與名稱
 curl -s https://ticket.example.com/api/v1/teams -H "Authorization: Bearer td_xxxxxxxx_..."
 ```
 
@@ -155,7 +155,7 @@ curl -X POST https://ticket.example.com/api/v1/tickets \
     "description": "主機 FIN-PC-023 於 09:12 偵測到大量檔案加密行為，已自動隔離。",
     "priority": "critical",
     "helpTopic": "security-incident",
-    "team": "資安組",
+    "teamid": "0b53939bf14e4d4d98d79c1de67d6e18",
     "tags": ["ransomware", "edr"],
     "requester": { "email": "soc@example.com", "name": "SOC Bot" },
     "customFields": { "host": "FIN-PC-023" }
@@ -170,7 +170,7 @@ curl -X POST https://ticket.example.com/api/v1/tickets \
 | `description` | 內文，最多 100,000 字 |
 | `priority` | 1–5 或別名 `lowest`／`low`／`normal`／`high`／`critical`，預設 3 |
 | `helpTopic`／`helpTopicId` | 服務類別（slug 或 id），決定 SLA、預設團隊與自動標籤 |
-| `team`／`teamId` | 團隊名稱（不分大小寫）或 id，擇一；省略時用服務類別的預設團隊。團隊改名後舊名稱會回 400，需要穩定時用 `teamId` |
+| `teamid` | 團隊的 TeamID（32 個英數字元，不分大小寫，見「團隊」頁或 `GET /teams`）；省略時用服務類別的預設團隊。團隊改名不影響 TeamID。v0.12.0 前的 `team`／`teamId` 已移除，帶了會回 400 |
 | `tags` | 最多 20 個、每個最多 64 字；不存在的會自動建立，服務類別的自動標籤也會加上 |
 | `requester`／`requesterId` | 代誰開單；省略時是建立 Token 的人。`requester.email` 沒有對應帳號時會建立外部的一般使用者 |
 | `customFields` | 以欄位 key 為鍵（見 `GET /help-topics` 的 `fields`），依該表單的必填、型別、選項與格式檢查；表單上沒有的 key 回 400 |
@@ -180,7 +180,7 @@ curl -X POST https://ticket.example.com/api/v1/tickets \
 - 成功回 `201` 與工單摘要（`id`、`number`、`status`、`priority`、`sla` 期限等）。
 - 相同的 `Idempotency-Key` 重送會回傳同一張工單（HTTP 200，標頭 `Idempotent-Replayed: true`），不會重複開單；逾時可以放心重試。
 - 錯誤為 RFC 7807（`application/problem+json`），`errors[].path` 指出欄位：
-  `400` 欄位格式錯誤、服務類別或團隊不存在、`team` 與 `teamId` 同時給、自訂欄位不符；`401` Token 錯誤、過期或已撤銷；
+  `400` 欄位格式錯誤、服務類別或 TeamID 不存在、帶了已移除的 `team`／`teamId`、自訂欄位不符；`401` Token 錯誤、過期或已撤銷；
   `403` Token 沒有所需範圍或帶了 `assigneeId`；`429` 超過速率限制。
 - 每個 Token 預設每分鐘 60 次，超過回 `429` 並附 `Retry-After`。
 - 完整規格：[docs/openapi.json](openapi.json)。
