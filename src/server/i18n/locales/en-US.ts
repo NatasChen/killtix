@@ -67,6 +67,7 @@ const enUS: Record<string, string> = {
   'ui.nav.users': 'Users', 'ui.nav.teams': 'Teams', 'ui.nav.help_topics': 'Help topics',
   'ui.nav.sla_plans': 'SLA plans', 'ui.nav.forms': 'Forms & custom fields', 'ui.nav.canned': 'Canned responses', 'ui.nav.api_tokens': 'API tokens',
   'ui.nav.notifications': 'Notification log', 'ui.nav.settings': 'Settings', 'ui.nav.audit': 'Audit log', 'ui.nav.profile': 'Profile',
+  'ui.nav.collapse': 'Collapse sidebar', 'ui.nav.expand': 'Expand sidebar',
 
   'ui.common.loading': 'Loading…', 'ui.common.empty': 'Nothing here yet', 'ui.common.all': 'All', 'ui.common.apply': 'Apply',
   'ui.common.reset': 'Reset', 'ui.common.save': 'Save', 'ui.common.saved': 'Saved', 'ui.common.cancel': 'Cancel',

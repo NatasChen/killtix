@@ -30,7 +30,22 @@ const nav = async (name, group, pg = page, menuName = '主選單') => {
   if (group && !(await link.isVisible())) await menu.getByRole('menuitem', { name: group }).click();
   await link.click();
 };
-const shot = (n) => page.screenshot({ path: `${SHOTS}/${n}.png`, fullPage: true });
+// The page column scrolls inside the window (styles.css .app-shell), so a full-page screenshot would stop at the
+// viewport: grow the viewport to the column's height for the shot, then restore it.
+const fullShot = async (pg, path) => {
+  const size = pg.viewportSize();
+  const height = await pg.evaluate(() => document.querySelector('.main')?.scrollHeight ?? 0);
+  if (height > size.height) await pg.setViewportSize({ width: size.width, height });
+  await pg.screenshot({ path, fullPage: true });
+  if (height > size.height) await pg.setViewportSize(size);
+};
+const shot = (n) => fullShot(page, `${SHOTS}/${n}.png`);
+// horizontal overflow of the window or of the page column (which clips it, so the window alone would not show it)
+const overflowOf = (pg) =>
+  pg.evaluate(() => {
+    const m = document.querySelector('.main');
+    return Math.max(document.documentElement.scrollWidth - window.innerWidth, m ? m.scrollWidth - m.clientWidth : 0);
+  });
 
 step('reset admin preferences');
 {
@@ -60,6 +75,54 @@ step('sidebar admin groups start collapsed and expand on click');
   await shot('02b-sidebar-groups');
   await group.click();
   await menu.getByRole('link', { name: '稽核日誌' }).waitFor({ state: 'hidden' });
+}
+
+step('sidebar collapses to an icon rail that is remembered; the page column scrolls on its own');
+{
+  const menu = page.getByLabel('主選單');
+  const sider = page.locator('.ant-layout-sider');
+  const siderWidth = async () => {
+    // let the width transition finish
+    let w = -1;
+    for (let i = 0; i < 40; i++) {
+      const now = (await sider.boundingBox()).width;
+      if (now === w) break;
+      w = now;
+      await page.waitForTimeout(50);
+    }
+    return Math.round(w);
+  };
+  await menu.getByRole('button', { name: '收合側邊欄' }).click();
+  if ((await siderWidth()) !== 64) throw new Error(`collapsed sidebar should be 64px wide, got ${await siderWidth()}`);
+  // footer controls stay reachable as icons
+  for (const name of ['個人設定', '深色主題', '語言', '登出']) await menu.getByLabel(name, { exact: true }).waitFor();
+  await page.reload();
+  await page.getByRole('heading', { name: '儀表板' }).waitFor();
+  await menu.getByRole('button', { name: '展開側邊欄' }).waitFor();
+  if ((await siderWidth()) !== 64) throw new Error('collapsed sidebar not remembered after reload');
+  // an admin group opens as a popup beside the rail
+  await menu.getByRole('menuitem', { name: '系統相關' }).hover();
+  const popup = page.locator('.ant-menu-submenu-popup:not(.ant-menu-submenu-hidden)');
+  await popup.getByRole('link', { name: '稽核日誌' }).waitFor();
+  await shot('02c-sidebar-rail');
+  await popup.getByRole('link', { name: '稽核日誌' }).click();
+  await page.getByRole('heading', { name: '稽核日誌' }).waitFor();
+  await popup.waitFor({ state: 'hidden' });
+  // a short window: the page column scrolls, the window and the sidebar do not
+  await page.setViewportSize({ width: 1360, height: 480 });
+  const main = page.locator('.main');
+  const toggleAt = async () => (await menu.getByRole('button', { name: '展開側邊欄' }).boundingBox()).y;
+  const before = await toggleAt();
+  if ((await main.evaluate((m) => ((m.scrollTop = m.scrollHeight), m.scrollTop))) <= 0) throw new Error('page column did not scroll');
+  if ((await page.evaluate(() => window.scrollY)) !== 0) throw new Error('the window scrolled with the page');
+  if ((await sider.boundingBox()).y !== 0 || (await toggleAt()) !== before) throw new Error('sidebar moved with the page');
+  await page.screenshot({ path: `${SHOTS}/02d-independent-scroll.png` });
+  await page.setViewportSize({ width: 1360, height: 860 });
+  await menu.getByRole('button', { name: '展開側邊欄' }).click();
+  if ((await siderWidth()) !== 220) throw new Error('expanded sidebar should be 220px wide');
+  await nav('儀表板');
+  await page.getByRole('heading', { name: '儀表板' }).waitFor();
+  if ((await main.evaluate((m) => m.scrollTop)) !== 0) throw new Error('a new page should start at the top');
 }
 
 step('create ticket through the form');
@@ -364,14 +427,14 @@ if (await p2.getByLabel('主選單').getByRole('menuitem', { name: /使用者管
 step('mobile viewport');
 await p2.setViewportSize({ width: 390, height: 844 });
 await p2.goto(`${BASE}/tickets`);
-await p2.screenshot({ path: `${SHOTS}/08-mobile.png`, fullPage: true });
-const overflow = await p2.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+await fullShot(p2, `${SHOTS}/08-mobile.png`);
+const overflow = await overflowOf(p2);
 if (overflow > 1) errors.push(`horizontal overflow on mobile: ${overflow}px`);
 
 // 375px is the narrowest supported phone width (PRD FR-5.4): no horizontal scrollbar on any screen.
 step('375px login page in light and dark');
 const noOverflow = async (target, label) => {
-  const px = await target.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  const px = await overflowOf(target);
   if (px > 1) errors.push(`horizontal overflow at 375px on ${label}: ${px}px`);
 };
 const p3 = await (await browser.newContext({ viewport: { width: 375, height: 812 }, locale: 'zh-TW' })).newPage();
@@ -382,10 +445,10 @@ await p3.getByLabel('電子郵件').waitFor();
 await p3.getByRole('img', { name: '公司標誌' }).waitFor(); // uploaded in the logo step
 await p3.locator('.brand-name', { hasText: 'ACME 服務台' }).waitFor(); // renamed in the logo step
 await noOverflow(p3, 'login page (light)');
-await p3.screenshot({ path: `${SHOTS}/09-login-375-light.png`, fullPage: true });
+await fullShot(p3, `${SHOTS}/09-login-375-light.png`);
 await p3.evaluate(() => { document.documentElement.dataset.theme = 'dark'; });
 await noOverflow(p3, 'login page (dark)');
-await p3.screenshot({ path: `${SHOTS}/10-login-375-dark.png`, fullPage: true });
+await fullShot(p3, `${SHOTS}/10-login-375-dark.png`);
 
 step('375px signed-in screens');
 // The admin's saved preferences are dark + en-US after the theme step; reset them so labels match.
@@ -403,22 +466,22 @@ await p3.getByRole('button', { name: '登入' }).click();
 await p3.getByRole('heading', { name: '儀表板' }).waitFor();
 await p3.getByRole('img', { name: /新增與解決趨勢/ }).waitFor();
 await noOverflow(p3, 'dashboard');
-await p3.screenshot({ path: `${SHOTS}/11a-dashboard-375-light.png`, fullPage: true });
+await fullShot(p3, `${SHOTS}/11a-dashboard-375-light.png`);
 await p3.evaluate(() => { document.documentElement.dataset.theme = 'dark'; });
 await noOverflow(p3, 'dashboard (dark)');
-await p3.screenshot({ path: `${SHOTS}/11b-dashboard-375-dark.png`, fullPage: true });
+await fullShot(p3, `${SHOTS}/11b-dashboard-375-dark.png`);
 await p3.evaluate(() => { document.documentElement.dataset.theme = 'light'; });
 for (const [label, path] of [['ticket list', '/tickets'], ['admin users', '/admin/users']]) {
   await p3.goto(`${BASE}${path}`);
   await p3.waitForLoadState('networkidle');
   await noOverflow(p3, label);
 }
-await p3.screenshot({ path: `${SHOTS}/11-admin-users-375.png`, fullPage: true });
+await fullShot(p3, `${SHOTS}/11-admin-users-375.png`);
 await p3.goto(`${BASE}/tickets`);
 await p3.getByRole('link', { name: 'UI 測試：印表機無法列印' }).first().click();
 await p3.getByRole('heading', { name: 'UI 測試：印表機無法列印' }).waitFor();
 await noOverflow(p3, 'ticket detail');
-await p3.screenshot({ path: `${SHOTS}/12-ticket-detail-375.png`, fullPage: true });
+await fullShot(p3, `${SHOTS}/12-ticket-detail-375.png`);
 
 await browser.close();
 if (errors.length) { console.log('BROWSER ERRORS:\n' + errors.join('\n')); process.exit(1); }

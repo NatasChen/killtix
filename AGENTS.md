@@ -295,8 +295,11 @@ docker compose --env-file /tmp/td.env -p tdtest down -v
 15. **nginx 的 `X-Forwarded-For` 必須覆寫，不能附加**：`clientIp()` 在 `TRUST_PROXY=true` 時取第一個值；改成 `$proxy_add_x_forwarded_for`
     會讓用戶端自帶的標頭成為第一個值，可偽造登入速率限制與稽核日誌的 IP。app 不對主機開放連接埠，除錯請用
     `docker compose exec app wget -qO- http://127.0.0.1:8080/healthz` 或經 nginx。
-16. **側邊欄收合時 antd `Menu` 的展開群組**：收合（手機寬度、或 Playwright 滿版截圖暫時把視窗縮成 1×1）時，antd 會呼叫 `onOpenChange([])`，
-    而且仍展開的群組會變成浮動子選單蓋住頁面。`Layout.tsx` 在收合時傳 `openKeys={[]}`、不採用 `onOpenChange`，展開後還原使用者的選擇。
+16. **側邊欄收合時 antd `Menu` 的展開群組**：收合時 antd 會呼叫 `onOpenChange([])`，而且仍展開的群組會變成浮動子選單蓋住頁面。
+    `Layout.tsx` 把收合時的浮動子選單（`popupKeys`）與展開時的群組（`openKeys`，存在瀏覽器）分開記錄，收合不會清掉使用者的選擇。
+    手機（`matchMedia`）與桌面的收合狀態也分開：手機完全隱藏，桌面是圖示列並記在瀏覽器，縮放視窗不會改掉使用者的選擇。
+17. **頁面在 `.main` 內捲動，不是 window**（`.app-shell` 固定為視窗高度）：Playwright 的 `fullPage` 截圖只會拍到視窗高度，
+    e2e 要用 `tests/e2e/ui.mjs` 的 `fullShot()`；檢查水平溢出也要看 `.main`（`overflowOf()`），因為它會裁掉溢出，只看 document 測不到。
 
 ---
 

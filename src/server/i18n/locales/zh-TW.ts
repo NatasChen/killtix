@@ -67,6 +67,7 @@ const zhTW: Record<string, string> = {
   'ui.nav.users': '使用者', 'ui.nav.teams': '團隊', 'ui.nav.help_topics': '服務類別',
   'ui.nav.sla_plans': 'SLA 方案', 'ui.nav.forms': '表單與自訂欄位', 'ui.nav.canned': '回覆範本', 'ui.nav.api_tokens': 'API Token',
   'ui.nav.notifications': '通知紀錄', 'ui.nav.settings': '系統設定', 'ui.nav.audit': '稽核日誌', 'ui.nav.profile': '個人設定',
+  'ui.nav.collapse': '收合側邊欄', 'ui.nav.expand': '展開側邊欄',
 
   'ui.common.loading': '載入中…', 'ui.common.empty': '沒有資料', 'ui.common.all': '全部', 'ui.common.apply': '套用',
   'ui.common.reset': '清除', 'ui.common.save': '儲存', 'ui.common.saved': '已儲存', 'ui.common.cancel': '取消',

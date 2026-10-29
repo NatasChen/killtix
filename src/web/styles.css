@@ -34,14 +34,27 @@ code, .mono { font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, mono
 .muted { color: var(--ink-3); }
 .small { font-size: 12px; }
 
-/* app shell: the antd Sider holds the nav; the content column scrolls on its own */
-.main { padding: 24px 28px; min-width: 0; }
+/* app shell: fills the window, and the sidebar and the content column each scroll on their own */
+.app-shell { height: 100vh; height: 100dvh; overflow: hidden; }
+.main { padding: 24px 28px; min-width: 0; overflow-y: auto; }
+.sidebar { display: flex; flex-direction: column; height: 100%; overflow-x: hidden; overflow-y: auto; }
+.sidebar-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 4px; padding-right: 8px; }
+.sidebar-head > .ant-btn { flex: none; margin-top: 12px; }
+.sidebar-head .brand { min-width: 0; flex: 1; flex-wrap: wrap; }
+/* beside the toggle a wide logo leaves little room: the name moves under the logo rather than one character per line */
+.sidebar-head .brand-name { flex: 1 0 6em; }
+/* icon rail (collapsed sidebar, 64px): logo, toggle and footer controls stack in the centre */
+.sidebar-head.rail { flex-direction: column; align-items: center; padding: 0 0 4px; }
+.sidebar-head.rail > .ant-btn { margin-top: 0; }
 .brand { font-weight: 700; font-size: 16px; padding: 16px 16px 12px; display: flex; align-items: center; gap: 8px; }
 /* company logo beside the product name: scaled to fit, never cropped or stretched; a long name wraps */
 .brand-logo { display: block; flex-shrink: 0; max-width: 120px; max-height: 32px; width: auto; height: auto; }
 .brand-name { min-width: 0; line-height: 1.3; overflow-wrap: anywhere; }
+.brand.compact { padding: 16px 8px 8px; justify-content: center; }
+.brand.compact .brand-logo { max-width: 40px; }
 .logo-preview { height: 80px; padding: 16px; border: 1px solid; border-radius: 8px; display: flex; align-items: center; }
 .sidebar-footer { margin-top: auto; display: flex; flex-direction: column; gap: 8px; padding: 12px 16px 16px; }
+.sidebar-footer.rail { align-items: center; gap: 12px; padding: 12px 8px 16px; }
 
 /* tables: IDs, badges, assignee and age stay on one line; names and dates may wrap */
 .nowrap { white-space: nowrap; }
