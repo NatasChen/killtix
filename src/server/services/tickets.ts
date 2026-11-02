@@ -608,7 +608,8 @@ export async function dashboardCharts(deps: Deps, actor: Actor, range: Dashboard
     const unassigned = await countWhere(where(open, isNull(tickets.assigneeId)));
     workload = [...people, { assigneeId: null, name: null, n: unassigned }];
     byTeam = await teamStatus(deps, actor, base, now);
-    noTeam = await countWhere(where(open, isNull(tickets.teamId)));
+    // routing tickets to teams is HQ's job: only those who see every ticket get the "no team yet" queue
+    if (can(actor.permissions, 'ticket:read:all')) noTeam = await countWhere(where(open, isNull(tickets.teamId)));
   }
   return { trend, agingBuckets, workload, byTeam, noTeam };
 }

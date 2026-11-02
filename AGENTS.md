@@ -297,6 +297,7 @@ docker compose --env-file /tmp/td.env -p tdtest down -v
     - `Button` 只有 `loading` 時點擊會被吞掉，但不是 disabled，Playwright 不會等它；送出按鈕要同時設 `disabled`。
     - `Select` 不是原生 `<select>`：e2e 用 `tests/e2e/ui.mjs` 的 `pick()`（點開後依 title 點選項），選項要帶 `title`（`<Choice>` 已處理）。
     - `Input.TextArea` 的 `autoSize` 會在頁面放一個隱藏的量測用 textarea，e2e 要用 `textarea:visible`。
+    - `DatePicker` 打字輸入日期後按 Escape 會**丟棄**輸入的值；要按 Enter 確認（在表單內同時會送出表單）。
     - `Layout.Sider` 的 `breakpoint` 要等第一次量測後才收合，手機上第一個畫面會被撐寬；`Layout.tsx` 用 `matchMedia` 決定初始的 `collapsed`。
     - 巢狀 `ConfigProvider` 換了 `algorithm` 仍會繼承外層的 token：側邊欄的深色選單曾繼承淺色主題的白色 `colorBgElevated`，變成白底白字。
       巢狀主題要自己設定會用到的底色（`Layout.tsx` 的 `navControls`）。
@@ -313,6 +314,8 @@ docker compose --env-file /tmp/td.env -p tdtest down -v
     e2e 要用 `tests/e2e/ui.mjs` 的 `fullShot()`；檢查水平溢出也要看 `.main`（`overflowOf()`），因為它會裁掉溢出，只看 document 測不到。
 18. **react-grid-layout 的寬度與動畫**：`useContainerWidth()` 預設先以 1280px 排版，量到實際寬度後再以動畫移動每張卡片，手機上會短暫溢出、截圖錯位；
     `Dashboard.tsx` 用 `measureBeforeMount: true`。e2e 量卡片位置前要等動畫（200ms）結束，拖曳前要先 `scrollIntoViewIfNeeded()`，視窗外的把手拖不到。
+
+19. **API 輸入用 `.strict()`，前端不能把整筆讀回來的資料直接送出**：例如情資回報表單曾把整筆派送資料（`id`、`team`、`history`…）當成回報送出而被 400 拒絕，API 測試抓不到（測試直接送正確欄位）。表單 state 只放要送出的欄位，並在 `tests/e2e/ui.mjs` 走一次真實操作。
 
 ---
 

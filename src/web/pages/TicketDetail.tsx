@@ -371,9 +371,11 @@ export function TicketDetailPage() {
             : t('ui.tickets.nudge_to_team', { team: data.team?.name ?? '' })}
         </p>
         <ErrorBanner error={nudging.error} />
-        <Field label={t('ui.tickets.nudge_message')}>
-          <Input.TextArea rows={3} maxLength={2000} value={nudgeText ?? ''} onChange={(e) => setNudgeText(e.target.value)} />
-        </Field>
+        <Form layout="vertical">
+          <Field label={t('ui.tickets.nudge_message')}>
+            <Input.TextArea rows={3} maxLength={2000} value={nudgeText ?? ''} onChange={(e) => setNudgeText(e.target.value)} />
+          </Field>
+        </Form>
       </Modal>
 
       <Row gutter={[16, 16]} align="top">

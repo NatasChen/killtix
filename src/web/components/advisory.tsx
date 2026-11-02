@@ -71,7 +71,15 @@ export function ResponseForm({ initial, busy, error, onSubmit, onCancel }: {
   onCancel?: () => void;
 }) {
   const { t } = useI18n();
-  const [a, setA] = useState<Answer>({ ...initial, exposure: initial.exposure === 'pending' ? '' : initial.exposure });
+  // only the answer's own fields: the target row also carries id, team, history… which the API rejects
+  const [a, setA] = useState<Answer>({
+    exposure: initial.exposure === 'pending' ? '' : initial.exposure,
+    affectedScope: initial.affectedScope,
+    actionPlan: initial.actionPlan,
+    actionDetail: initial.actionDetail,
+    actionStatus: initial.actionStatus,
+    targetDate: initial.targetDate,
+  });
   const [note, setNote] = useState('');
   const set = (patch: Partial<Answer>) => setA((x) => ({ ...x, ...patch }));
   const affected = a.exposure === 'affected';

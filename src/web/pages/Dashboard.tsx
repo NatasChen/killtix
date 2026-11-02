@@ -324,21 +324,15 @@ export function DashboardPage() {
       ),
     },
   ];
-  if (data.workload) {
-    const workload = data.workload;
+  if (data.byTeam) {
+    const byTeam = data.byTeam;
     nowCells.push({
-      id: 'workload',
+      id: 'team',
       kind: 'chart',
-      h: 6,
+      h: Math.min(14, Math.max(6, byTeam.length + 4)),
       node: (
-        <ChartCard title={t('ui.dashboard.workload')}>
-          <Bars
-            title={t('ui.dashboard.workload')}
-            rows={workload.map((r) => ({ key: r.assigneeId ?? 'none', n: r.n }))}
-            label={(k) => (k === 'none' ? t('ui.tickets.unassigned') : (workload.find((r) => r.assigneeId === k)?.name ?? String(k)))}
-            tone={(k, i) => (k === 'none' ? 'grey' : ROTATION[i % ROTATION.length])}
-            to={(k) => `/tickets?assignee=${k}`}
-          />
+        <ChartCard title={t('ui.dashboard.by_team')}>
+          <TeamTable rows={byTeam} canManageTeams={can('catalog:manage')} />
         </ChartCard>
       ),
     });
@@ -356,15 +350,21 @@ export function DashboardPage() {
       ),
     });
   }
-  if (data.byTeam) {
-    const byTeam = data.byTeam;
+  if (data.workload) {
+    const workload = data.workload;
     nowCells.push({
-      id: 'team',
+      id: 'workload',
       kind: 'chart',
-      h: Math.min(14, Math.max(6, byTeam.length + 4)),
+      h: 6,
       node: (
-        <ChartCard title={t('ui.dashboard.by_team')}>
-          <TeamTable rows={byTeam} canManageTeams={can('catalog:manage')} />
+        <ChartCard title={t('ui.dashboard.workload')}>
+          <Bars
+            title={t('ui.dashboard.workload')}
+            rows={workload.map((r) => ({ key: r.assigneeId ?? 'none', n: r.n }))}
+            label={(k) => (k === 'none' ? t('ui.tickets.unassigned') : (workload.find((r) => r.assigneeId === k)?.name ?? String(k)))}
+            tone={(k, i) => (k === 'none' ? 'grey' : ROTATION[i % ROTATION.length])}
+            to={(k) => `/tickets?assignee=${k}`}
+          />
         </ChartCard>
       ),
     });

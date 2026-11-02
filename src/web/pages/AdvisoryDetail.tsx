@@ -106,7 +106,22 @@ export function AdvisoryDetailPage() {
   const published = data.status === 'published';
 
   const columns: TableColumnsType<Target> = [
-    { key: 'team', title: t('ui.tickets.team'), className: 'nowrap', render: (_, r) => <strong>{r.team}</strong> },
+    {
+      key: 'team',
+      title: t('ui.tickets.team'),
+      className: 'nowrap',
+      render: (_, r) => (
+        <Flex vertical gap={2} align="flex-start">
+          <strong>{r.team}</strong>
+          {r.overdue && <span style={{ color: p.danger, fontWeight: 650 }} className="small">{t('ui.advisory.overdue')}</span>}
+          {published && (
+            <Button type="link" size="small" style={{ padding: 0, height: 'auto' }} onClick={() => setOnBehalf(r)}>
+              {t('ui.advisory.respond_on_behalf')}
+            </Button>
+          )}
+        </Flex>
+      ),
+    },
     {
       key: 'exposure',
       title: t('ui.advisory.exposure'),
@@ -118,21 +133,11 @@ export function AdvisoryDetailPage() {
         </Flex>
       ),
     },
-    { key: 'scope', title: t('ui.advisory.affected_scope'), render: (_, r) => <Text value={r.affectedScope} /> },
-    {
-      key: 'action',
-      title: t('ui.advisory.action'),
-      render: (_, r) => (
-        <Flex vertical gap={2}>
-          <ActionSummary answer={r} />
-          {r.overdue && <span style={{ color: p.danger, fontWeight: 650 }} className="small">{t('ui.advisory.overdue')}</span>}
-        </Flex>
-      ),
-    },
+    { key: 'scope', title: t('ui.advisory.affected_scope'), render: (_, r) => <div style={{ maxWidth: 220 }}><Text value={r.affectedScope} /></div> },
+    { key: 'action', title: t('ui.advisory.action'), render: (_, r) => <ActionSummary answer={r} /> },
     {
       key: 'updated',
       title: t('ui.advisory.last_update'),
-      className: 'nowrap',
       render: (_, r) =>
         r.respondedAt ? (
           <div className="small">
@@ -143,19 +148,6 @@ export function AdvisoryDetailPage() {
           <span className="muted">—</span>
         ),
     },
-    ...(published
-      ? ([
-          {
-            key: 'act',
-            title: '',
-            render: (_, r) => (
-              <Button size="small" onClick={() => setOnBehalf(r)}>
-                {t('ui.advisory.respond_on_behalf')}
-              </Button>
-            ),
-          },
-        ] as TableColumnsType<Target>)
-      : []),
   ];
 
   const stat = (label: string, value: ReactNode, alert = false) => (
@@ -238,7 +230,8 @@ export function AdvisoryDetailPage() {
                   columns={columns}
                   dataSource={data.targets}
                   pagination={false}
-                  scroll={{ x: 'max-content' }}
+                  // a fixed minimum lets long cells wrap inside the card instead of scrolling sideways
+                  scroll={{ x: 720 }}
                   expandable={{
                     expandedRowRender: (r) => <ResponseHistory entries={r.history} />,
                     rowExpandable: (r) => r.history.length > 0,

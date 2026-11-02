@@ -247,6 +247,66 @@ await members.getByRole('button', { name: '把 UI Vendor 移出團隊' }).click(
 await members.getByRole('row').filter({ hasText: 'UI Vendor' }).waitFor({ state: 'detached' });
 await netTeamRow.getByRole('cell', { name: '1', exact: true }).waitFor();
 
+step('security advisory: HQ writes and sends it to a team, a team member answers, HQ sees the answer (D24)');
+{
+  const h = { 'X-Requested-With': 'XMLHttpRequest' };
+  const AGENT = { email: `agent.${RUN}@example.com`, password: 'E2e-Agent-Passw0rd!' };
+  const netId = (await (await page.request.get(`${BASE}/api/v1/admin/teams`, { headers: h })).json()).find((tm) => tm.name === NET).id;
+  const created = await page.request.post(`${BASE}/api/v1/admin/users`, { data: { email: AGENT.email, displayName: 'UI Agent', role: 'agent', teamIds: [netId] }, headers: h });
+  const { temporaryPassword } = await created.json();
+  const agentCtx = await browser.newContext({ viewport: { width: 1360, height: 860 }, locale: 'zh-TW' });
+  await agentCtx.request.post(`${BASE}/api/v1/auth/login`, { data: { email: AGENT.email, password: temporaryPassword }, headers: h });
+  await agentCtx.request.post(`${BASE}/api/v1/auth/change-password`, { data: { currentPassword: temporaryPassword, newPassword: AGENT.password }, headers: h });
+
+  const TITLE = `E2E 情資 ${RUN}`;
+  await nav('資安情資');
+  await page.getByRole('heading', { name: '資安情資', exact: true }).waitFor();
+  await page.getByRole('button', { name: '新增情資' }).click();
+  await page.getByRole('heading', { name: '新增情資' }).waitFor();
+  await page.getByLabel('標題', { exact: true }).fill(TITLE);
+  await page.getByLabel('風險／威脅說明').fill('E2E：未經驗證的遠端程式碼執行。');
+  await page.getByLabel('CVE', { exact: true }).fill('cve-2026-99999');
+  await page.keyboard.press('Enter');
+  await pick(page.getByLabel('嚴重度'), '緊急');
+  await page.getByLabel('派送團隊').click(); // a multiple select stays open: pick, then close it
+  await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').getByTitle(NET, { exact: true }).click();
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: '儲存並發布' }).click();
+  await page.getByRole('heading', { name: TITLE }).waitFor();
+  await page.getByText('CVE-2026-99999').first().waitFor(); // stored upper-cased
+  const hqRow = page.getByRole('row').filter({ hasText: NET });
+  await hqRow.getByText('待回報').waitFor();
+
+  const agent = await agentCtx.newPage();
+  agent.on('console', onConsole);
+  agent.on('pageerror', (e) => errors.push(String(e)));
+  await agent.goto(BASE); // already signed in: the password change above completed the session
+  await agent.getByRole('heading', { name: '儀表板' }).waitFor();
+  await nav('資安情資', undefined, agent);
+  await agent.getByRole('link', { name: TITLE }).click();
+  await agent.getByRole('heading', { name: TITLE }).waitFor();
+  // the answer form sends only the answer: a 400 here once meant the whole target row was posted
+  await agent.getByRole('radio', { name: '受影響', exact: true }).check();
+  await agent.getByLabel('受影響範圍').fill('sw-core-01');
+  await pick(agent.getByLabel('處理方式'), '修補／更新');
+  await pick(agent.getByLabel('處理狀態'), '處理中');
+  await agent.getByLabel('處理說明').fill('週五維護窗口更新');
+  // Enter confirms the typed date (Escape would discard it) and submits the form
+  await agent.getByLabel('預計完成日').fill('2026-12-31');
+  await agent.keyboard.press('Enter');
+  await agent.getByRole('button', { name: '更新回報' }).waitFor();
+  await agent.getByText('預計 2026-12-31 完成').first().waitFor();
+  if ((await overflowOf(agent)) > 1) errors.push('horizontal overflow on the advisory answer page');
+  await fullShot(agent, `${SHOTS}/05c-advisory-team-answer.png`);
+  await agentCtx.close();
+
+  await page.reload();
+  await hqRow.getByText('受影響').first().waitFor();
+  await hqRow.getByText('UI Agent').waitFor();
+  if ((await overflowOf(page)) > 1) errors.push('horizontal overflow on the advisory page');
+  await shot('05d-advisory-hq');
+}
+
 step('dashboard charts: render, drill down by status and by tag');
 const TAG = `e2etag${RUN}`;
 {

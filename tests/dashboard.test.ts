@@ -253,6 +253,7 @@ describe('dashboard visibility', () => {
       expect(a.workload.reduce((s: number, r: any) => s + r.n, 0)).toBe(2);
       // an engineer sees their own teams only, not every team of the organisation
       expect(a.byTeam.map((r: any) => r.name)).toEqual(['Mine']);
+      expect(a.noTeam).toBeNull(); // routing tickets to teams is HQ's queue
 
       for (const [email, n] of [['vendor@example.com', 1], ['user@example.com', 1]] as const) {
         const d = await dashboard(await ctx.login(email));
