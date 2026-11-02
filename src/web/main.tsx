@@ -27,6 +27,10 @@ const TicketListPage = lazyPage(() => import('./pages/TicketList'), 'TicketListP
 const TicketNewPage = lazyPage(() => import('./pages/TicketNew'), 'TicketNewPage');
 const TicketDetailPage = lazyPage(() => import('./pages/TicketDetail'), 'TicketDetailPage');
 const ProfilePage = lazyPage(() => import('./pages/Profile'), 'ProfilePage');
+const AdvisoryListPage = lazyPage(() => import('./pages/AdvisoryList'), 'AdvisoryListPage');
+const AdvisoryNewPage = lazyPage(() => import('./pages/AdvisoryForm'), 'AdvisoryNewPage');
+const AdvisoryEditPage = lazyPage(() => import('./pages/AdvisoryForm'), 'AdvisoryEditPage');
+const AdvisoryDetailPage = lazyPage(() => import('./pages/AdvisoryDetail'), 'AdvisoryDetailPage');
 const AdminRoutes = lazyPage(() => import('./pages/admin/AdminRoutes'), 'AdminRoutes');
 
 /** Ant Design theme (palette.ts tokens, light/dark algorithm) and the locale of antd's built-in labels. */
@@ -73,6 +77,10 @@ function Root() {
         <Route path="tickets" element={<TicketListPage />} />
         <Route path="tickets/new" element={<TicketNewPage />} />
         <Route path="tickets/:id" element={<TicketDetailPage />} />
+        <Route path="advisories" element={<AdvisoryListPage />} />
+        <Route path="advisories/new" element={<AdvisoryNewPage />} />
+        <Route path="advisories/:id" element={<AdvisoryDetailPage />} />
+        <Route path="advisories/:id/edit" element={<AdvisoryEditPage />} />
         <Route path="profile" element={<ProfilePage />} />
         <Route path="admin/*" element={<AdminRoutes />} />
         <Route path="*" element={<Navigate to="/" replace />} />

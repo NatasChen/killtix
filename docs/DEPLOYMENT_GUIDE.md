@@ -193,9 +193,9 @@ curl -X POST https://ticket.example.com/api/v1/tickets \
 
 | 管道 | 設定位置 | 收件者 |
 | --- | --- | --- |
-| Email | 「郵件設定」：SMTP（主機、連接埠、TLS、帳號、密碼、寄件者）或 Resend（API Key、寄件者），可寄送測試信 | 被指派者（指派、使用者回覆、SLA 逾時）、申請人（對外回覆） |
-| Telegram | 「通知設定」的 Bot Token；使用者在「個人設定」填入自己的 Chat ID | 被指派者 |
-| Microsoft Teams | 「通知設定」的 Webhook URL（Teams Workflows 的 https 網址，送出 Adaptive Card） | 頻道：新工單、SLA 逾時、每日 3 天積壓報告 |
+| Email | 「郵件設定」：SMTP（主機、連接埠、TLS、帳號、密碼、寄件者）或 Resend（API Key、寄件者），可寄送測試信 | 被指派者（指派、回覆、SLA 即將逾時與逾時、催辦；沒有負責人時改為團隊成員）、申請人（對外回覆）、資安情資派送團隊的成員 |
+| Telegram | 「通知設定」的 Bot Token；使用者在「個人設定」填入自己的 Chat ID | 與 Email 相同的個人通知（申請人回覆通知除外） |
+| Microsoft Teams | 「通知設定」的 Webhook URL（Teams Workflows 的 https 網址，送出 Adaptive Card） | 頻道：新工單、SLA 逾時、每日 3 天積壓報告、資安情資逾期未回報與團隊回報受影響 |
 
 密碼、API Key、Bot Token 與 Webhook URL 以 `APP_SECRET` 加密存在資料庫，只寫不讀；更換 `APP_SECRET` 後需要重新輸入。
 

@@ -27,6 +27,11 @@ const DYNAMIC: Record<string, string[]> = {
   'ui.source.': ['web', 'api', 'email'],
   'ui.thread.': ['customer_message', 'agent_reply', 'internal_note', 'system_event'],
   'ui.visibility.': ['public', 'internal'],
+  'ui.advisory.severity.': ['low', 'medium', 'high', 'critical'],
+  'ui.advisory.status.': ['draft', 'published', 'closed'],
+  'ui.advisory.exposure.': ['pending', 'investigating', 'not_affected', 'affected'],
+  'ui.advisory.plan.': ['patch', 'mitigate', 'accept_risk', 'other'],
+  'ui.advisory.action_status.': ['not_started', 'in_progress', 'done'],
   'notify.': [],
   'error.': [],
 };

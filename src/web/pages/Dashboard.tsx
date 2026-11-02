@@ -44,6 +44,33 @@ interface Dashboard {
   workload: { assigneeId: number | null; name: string | null; n: number }[] | null;
   byTeam: TeamStatusRow[] | null;
   noTeam: number | null;
+  advisories: { scope: 'all' | 'mine'; openAdvisories: number; awaitingResponse: number; affectedOpen: number; overdue: number } | null;
+}
+
+/** Threat-intel advisories still needing attention: every team's for HQ, one's own teams' otherwise. */
+function AdvisoryCard({ data }: { data: NonNullable<Dashboard['advisories']> }) {
+  const { t } = useI18n();
+  const p = usePalette();
+  const list = data.scope === 'all' ? '/advisories?status=published' : '/advisories?todo=1';
+  const items: { key: string; label: string; n: number; alert?: boolean }[] = [
+    ...(data.scope === 'all' ? [{ key: 'open', label: t('ui.dashboard.advisories_open'), n: data.openAdvisories }] : []),
+    { key: 'awaiting', label: t('ui.dashboard.advisories_awaiting'), n: data.awaitingResponse },
+    { key: 'affected', label: t('ui.dashboard.advisories_affected'), n: data.affectedOpen, alert: data.affectedOpen > 0 },
+    { key: 'overdue', label: t('ui.dashboard.advisories_overdue'), n: data.overdue, alert: data.overdue > 0 },
+  ];
+  return (
+    <Flex wrap gap="12px 32px">
+      {items.map((i) => (
+        <Statistic
+          key={i.key}
+          title={i.label}
+          value={i.n}
+          styles={{ content: { fontWeight: 650, color: i.alert ? p.danger : undefined } }}
+          formatter={(v) => <Link to={list} style={{ color: 'inherit' }}>{v}</Link>}
+        />
+      ))}
+    </Flex>
+  );
 }
 
 interface TeamStatusRow {
@@ -312,6 +339,19 @@ export function DashboardPage() {
             tone={(k, i) => (k === 'none' ? 'grey' : ROTATION[i % ROTATION.length])}
             to={(k) => `/tickets?assignee=${k}`}
           />
+        </ChartCard>
+      ),
+    });
+  }
+  if (data.advisories) {
+    const advisories = data.advisories;
+    nowCells.push({
+      id: 'advisories',
+      kind: 'chart',
+      h: 5,
+      node: (
+        <ChartCard title={t('ui.dashboard.advisories')}>
+          <AdvisoryCard data={advisories} />
         </ChartCard>
       ),
     });

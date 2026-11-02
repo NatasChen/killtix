@@ -14,7 +14,7 @@
 | --- | --- |
 | 目前版本 | **0.12.0**（2026-10-29，git tag `v0.12.0`），見 [CHANGELOG.md](CHANGELOG.md) |
 | 支援部署 | Docker Compose（nginx + app + PostgreSQL 16 + Redis 7；只有 nginx 對主機開放 HTTP 埠，DECISIONS D19）。Cloudflare 方案已決定不做（DECISIONS D3） |
-| 測試狀態 | 124 個 Vitest 測試、`scripts/validate.sh`、`scripts/smoke.sh`（24 項）、`scripts/ui-e2e.sh` 全部通過 |
+| 測試狀態 | 141 個 Vitest 測試、`scripts/validate.sh`、`scripts/smoke.sh`（24 項）、`scripts/ui-e2e.sh` 全部通過 |
 | 未實作 | AD/LDAP、SAML、OIDC、SCIM、FIDO2、附件、SLA 營業時間、多副本背景工作 |
 | 待客戶確認 | 見 [specs/DECISIONS.md](specs/DECISIONS.md) 中標示 ⏳ 的項目（SSO 時程）；已決定：預設管理員密碼（D1：各部署以 `.env` 設定）、Cloudflare 不做（D3）、移除 `users.team_id`（D14） |
 | 下一步建議 | v1.1：SSO（`users.identity_provider` 已預留）→ 附件 → SLA 營業時間 |
@@ -75,7 +75,8 @@ src/server/
   config.ts           所有環境變數的唯一入口（loadConfig）。新增環境變數要同時更新 .env.example、docker-compose.yml、docs/DEPLOYMENT_GUIDE.md
   context.ts          Deps（db/config/glossary/rateLimiter/secretBox/clock）、AuthContext、AppEnv 型別
   errors.ts           ApiError(status, code)；code 對應 glossary 的 error.<code>
-  rbac.ts             ROLE_DEFINITIONS（角色→權限）、can()、isStaff()、ticketScope()（查詢層授權；團隊範圍經 `team_members` 子查詢，一人可屬多個團隊）
+  rbac.ts             ROLE_DEFINITIONS（角色→權限）、can()、isStaff()、ticketScope()（查詢層授權；團隊範圍經 `team_members` 子查詢，一人可屬多個團隊）；
+                      權限另有 `ticket:nudge`（催辦）、`advisory:manage`（HQ 管理情資）、`advisory:respond`（團隊回報情資）
   cli.ts              維運指令：reset-password <email>
   auth/crypto.ts      sha256、隨機 token、bcrypt、密碼政策、隨機密碼、AES-GCM secretBox
   auth/session.ts     session cookie、API token 驗證（authenticate）、csrfGuard、guard()、nextStage()
@@ -90,11 +91,15 @@ src/server/
   routes/tickets.ts   工單 CRUD、對話、關注者（API Token 可用的路由在這裡）
   routes/reports.ts   儀表板、CSV 匯出
   routes/catalog.ts   下拉選單資料（服務類別＋欄位、團隊、使用者、範本）
+  routes/advisories.ts 資安情資（D24）：列表、建立、編輯、發布、結案／重新開啟、刪除草稿、提醒、團隊回報（`PUT /:id/teams/:teamId`）、CSV；不開放 API Token
   routes/admin.ts     使用者、團隊（含成員管理）、SLA、表單/欄位、服務類別、標籤、範本、API Token、設定、glossary、通知紀錄、稽核
   routes/util.ts      parseJson/parseWith（zod）、rateLimit、publicUser
   services/tickets.ts 工單核心：建立（冪等）、篩選條件、詳情、狀態機、SLA 暫停、自訂欄位驗證、對話、關注者
-  services/notify.ts  outbox：notifyTicketEvent（決定誰收到什麼）、enqueue、dispatchPending（重試/退避）、各管道發送
-  services/jobs.ts    scanSla（逾時/即將逾時）、agingDigest（每日 3 天積壓報告）
+  services/notify.ts  outbox：notifyTicketEvent（決定誰收到什麼；回覆、SLA、催辦在沒有負責人時通知團隊內部成員，D25）、teamRecipients()／teamMembersWith()、
+                      enqueue、dispatchPending（重試/退避）、各管道發送
+  services/advisories.ts 資安情資（D24）：advisoryScope()／targetScope()（查詢層授權）、建立／發布／回報、進度統計、儀表板摘要、
+                      notifyTarget()（團隊成員）、scanAdvisories()（期限前一天、逾期、預計完成日已過；index.ts 每 5 分鐘執行）
+  services/jobs.ts    scanSla（逾時/即將逾時，兩者都通知）、agingDigest（每日 3 天積壓報告）
   services/settings.ts system_settings 讀寫：2FA 全域開關、digest 執行日、系統名稱、通知總開關與所有通知管道（秘密以 secretBox 加密、只寫不讀，DECISIONS D13）
   services/branding.ts 企業標誌：PNG 檢查（檔頭、512 KB）、brand_logos 讀寫、帶版本的公開網址
   services/audit.ts   稽核日誌
@@ -112,7 +117,8 @@ src/web/
   components/common.tsx 共用元件：Field（label 綁定控制項）、Choice（下拉選單）、PageHeader、各種 badge、ErrorBanner、useLoad/useAction
   components/charts.tsx 儀表板圖表（Donut、LineChart、Columns、TagCloud、Bars）：SVG 自繪、顏色只取自 palette.ts、viewBox 縮放、role="img" + aria-label
   styles.css          只放版面與首次繪製的底色，元件樣式來自 Ant Design
-  pages/…             各頁面；Dashboard.tsx 分「目前狀態」與「期間統計」兩區（期間在網址 ?from=&to=，DECISIONS D16）
+  pages/…             各頁面；Dashboard.tsx 分「目前狀態」與「期間統計」兩區（期間在網址 ?from=&to=，DECISIONS D16），團隊狀態表與情資卡片在「目前狀態」；
+                      AdvisoryList／AdvisoryForm／AdvisoryDetail 是資安情資，共用元件（徽章、回報表單、回報紀錄）在 components/advisory.tsx
   pages/admin/        AdminRoutes.tsx 只放路由與 lazyPage()；每頁一個檔：UsersPage、CatalogPages（團隊／SLA／服務類別／回覆範本，
                       皆為 Crud.tsx 的 CrudPage 設定）、FormsPage、ApiTokensPage、SettingsPage（LogoSettings、NotifySettingsCard、MailSettingsCard）、
                       NotificationsPage、AuditPage；shared.tsx 放共用的 useOptions、OneTimeSecret、tableProps、sectionTitle；
@@ -120,7 +126,7 @@ src/web/
   public/theme-init.js 首次繪製前套用主題（CSP 不允許 inline script，所以是外部檔）
 drizzle/              自動產生的 migration，不要手改
 deploy/nginx/         compose 的 nginx 設定：HTTP 轉送到 app:8080、覆寫 X-Forwarded-For（validate.sh 以 `nginx -t` 檢查）
-tests/                Vitest：helpers.ts（測試環境工廠）、auth / tickets / teams / dashboard / notify / i18n 測試；e2e/ui.mjs（瀏覽器）
+tests/                Vitest：helpers.ts（測試環境工廠）、auth / tickets / teams / dashboard / notify / advisories / i18n 測試；e2e/ui.mjs（瀏覽器）
 scripts/              init-env.sh（建立 .env、只填空白密鑰）、validate.sh、smoke.sh、ui-e2e.sh、check-links.mjs、
                       bundle-check.mjs（首頁 JS ≤ 300 KB gzip、首頁不含管理頁程式碼）、
                       seed-sample-tickets.py（經 API 建立 30 張範例工單，只用 Python 標準函式庫）
@@ -144,6 +150,7 @@ crewai_ticket_build.py CrewAI 迭代工具（PM → SAr → PG → UI 設計師 
 違反任何一條都視為安全或資料正確性問題，必須有測試保護。
 
 1. **授權在 SQL 查詢層套用**：讀取工單一律透過 `loadVisibleTicket()` 或 `buildTicketConditions()`，兩者都使用 `ticketScope()`。不可以先查全部再在程式中過濾。
+   資安情資同理：情資用 `advisoryScope()`（`loadVisibleAdvisory()`），各團隊回報用 `targetScope()`；團隊成員只看得到派給自己團隊的情資與自己團隊的回報（D24）。
    團隊成員資格只看 `team_members`（`users.team_id` 已在 migration 0004 移除，DECISIONS D14）；廠商與一般使用者即使在團隊中也不會因此看到團隊工單。
 2. **看不到的工單回 404**，不是 403（不洩漏存在性）。
 3. **`visibility='internal'` 的自訂欄位、系統事件與既有的內部備忘**永遠不回傳給非 staff（`isStaff()` = 有 `ticket:note` 權限），也**永遠不觸發通知**。
@@ -232,7 +239,7 @@ crewai_ticket_build.py CrewAI 迭代工具（PM → SAr → PG → UI 設計師 
 
 | 指令 | 內容 | 需要 |
 | --- | --- | --- |
-| `npm test` | 124 個單元/整合測試（PGlite） | Node |
+| `npm test` | 141 個單元/整合測試（PGlite） | Node |
 | `TEST_DATABASE_URL=postgres://… npm test` | 同上，改用真實 PostgreSQL + 正式驅動 | 一個 Postgres（見下） |
 | `npm run validate` | 型別、schema/migration 一致、測試、文件中的測試數、建置、首頁 JS 大小（bundle-check）、OpenAPI JSON、Markdown 連結、compose 與 nginx 設定 | Node（Docker 可選） |
 | `scripts/smoke.sh <url> <預設管理員密碼>` | 部署後 API 端到端 24 項（會改管理員密碼為 `Smoke-Test-Passw0rd!`） | 執行中的系統 |

@@ -16,6 +16,7 @@ import {
   MessageOutlined,
   MoonOutlined,
   PlusCircleOutlined,
+  SafetyCertificateOutlined,
   SettingOutlined,
   SunOutlined,
   TeamOutlined,
@@ -137,6 +138,7 @@ export function Layout() {
     { to: '/', label: t('ui.nav.dashboard'), icon: DashboardOutlined, end: true },
     { to: '/tickets', label: t('ui.nav.tickets'), icon: FileTextOutlined, end: true },
     ...(can('ticket:create') ? [{ to: '/tickets/new', label: t('ui.nav.new_ticket'), icon: PlusCircleOutlined }] : []),
+    ...(can('advisory:manage') || can('advisory:respond') ? [{ to: '/advisories', label: t('ui.nav.advisories'), icon: SafetyCertificateOutlined }] : []),
   ];
   const groups: Group[] = [
     {
