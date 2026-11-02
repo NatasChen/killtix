@@ -1,5 +1,5 @@
 import { DragOutlined, HolderOutlined } from '@ant-design/icons';
-import { Alert, Button, Card, DatePicker, Flex, Progress, Statistic } from 'antd';
+import { Alert, Button, Card, DatePicker, Flex, Progress, Statistic, Table, type TableColumnsType } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
 import { useState, type CSSProperties, type ReactNode } from 'react';
 import { Responsive, useContainerWidth, type ResponsiveLayouts } from 'react-grid-layout';
@@ -8,7 +8,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { get } from '../api';
 import { useAuth } from '../auth';
 import { Bars, Columns, Donut, LineChart, TagCloud, type TrendPoint } from '../components/charts';
-import { ErrorBanner, Loading, PageHeader, useLoad, usePalette } from '../components/common';
+import { Empty, ErrorBanner, Loading, PageHeader, useLoad, usePalette } from '../components/common';
 import {
   BREAKPOINTS,
   COLS,
@@ -42,7 +42,71 @@ interface Dashboard {
   trend: TrendPoint[];
   agingBuckets: { key: '0-1' | '1-3' | '3-7' | '7-14' | '14+'; n: number }[];
   workload: { assigneeId: number | null; name: string | null; n: number }[] | null;
-  byTeam: { teamId: number | null; name: string | null; n: number }[] | null;
+  byTeam: TeamStatusRow[] | null;
+  noTeam: number | null;
+}
+
+interface TeamStatusRow {
+  teamId: number;
+  name: string;
+  open: number;
+  olderThan3Days: number;
+  slaBreached: number;
+  unclaimed: number;
+}
+
+const UNRESOLVED = 'status=new,open,pending_user';
+
+/**
+ * Open tickets per team, one row each, so HQ sees which team to follow up with. Every count opens the ticket list
+ * with the same filter; teams needing attention come first (server order).
+ */
+function TeamTable({ rows, canManageTeams }: { rows: TeamStatusRow[]; canManageTeams: boolean }) {
+  const { t } = useI18n();
+  const p = usePalette();
+  if (!rows.length) {
+    return (
+      <Empty>
+        {t('ui.dashboard.no_teams')}
+        {canManageTeams && (
+          <div>
+            <Link to="/admin/teams">{t('ui.dashboard.create_teams')}</Link>
+          </div>
+        )}
+      </Empty>
+    );
+  }
+  const cell = (n: number, query: string, alert = false) =>
+    n ? (
+      <Link to={`/tickets?${query}`} style={alert ? { color: p.danger, fontWeight: 650 } : undefined}>
+        {n}
+      </Link>
+    ) : (
+      <span className="muted">0</span>
+    );
+  const columns: TableColumnsType<TeamStatusRow> = [
+    { key: 'name', title: t('ui.tickets.team'), render: (_, r) => <Link to={`/tickets?teamId=${r.teamId}&${UNRESOLVED}`}>{r.name}</Link> },
+    { key: 'open', title: t('ui.dashboard.open'), className: 'num', render: (_, r) => cell(r.open, `teamId=${r.teamId}&${UNRESOLVED}`) },
+    {
+      key: 'older',
+      title: t('ui.dashboard.older_than_3_days'),
+      className: 'num',
+      render: (_, r) => cell(r.olderThan3Days, `teamId=${r.teamId}&olderThanDays=3`, true),
+    },
+    {
+      key: 'breached',
+      title: t('ui.dashboard.sla_breached'),
+      className: 'num',
+      render: (_, r) => cell(r.slaBreached, `teamId=${r.teamId}&slaStatus=breached&${UNRESOLVED}`, true),
+    },
+    {
+      key: 'unclaimed',
+      title: t('ui.dashboard.unclaimed'),
+      className: 'num',
+      render: (_, r) => cell(r.unclaimed, `teamId=${r.teamId}&assignee=none&${UNRESOLVED}`),
+    },
+  ];
+  return <Table<TeamStatusRow> rowKey="teamId" size="small" columns={columns} dataSource={rows} pagination={false} scroll={{ x: 'max-content' }} />;
 }
 
 type Kpi = { id: string; label: string; value: string | number; tone: Tone; to?: string; alert?: boolean };
@@ -135,7 +199,8 @@ function DashboardGrid({ section, cells, saved, editing, onChange }: {
 export function DashboardPage() {
   const { t } = useI18n();
   const p = usePalette();
-  const userId = useAuth().user?.id ?? 0;
+  const { user, can } = useAuth();
+  const userId = user?.id ?? 0;
   const [params, setParams] = useSearchParams();
   // the saved layout as read from storage; DashboardGrid checks it against the cards on screen
   const [saved, setSaved] = useState(() => readSaved(userId));
@@ -175,6 +240,10 @@ export function DashboardPage() {
     { id: 'breached', label: t('ui.dashboard.sla_breached'), value: data.slaBreached, tone: 'red', to: '/tickets?slaStatus=breached&status=new,open,pending_user', alert: data.slaBreached > 0 },
     { id: 'at_risk', label: t('ui.dashboard.sla_at_risk'), value: data.slaAtRisk, tone: 'amber', to: '/tickets?slaStatus=at_risk' },
   ];
+  if (data.noTeam != null) {
+    // HQ's routing queue: open tickets that no team has been given yet
+    now.push({ id: 'no_team', label: t('ui.dashboard.no_team'), value: data.noTeam, tone: 'purple', to: `/tickets?teamId=none&${UNRESOLVED}`, alert: data.noTeam > 0 });
+  }
   if (data.failedNotifications != null) {
     now.push({ id: 'failed', label: t('ui.dashboard.failed_notifications'), value: data.failedNotifications, tone: 'pink', alert: data.failedNotifications > 0 });
   }
@@ -188,7 +257,6 @@ export function DashboardPage() {
   const trendTitle = t('ui.dashboard.trend');
   const agingTitle = t('ui.dashboard.aging');
   const slaTitle = t('ui.dashboard.sla_met_rate');
-  const noTeam = t('ui.dashboard.no_team');
 
   const kpiCells = (kpis: Kpi[]): Cell[] => kpis.map((k) => ({ id: k.id, kind: 'kpi', node: <KpiCard kpi={k} /> }));
   const nowCells: Cell[] = [
@@ -253,16 +321,10 @@ export function DashboardPage() {
     nowCells.push({
       id: 'team',
       kind: 'chart',
-      h: 6,
+      h: Math.min(14, Math.max(6, byTeam.length + 4)),
       node: (
         <ChartCard title={t('ui.dashboard.by_team')}>
-          <Bars
-            title={t('ui.dashboard.by_team')}
-            rows={byTeam.map((r) => ({ key: r.teamId ?? 'none', n: r.n }))}
-            label={(k) => (k === 'none' ? noTeam : (byTeam.find((r) => r.teamId === k)?.name ?? String(k)))}
-            tone={(k, i) => (k === 'none' ? 'grey' : ROTATION[(i + 1) % ROTATION.length])}
-            to={(k) => (k === 'none' ? undefined : `/tickets?teamId=${k}`)}
-          />
+          <TeamTable rows={byTeam} canManageTeams={can('catalog:manage')} />
         </ChartCard>
       ),
     });

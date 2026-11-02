@@ -187,15 +187,39 @@ describe('workload and byTeam', () => {
       }
       expect((await admin.get(`/api/v1/tickets?assignee=none&${OPEN}&perPage=1`)).body.total).toBe(2);
 
+      // team table: one row per team; "no team" is its own number (HQ's routing queue), not a table row
       const team = Object.fromEntries(d.byTeam.map((r: any) => [r.name, r]));
-      expect(d.byTeam.some((r: any) => r.teamId === null && r.name === null)).toBe(true);
-      expect(d.byTeam.reduce((s: number, r: any) => s + r.n, 0)).toBe(open);
-      for (const r of d.byTeam.filter((x: any) => x.teamId !== null)) {
-        expect((await admin.get(`/api/v1/tickets?teamId=${r.teamId}&${OPEN}&perPage=1`)).body.total).toBe(r.n);
-      }
-      expect(team.Desk.n).toBeGreaterThan(0);
-      expect(team.Network.n).toBeGreaterThan(0);
-      expect(d.byTeam.find((r: any) => r.teamId === null).n).toBe(open - team.Desk.n - team.Network.n);
+      expect(d.byTeam.every((r: any) => r.teamId !== null)).toBe(true);
+      expect(d.byTeam.reduce((s: number, r: any) => s + r.open, 0) + d.noTeam).toBe(open);
+      expect((await admin.get(`/api/v1/tickets?teamId=none&${OPEN}&perPage=1`)).body.total).toBe(d.noTeam);
+      expect(team.Desk.open).toBeGreaterThan(0);
+      expect(team.Network.open).toBeGreaterThan(0);
+      expect(team.Desk.unclaimed).toBe(1); // the Desk ticket without an assignee
+    }));
+
+  it('lists every team with open, older-than-3-days, SLA-breached and unclaimed counts that match the list filters', () =>
+    withContext(async (ctx, admin) => {
+      const busy = (await admin.post('/api/v1/admin/teams', { name: 'Busy' })).body.id;
+      const calm = (await admin.post('/api/v1/admin/teams', { name: 'Calm' })).body.id;
+      await admin.post('/api/v1/admin/teams', { name: 'Idle' });
+      const agent = await ctx.createUser('agent@example.com', 'agent');
+      const old = new Date(ctx.clock.now.getTime() - 4 * DAY);
+      await mk(ctx, admin, { teamId: busy, createdAt: old, slaStatus: 'breached' });
+      await mk(ctx, admin, { teamId: busy, assigneeId: agent.id, status: 'open' });
+      await mk(ctx, admin, { teamId: busy, status: 'closed', resolvedAt: ctx.clock.now }); // closed: never counted
+      await mk(ctx, admin, { teamId: calm, assigneeId: agent.id, status: 'open' });
+
+      const d = await dashboard(admin);
+      // HQ (sees every ticket) gets every team, the ones needing attention first, idle ones included with zeros
+      expect(d.byTeam.map((r: any) => r.name)).toEqual(['Busy', 'Calm', 'Idle']);
+      const row = d.byTeam[0];
+      expect(row).toMatchObject({ open: 2, olderThan3Days: 1, slaBreached: 1, unclaimed: 1 });
+      expect(d.byTeam[2]).toMatchObject({ open: 0, olderThan3Days: 0, slaBreached: 0, unclaimed: 0 });
+      const total = async (q: string) => (await admin.get(`/api/v1/tickets?teamId=${busy}&${q}&perPage=1`)).body.total;
+      expect(await total(OPEN)).toBe(row.open);
+      expect(await total('olderThanDays=3')).toBe(row.olderThan3Days);
+      expect(await total(`slaStatus=breached&${OPEN}`)).toBe(row.slaBreached);
+      expect(await total(`assignee=none&${OPEN}`)).toBe(row.unclaimed);
     }));
 });
 
@@ -225,15 +249,17 @@ describe('dashboard visibility', () => {
       expect(a.openCount).toBe(2);
       expect(a.trend.reduce((s: number, d: any) => s + d.created, 0)).toBe(2);
       expect(a.agingBuckets.reduce((s: number, b: any) => s + b.n, 0)).toBe(2);
-      expect(a.byTeam.reduce((s: number, r: any) => s + r.n, 0)).toBe(2);
+      expect(a.byTeam.reduce((s: number, r: any) => s + r.open, 0)).toBe(2);
       expect(a.workload.reduce((s: number, r: any) => s + r.n, 0)).toBe(2);
-      expect(a.byTeam.map((r: any) => r.name)).not.toContain('Other');
+      // an engineer sees their own teams only, not every team of the organisation
+      expect(a.byTeam.map((r: any) => r.name)).toEqual(['Mine']);
 
       for (const [email, n] of [['vendor@example.com', 1], ['user@example.com', 1]] as const) {
         const d = await dashboard(await ctx.login(email));
         expect(d.openCount, email).toBe(n);
         expect(d.workload, email).toBeNull();
         expect(d.byTeam, email).toBeNull();
+        expect(d.noTeam, email).toBeNull();
         expect(d.trend, email).toHaveLength(30);
         expect(d.trend.reduce((s: number, x: any) => s + x.created, 0), email).toBe(n);
         expect(d.agingBuckets.reduce((s: number, b: any) => s + b.n, 0), email).toBe(n);

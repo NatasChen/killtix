@@ -1,5 +1,6 @@
-import { Button, Card, Checkbox, Col, Descriptions, Flex, Form, Input, Row, Space, type DescriptionsProps } from 'antd';
+import { App, Button, Card, Checkbox, Col, Descriptions, Flex, Form, Input, Modal, Row, Space, type DescriptionsProps } from 'antd';
 import { useState } from 'react';
+import { BellOutlined } from '@ant-design/icons';
 import { Link, useParams } from 'react-router-dom';
 import { del, get, patch, post } from '../api';
 import { useAuth } from '../auth';
@@ -87,6 +88,8 @@ function SystemEvent({ body }: { body: string }) {
       return <>{t('ui.event.help_topic')}</>;
     case 'custom_fields':
       return <>{t('ui.event.custom_fields', { keys: ((e.keys as string[]) ?? []).join(', ') })}</>;
+    case 'nudge':
+      return <>{e.message ? t('ui.event.nudge_message', { message: v(e.message) }) : t('ui.event.nudge')}</>;
     default:
       return <>{body}</>;
   }
@@ -106,6 +109,9 @@ export function TicketDetailPage() {
   const [tagDraft, setTagDraft] = useState<string | null>(null);
   const [fieldDraft, setFieldDraft] = useState<Record<string, unknown> | null>(null);
   const [watcherId, setWatcherId] = useState('');
+  const [nudgeText, setNudgeText] = useState<string | null>(null); // null = dialog closed
+  const nudging = useAction();
+  const { message } = App.useApp();
 
   if (loading && !data) return <Loading />;
   if (!data) return <ErrorBanner error={error} />;
@@ -128,6 +134,16 @@ export function TicketDetailPage() {
   const canAssign = can('ticket:assign');
   // "I'll take it": a team member makes themselves the assignee (same PATCH as choosing yourself in the list).
   const canClaim = canAssign && !!me && data.assignee?.id !== me.id && !['resolved', 'closed'].includes(data.status);
+
+  // HQ asks for a status update: the assignee, or the team while nobody has claimed the ticket.
+  const canNudge = can('ticket:nudge') && !['resolved', 'closed'].includes(data.status) && !!(data.assignee || data.team);
+  const sendNudge = () =>
+    void nudging.run(async () => {
+      await post(`/tickets/${data.id}/nudge`, { message: nudgeText ?? '' });
+      setNudgeText(null);
+      void message.success(t('ui.tickets.nudge_sent'));
+      await reload();
+    });
 
   const applyCanned = (id: string) => {
     const c = catalog.data?.cannedResponses?.find((x) => x.id === Number(id));
@@ -320,7 +336,15 @@ export function TicketDetailPage() {
 
   return (
     <>
-      <PageHeader title={data.subject}>
+      <PageHeader
+        title={data.subject}
+        extra={
+          canNudge && (
+            <Button icon={<BellOutlined />} onClick={() => setNudgeText('')}>
+              {t('ui.tickets.nudge')}
+            </Button>
+          )
+        }>
         <div className="mono muted">
           <Link to="/tickets">{t('ui.nav.tickets')}</Link> / {data.number}
         </div>
@@ -332,6 +356,25 @@ export function TicketDetailPage() {
         <Tags tags={data.tags} />
       </Flex>
       <ErrorBanner error={action.error} />
+      <Modal
+        open={nudgeText !== null}
+        title={t('ui.tickets.nudge')}
+        okText={t('ui.tickets.nudge_send')}
+        cancelText={t('ui.common.cancel')}
+        onOk={sendNudge}
+        onCancel={() => setNudgeText(null)}
+        okButtonProps={{ loading: nudging.busy, disabled: nudging.busy }}
+        destroyOnHidden>
+        <p className="muted">
+          {data.assignee
+            ? t('ui.tickets.nudge_to_assignee', { name: data.assignee.displayName })
+            : t('ui.tickets.nudge_to_team', { team: data.team?.name ?? '' })}
+        </p>
+        <ErrorBanner error={nudging.error} />
+        <Field label={t('ui.tickets.nudge_message')}>
+          <Input.TextArea rows={3} maxLength={2000} value={nudgeText ?? ''} onChange={(e) => setNudgeText(e.target.value)} />
+        </Field>
+      </Modal>
 
       <Row gutter={[16, 16]} align="top">
         <Col xs={24} lg={16}>

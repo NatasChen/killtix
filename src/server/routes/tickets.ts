@@ -11,6 +11,8 @@ import {
   customFieldFiltersFromQuery,
   listTickets,
   loadVisibleTicket,
+  nudgeSchema,
+  nudgeTicket,
   removeWatcher,
   threadSchema,
   ticketDetail,
@@ -68,6 +70,16 @@ export const ticketRoutes = new Hono<AppEnv>()
     const ticket = await loadVisibleTicket(c.var.deps, auth, c.req.param('id'));
     const { thread } = await addThread(c.var.deps, auth, ticket, input);
     return c.json(thread, 201);
+  })
+
+  // HQ asks the assignee (or the team, while unclaimed) for a status update.
+  .post('/:id/nudge', guard({ permission: 'ticket:nudge' }), async (c) => {
+    const auth = authOf(c);
+    const input = await parseJson(c, nudgeSchema);
+    const ticket = await loadVisibleTicket(c.var.deps, auth, c.req.param('id'));
+    await nudgeTicket(c.var.deps, auth, ticket, input);
+    await audit(c, 'ticket.nudged', { type: 'ticket', id: ticket.id });
+    return c.body(null, 204);
   })
 
   .post('/:id/watchers', guard({ permission: 'ticket:assign' }), async (c) => {

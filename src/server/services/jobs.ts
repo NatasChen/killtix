@@ -30,7 +30,7 @@ export async function scanSla(deps: Deps) {
     )
     .returning();
 
-  await db
+  const atRiskRows = await db
     .update(tickets)
     .set({ slaStatus: 'at_risk' })
     .where(
@@ -39,7 +39,10 @@ export async function scanSla(deps: Deps) {
         eq(tickets.slaStatus, 'on_track'),
         sql`${tickets.resolutionDueAt} - (${tickets.resolutionDueAt} - ${tickets.createdAt}) * 0.25 < ${now.toISOString()}::timestamptz`,
       ),
-    );
+    )
+    .returning();
+  // a ticket only turns at_risk from on_track; the outbox keeps it to one warning per ticket and recipient
+  for (const ticket of atRiskRows) await notifyTicketEvent(deps, { kind: 'sla_at_risk', ticket });
 
   for (const ticket of breachedRows) {
     if (ticket.slaBreachNotifiedAt) continue;
