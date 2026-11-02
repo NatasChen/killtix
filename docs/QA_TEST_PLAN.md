@@ -576,6 +576,7 @@
 | REG-TICKET-022 | 團隊 TeamID | D23 | `tests/teams.test.ts`（TeamID）：不填、自訂大寫、重複、格式錯誤、建立後修改；0006 結構放入團隊後升級；e2e 編輯團隊 | 不填時產生 32 碼小寫英數；大寫轉小寫；重複 `409`；格式錯誤 `400`；建立後修改 TeamID 回 `400 teamid_immutable`，名稱與說明可改；編輯表單 TeamID 唯讀；升級後既有團隊各有不同的 TeamID | ✅ | P0 |
 | REG-TICKET-019 | 依團隊篩選 | FR-2.11 | `GET /tickets?teamId=mine`；e2e 清單「團隊」篩選 | 只回傳自己任一團隊的工單；沒有團隊時為空 | ✅ | P1 |
 | REG-TICKET-025 | 團隊 CSV 匯入（D26） | FR-2.13 | `tests/teamImport.test.ts`；`scripts/ui-e2e.sh`：上傳有誤的檔案、上傳正確的檔案並確認 | CSV 解析（引號、換行）、UTF-8／Big5；預覽不寫入；成員可留空；各種錯誤逐列標示且整批不匯入；檔案層級錯誤碼；範本只給 `catalog:manage`；稽核 `admin.teams_imported` | ✅ | P1 |
+| REG-TICKET-026 | 團隊停用與刪除（D27） | FR-2.14 | `tests/teamLifecycle.test.ts`；`scripts/ui-e2e.sh`：有成員的團隊被擋下、停用、重新啟用、刪除 | 只有系統管理員；成員、未結案工單、服務類別預設、待完成情資回報會擋下兩者，工單與情資紀錄另會擋下刪除（`409 team_in_use`）；停用後網頁與 API 開單、指派、成員、預設、情資派送都回 `team_inactive`，選單與 `GET /teams`、儀表板不列出；已結案工單與情資保留團隊 | ✅ | P0 |
 | REG-TICKET-023 | 處理者通知（D25） | FR-4.5 | `tests/notify.test.ts`（following up on team tickets）：HQ 回覆未認領／已認領的團隊工單；申請人回覆；SLA 即將逾時與逾時 | 未認領時通知團隊內部成員（不含廠商、回覆者）；認領後只通知負責人；即將逾時每張一次 | ✅ | P1 |
 | REG-TICKET-024 | 催辦（D25） | FR-4.5 | `POST /tickets/{id}/nudge`：IT 服務主管、工程師；已解決；沒有團隊 | `204` 並通知處理者、寫入歷程與稽核；工程師 `403`；`409 ticket_not_open`／`nudge_no_recipients` | ✅ | P1 |
 | REG-TICKET-020 | 團隊成員回填與移除 `users.team_id` | FR-2.11 | `tests/teams.test.ts` 的 upgrade 測試：0002 結構放入舊資料 → 套用其餘 migration | v0.4 資料寫入 `team_members`；v0.5／v0.6 已移出的成員不會加回；欄位與旗標已刪除 | ✅ | P1 |

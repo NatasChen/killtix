@@ -229,7 +229,13 @@ export function TicketDetailPage() {
           value={data.team?.id ?? ''}
           onChange={(v) => void update({ teamId: v ? Number(v) : null })}
           empty="—"
-          options={catalog.data?.teams?.map((tm) => ({ value: tm.id, label: tm.name })) ?? []}
+          options={[
+            ...(catalog.data?.teams?.map((tm) => ({ value: tm.id, label: tm.name })) ?? []),
+            // the picker lists active teams; a ticket may still belong to a deactivated one (D27)
+            ...(data.team && catalog.data?.teams && !catalog.data.teams.some((tm) => tm.id === data.team!.id)
+              ? [{ value: data.team.id, label: t('ui.teams.archived_label', { name: data.team.name }) }]
+              : []),
+          ]}
         />
       ) : (
         (data.team?.name ?? '—')

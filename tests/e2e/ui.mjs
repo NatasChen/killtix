@@ -262,6 +262,27 @@ step('teams: TeamID is read-only once created; CSV import checks every row first
   await dialog.waitFor({ state: 'detached' });
   await page.getByRole('row').filter({ hasText: `E2E 匯入 A ${RUN}` }).getByText('匯入說明').waitFor();
   await page.getByRole('row').filter({ hasText: `E2E 匯入 B ${RUN}` }).first().waitFor();
+
+  // deactivate / reactivate / delete (D27): a team with a member is blocked until the member is removed
+  const rowA = page.getByRole('row').filter({ hasText: `E2E 匯入 A ${RUN}` }).first();
+  await rowA.getByRole('button', { name: '停用／刪除' }).click();
+  const removal = page.getByRole('dialog', { name: `停用或刪除團隊「E2E 匯入 A ${RUN}」` });
+  await removal.getByText('沒有成員（目前 1 位）').waitFor();
+  if (!(await removal.getByRole('button', { name: '停用', exact: true }).isDisabled())) throw new Error('deactivate must wait until members are removed');
+  await shot('05f-team-removal-blocked');
+  await removal.getByRole('button', { name: '取消' }).click();
+  const rowB = page.getByRole('row').filter({ hasText: `E2E 匯入 B ${RUN}` }).first();
+  await rowB.getByRole('button', { name: '停用／刪除' }).click();
+  const removalB = page.getByRole('dialog', { name: `停用或刪除團隊「E2E 匯入 B ${RUN}」` });
+  await removalB.getByRole('button', { name: '停用', exact: true }).click();
+  await rowB.getByText('已停用').waitFor();
+  await rowB.getByRole('button', { name: '重新啟用' }).click();
+  await page.locator('.ant-popconfirm').getByRole('button', { name: '重新啟用' }).click();
+  await rowB.getByText('已停用').waitFor({ state: 'detached' });
+  await rowB.getByRole('button', { name: '停用／刪除' }).click();
+  await removalB.getByRole('button', { name: '刪除', exact: true }).click();
+  await page.locator('.ant-popconfirm').getByRole('button', { name: '刪除' }).click();
+  await page.getByRole('row').filter({ hasText: `E2E 匯入 B ${RUN}` }).waitFor({ state: 'detached' });
 }
 await netTeamRow.getByRole('button', { name: '展開列' }).click();
 const members = page.getByRole('region', { name: `${NET} 的成員` });

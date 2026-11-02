@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { authOf, guard } from '../auth/session.js';
 import type { AppEnv } from '../context.js';
@@ -56,7 +56,8 @@ export const catalogRoutes = new Hono<AppEnv>()
   .get('/teams', guard({ tokenScope: 'tickets:write' }), async (c) => {
     const auth = authOf(c);
     if (auth.via !== 'token' && !can(auth.permissions, 'ticket:assign')) throw forbidden();
-    return c.json(await c.var.deps.db.select({ teamid: teams.teamid, name: teams.name }).from(teams).orderBy(asc(teams.name)));
+    // deactivated teams (D27) take no new tickets, so they are not offered
+    return c.json(await c.var.deps.db.select({ teamid: teams.teamid, name: teams.name }).from(teams).where(isNull(teams.archivedAt)).orderBy(asc(teams.name)));
   })
 
   .get('/catalog', guard(), async (c) => {
@@ -82,7 +83,7 @@ export const catalogRoutes = new Hono<AppEnv>()
     for (const m of memberships) teamIdsByUser.set(m.userId, [...(teamIdsByUser.get(m.userId) ?? []), m.teamId]);
     return c.json({
       tags: allTags,
-      teams: await db.select().from(teams).orderBy(asc(teams.name)),
+      teams: await db.select().from(teams).where(isNull(teams.archivedAt)).orderBy(asc(teams.name)),
       slaPlans: await db.select().from(slaPlans).where(eq(slaPlans.isActive, true)),
       cannedResponses: await db.select().from(cannedResponses).where(eq(cannedResponses.isActive, true)).orderBy(asc(cannedResponses.name)),
       users: userRows.map((u) => ({ ...u, teamIds: teamIdsByUser.get(u.id) ?? [] })),

@@ -47,6 +47,7 @@ export function CrudPage<T extends Row>({
   defaults = {},
   expand,
   actions,
+  rowActions,
 }: {
   title: string;
   path: string;
@@ -58,6 +59,8 @@ export function CrudPage<T extends Row>({
   expand?: (row: T, reload: () => Promise<void>) => ReactNode;
   /** More header actions beside "Add" (e.g. an import); `reload` refreshes the list. */
   actions?: (reload: () => Promise<void>) => ReactNode;
+  /** More actions on a row beside "Edit"; `reload` refreshes the list. */
+  rowActions?: (row: T, reload: () => Promise<void>) => ReactNode;
 }) {
   const { t } = useI18n();
   const { data, error, loading, reload } = useLoad(() => get<T[]>(listPath), [listPath]);
@@ -166,9 +169,12 @@ export function CrudPage<T extends Row>({
               key: '_edit',
               title: '',
               render: (_: unknown, row: T) => (
-                <Button type="link" onClick={() => open(row)}>
-                  {t('ui.common.edit')}
-                </Button>
+                <Flex gap={0} wrap={false}>
+                  <Button type="link" onClick={() => open(row)}>
+                    {t('ui.common.edit')}
+                  </Button>
+                  {rowActions?.(row, reload)}
+                </Flex>
               ),
             },
           ]}

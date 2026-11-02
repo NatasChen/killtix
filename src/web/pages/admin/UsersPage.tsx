@@ -13,7 +13,7 @@ export function UsersPage() {
   const { user: me } = useAuth();
   const [q, setQ] = useState('');
   const { data, error, loading, reload } = useLoad(() => get<any[]>(`/admin/users${q ? `?q=${encodeURIComponent(q)}` : ''}`), [q]);
-  const teams = useOptions('/admin/teams');
+  const teams = useOptions('/admin/teams?active=1'); // deactivated teams take no members (D27)
   const action = useAction();
   const [secret, setSecret] = useState<{ email: string; password: string } | null>(null);
   const [form, setForm] = useState({ email: '', displayName: '', role: 'end_user', teamIds: [] as number[] });

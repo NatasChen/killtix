@@ -180,7 +180,7 @@ curl -X POST https://ticket.example.com/api/v1/tickets \
 - 成功回 `201` 與工單摘要（`id`、`number`、`status`、`priority`、`sla` 期限等）。
 - 相同的 `Idempotency-Key` 重送會回傳同一張工單（HTTP 200，標頭 `Idempotent-Replayed: true`），不會重複開單；逾時可以放心重試。
 - 錯誤為 RFC 7807（`application/problem+json`），`errors[].path` 指出欄位：
-  `400` 欄位格式錯誤、服務類別或 TeamID 不存在、帶了已移除的 `team`／`teamId`、自訂欄位不符；`401` Token 錯誤、過期或已撤銷；
+  `400` 欄位格式錯誤、服務類別或 TeamID 不存在、團隊已停用（`team_inactive`）、帶了已移除的 `team`／`teamId`、自訂欄位不符；`401` Token 錯誤、過期或已撤銷；
   `403` Token 沒有所需範圍或帶了 `assigneeId`；`429` 超過速率限制。
 - 每個 Token 預設每分鐘 60 次，超過回 `429` 並附 `Retry-After`。
 - 完整規格：[docs/openapi.json](openapi.json)。

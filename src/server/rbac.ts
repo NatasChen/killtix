@@ -11,6 +11,7 @@ import { teamMembers, tickets, ticketWatchers, type User } from './db/schema.js'
  *  ticket:nudge   - ask the assignee / team of a visible open ticket for a status update (HQ)
  *  advisory:manage  - create, publish, close threat-intel advisories and see every team's response (HQ)
  *  advisory:respond - answer the advisories sent to one's own teams
+ *  admin:teams      - deactivate, reactivate and delete teams (system administrators only, D27)
  */
 export const ROLE_DEFINITIONS: Record<string, { name: string; description: string; permissions: string[] }> = {
   super_admin: { name: '系統管理員', description: '全功能系統管理', permissions: ['*'] },

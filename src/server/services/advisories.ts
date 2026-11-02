@@ -115,11 +115,14 @@ function yearIn(timezone: string, date: Date): string {
 
 const dueOf = (v: string | null | undefined) => (v === undefined ? undefined : v === null ? null : new Date(v));
 
-async function assertTeams(deps: Deps, teamIds: number[]) {
-  if (!teamIds.length) return;
-  const found = await deps.db.select({ id: teams.id }).from(teams).where(inArray(teams.id, teamIds));
-  const missing = teamIds.filter((id) => !found.some((f) => f.id === id));
+/** Teams an advisory is sent to must exist and be active (D27); teams already on it may since have been deactivated. */
+async function assertTeams(deps: Deps, teamIds: number[], already: number[] = []) {
+  const fresh = teamIds.filter((id) => !already.includes(id));
+  if (!fresh.length) return;
+  const found = await deps.db.select({ id: teams.id, archivedAt: teams.archivedAt }).from(teams).where(inArray(teams.id, fresh));
+  const missing = fresh.filter((id) => !found.some((f) => f.id === id));
   if (missing.length) throw badRequest(undefined, { errors: missing.map((id) => ({ path: 'teamIds', message: `unknown team ${id}` })) });
+  if (found.some((f) => f.archivedAt)) throw new ApiError(400, 'team_inactive');
 }
 
 // ---------------------------------------------------------------------------
@@ -164,7 +167,10 @@ export async function updateAdvisory(deps: Deps, actor: Actor, advisory: Advisor
   const { teamIds, responseDueAt, ...rest } = input;
   const now = clock();
   // checked before the transaction: a query on deps.db inside it would wait for the transaction's own connection
-  if (teamIds) await assertTeams(deps, teamIds);
+  if (teamIds) {
+    const current = await db.select({ teamId: advisoryTargets.teamId }).from(advisoryTargets).where(eq(advisoryTargets.advisoryId, advisory.id));
+    await assertTeams(deps, teamIds, current.map((t) => t.teamId));
+  }
   let added: AdvisoryTarget[] = [];
   const updated = await db.transaction(async (tx) => {
     if (teamIds) {

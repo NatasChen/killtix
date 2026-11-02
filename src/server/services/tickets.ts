@@ -218,10 +218,12 @@ const ASSIGNABLE_ROLES = ['super_admin', 'it_manager', 'agent', 'vendor'];
 async function resolveTeamId(db: DB, by: { id: number } | { teamid: string }): Promise<number> {
   const byId = 'id' in by;
   const [team] = await db
-    .select({ id: teams.id })
+    .select({ id: teams.id, archivedAt: teams.archivedAt })
     .from(teams)
     .where(byId ? eq(teams.id, by.id) : eq(teams.teamid, by.teamid));
   if (!team) throw badRequest(undefined, { errors: [{ path: byId ? 'teamId' : 'teamid', message: 'unknown team' }] });
+  // a deactivated team keeps its tickets but takes no new ones (DECISIONS D27)
+  if (team.archivedAt) throw new ApiError(400, 'team_inactive');
   return team.id;
 }
 
@@ -649,8 +651,9 @@ async function teamStatus(deps: Deps, actor: Actor, base: SQL[], now: Date): Pro
   const mine = all
     ? new Set<number>()
     : new Set((await db.select({ teamId: teamMembers.teamId }).from(teamMembers).where(eq(teamMembers.userId, actor.user.id))).map((r) => r.teamId));
-  const rows = (await db.select({ id: teams.id, name: teams.name }).from(teams))
-    .filter((tm) => all || mine.has(tm.id) || byId.has(tm.id))
+  const rows = (await db.select({ id: teams.id, name: teams.name, archivedAt: teams.archivedAt }).from(teams))
+    // deactivated teams have nothing open (D27): listed only in the unlikely case they still do
+    .filter((tm) => byId.has(tm.id) || (!tm.archivedAt && (all || mine.has(tm.id))))
     .map((tm) => {
       const c = byId.get(tm.id);
       return {

@@ -24,7 +24,7 @@ interface Loaded extends Omit<AdvisoryDraft, 'teamIds' | 'source'> {
   number: string;
   status: string;
   source: string | null;
-  targets: { teamId: number; exposure: string }[];
+  targets: { teamId: number; team: string; exposure: string }[];
 }
 
 /** Default answer deadline by severity, at 18:00: critical 1 day, high 3, medium 7, low 14. */
@@ -172,7 +172,13 @@ function AdvisoryForm({ loaded }: { loaded?: Loaded }) {
                 <MultiChoice
                   value={a.teamIds}
                   onChange={(v) => set({ teamIds: v })}
-                  options={(teams.data?.teams ?? []).map((tm) => ({ value: tm.id, label: answered.has(tm.id) ? `${tm.name} ✓` : tm.name }))}
+                  options={[
+                    ...(teams.data?.teams ?? []).map((tm) => ({ value: tm.id, label: answered.has(tm.id) ? `${tm.name} ✓` : tm.name })),
+                    // teams already on the advisory that have since been deactivated (D27) stay, but cannot be added anew
+                    ...(loaded?.targets ?? [])
+                      .filter((x) => teams.data?.teams && !teams.data.teams.some((tm) => tm.id === x.teamId))
+                      .map((x) => ({ value: x.teamId, label: t('ui.teams.archived_label', { name: x.team }) })),
+                  ]}
                   placeholder={t('ui.advisory.teams_placeholder')}
                   style={{ width: '100%' }}
                 />

@@ -60,6 +60,8 @@ export const teams = pgTable(
       .unique()
       .default(sql`replace(gen_random_uuid()::text, '-', '')`),
     description: text('description'),
+    // deactivated (DECISIONS D27): kept for history, no longer offered for routing, assignment or advisories
+    archivedAt: tstz('archived_at'),
     createdAt: createdAt(),
   },
   (t) => [check('chk_teams_teamid', sql`${t.teamid} ~ '^[a-z0-9]{32}$'`)],

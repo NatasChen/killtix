@@ -1,8 +1,11 @@
-import { Typography } from 'antd';
+import { Flex, Typography } from 'antd';
+import { useAuth } from '../../auth';
+import { ToneTag } from '../../components/common';
 import { useI18n } from '../../i18n';
 import { CrudPage } from './Crud';
 import { useOptions } from './shared';
 import { TeamImport } from './TeamImport';
+import { TeamRemoval } from './TeamRemoval';
 import { TeamMembers } from './TeamMembers';
 
 /* Simple catalog resources (catalog:manage), each a CrudPage configuration. */
@@ -11,12 +14,21 @@ const yes = (v: unknown) => (v ? '✓' : '—');
 
 export function TeamsPage() {
   const { t } = useI18n();
+  const { can } = useAuth();
   return (
     <CrudPage
       title={t('ui.nav.teams')}
       path="/admin/teams"
       columns={[
-        { label: t('ui.admin.name'), render: (r: any) => r.name },
+        {
+          label: t('ui.admin.name'),
+          render: (r: any) => (
+            <Flex gap={6} align="center" wrap>
+              {r.name}
+              {r.archivedAt && <ToneTag tone="grey">{t('ui.teams.archived')}</ToneTag>}
+            </Flex>
+          ),
+        },
         // external systems route tickets by this code, so it can be copied
         {
           label: t('ui.admin.teamid'),
@@ -38,6 +50,8 @@ export function TeamsPage() {
       // expand a team to see its members and add or remove them
       expand={(r: any, reload) => <TeamMembers teamId={r.id} teamName={r.name} onChange={reload} />}
       actions={(reload) => <TeamImport onImported={reload} />}
+      // deactivate / reactivate / delete: system administrators only (DECISIONS D27)
+      rowActions={can('admin:teams') ? (r: any, reload) => <TeamRemoval team={r} onChange={reload} /> : undefined}
     />
   );
 }
@@ -67,7 +81,7 @@ export function SlaPlansPage() {
 
 export function HelpTopicsPage() {
   const { t } = useI18n();
-  const teams = useOptions('/admin/teams');
+  const teams = useOptions('/admin/teams?active=1'); // deactivated teams cannot be a default (D27)
   const slaPlans = useOptions('/admin/sla-plans');
   const forms = useOptions('/admin/forms');
   const topics = useOptions('/admin/help-topics');

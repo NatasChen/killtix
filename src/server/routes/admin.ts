@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, ilike, inArray, ne, notInArray, or } from 'drizzle-orm';
+import { and, asc, count, desc, eq, ilike, inArray, isNull, ne, notInArray, or, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { hashPassword, randomPassword, randomToken, sha256 } from '../auth/crypto.js';
@@ -33,6 +33,7 @@ import { audit } from '../services/audit.js';
 import { BRAND_NAME_MAX, deleteLogo, LOGO_MAX_BYTES, logoUrls, setLogo } from '../services/branding.js';
 import { sendTestEmail } from '../services/notify.js';
 import { checkImport, importSchema, importTeams, summarize, templateCsv } from '../services/teamImport.js';
+import { archiveTeam, assertActiveTeams, deleteTeam, restoreTeam, teamUsageReport } from '../services/teams.js';
 import { teamidSchema } from '../services/tickets.js';
 import {
   getChannelSettings,
@@ -126,13 +127,8 @@ async function activeSuperAdmins(c: AppContext) {
   return n;
 }
 
-async function assertTeamsExist(db: DB, teamIds: number[]) {
-  if (!teamIds.length) return;
-  const rows = await db.select({ id: teams.id }).from(teams).where(inArray(teams.id, teamIds));
-  if (rows.length !== new Set(teamIds).size) {
-    throw badRequest(undefined, { errors: [{ path: 'teamIds', message: 'unknown team' }] });
-  }
-}
+/** Teams a user is put in must exist and be active (DECISIONS D27). */
+const assertTeamsExist = (db: DB, teamIds: number[]) => assertActiveTeams(db, teamIds);
 
 async function replaceTeamMembers(db: DB, userId: number, teamIds: number[]) {
   await db.transaction(async (tx) => {
@@ -144,8 +140,9 @@ async function replaceTeamMembers(db: DB, userId: number, teamIds: number[]) {
 }
 
 async function assertTeamExists(db: DB, teamId: number) {
-  const [team] = await db.select({ id: teams.id }).from(teams).where(eq(teams.id, teamId));
+  const [team] = await db.select({ id: teams.id, archivedAt: teams.archivedAt }).from(teams).where(eq(teams.id, teamId));
   if (!team) throw notFound();
+  if (team.archivedAt) throw new ApiError(400, 'team_inactive'); // a deactivated team takes no members (D27)
 }
 
 /** Whether team membership lets this role see the team's tickets (vendors and end users never do: rule 1). */
@@ -157,6 +154,8 @@ const seesTeamTickets = (role: string) => {
 const manageUsers = guard({ permission: 'admin:users' });
 const manageCatalog = guard({ permission: 'catalog:manage' });
 const manageSystem = guard({ permission: 'admin:settings' });
+// deactivating and deleting teams: system administrators only (DECISIONS D27)
+const manageTeams = guard({ permission: 'admin:teams' });
 
 export const adminRoutes = new Hono<AppEnv>()
   // ------------------------------------------------------------------ users
@@ -302,7 +301,13 @@ export const adminRoutes = new Hono<AppEnv>()
 
   // ------------------------------------------------------------------ teams
   .get('/teams', manageCatalog, async (c) => {
-    const rows = await c.var.deps.db.select().from(teams).orderBy(asc(teams.name));
+    // ?active=1: only teams that can be picked (help topics, canned responses, users); the teams page lists all
+    const active = c.req.query('active') === '1';
+    const rows = await c.var.deps.db
+      .select()
+      .from(teams)
+      .where(active ? isNull(teams.archivedAt) : undefined)
+      .orderBy(sql`${teams.archivedAt} is not null`, asc(teams.name));
     const counts = await c.var.deps.db
       .select({ teamId: teamMembers.teamId, n: count() })
       .from(teamMembers)
@@ -347,6 +352,24 @@ export const adminRoutes = new Hono<AppEnv>()
     const [row] = await unique(() => c.var.deps.db.update(teams).set(patch).where(eq(teams.id, idParam(c))).returning());
     if (!row) throw notFound();
     return c.json(row);
+  })
+
+  // Deactivate / reactivate / delete (DECISIONS D27): the usage report says what has to be removed or moved first.
+  .get('/teams/:id/usage', manageTeams, async (c) => c.json(await teamUsageReport(c.var.deps, idParam(c))))
+  .post('/teams/:id/archive', manageTeams, async (c) => {
+    const row = await archiveTeam(c.var.deps, idParam(c));
+    await audit(c, 'admin.team_archived', { type: 'team', id: row.id }, { name: row.name, teamid: row.teamid });
+    return c.json(row);
+  })
+  .post('/teams/:id/restore', manageTeams, async (c) => {
+    const row = await restoreTeam(c.var.deps, idParam(c));
+    await audit(c, 'admin.team_restored', { type: 'team', id: row.id }, { name: row.name });
+    return c.json(row);
+  })
+  .delete('/teams/:id', manageTeams, async (c) => {
+    const row = await deleteTeam(c.var.deps, idParam(c));
+    await audit(c, 'admin.team_deleted', { type: 'team', id: row.id }, { name: row.name, teamid: row.teamid });
+    return c.body(null, 204);
   })
 
   // Team members, managed from the teams page (DECISIONS D18). The users page edits the same team_members rows.
@@ -516,6 +539,7 @@ export const adminRoutes = new Hono<AppEnv>()
         isPublic: z.boolean().default(true),
       }),
     );
+    if (body.defaultTeamId) await assertActiveTeams(c.var.deps.db, [body.defaultTeamId], 'defaultTeamId');
     const [row] = await unique(() => c.var.deps.db.insert(helpTopics).values(body).returning());
     await audit(c, 'admin.help_topic_created', { type: 'help_topic', id: row.id });
     return c.json(row, 201);
@@ -540,6 +564,7 @@ export const adminRoutes = new Hono<AppEnv>()
     );
     const topicId = idParam(c);
     if (body.parentId === topicId) throw badRequest(undefined, { errors: [{ path: 'parentId', message: 'cannot be itself' }] });
+    if (body.defaultTeamId) await assertActiveTeams(c.var.deps.db, [body.defaultTeamId], 'defaultTeamId');
     const [row] = await unique(() => c.var.deps.db.update(helpTopics).set(body).where(eq(helpTopics.id, topicId)).returning());
     if (!row) throw notFound();
     return c.json(row);
