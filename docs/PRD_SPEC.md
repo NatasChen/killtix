@@ -308,6 +308,7 @@ new ──▶ open ──▶ pending_user ──▶ open
 | `POST` | `/api/v1/webhooks` | 註冊外部事件回呼（選用） |
 
 - **指定團隊（DECISIONS D21、D23）**：API Token 開單可帶 `teamid`（團隊的 TeamID），覆寫服務類別的預設團隊並通知團隊成員；不存在的 TeamID 回 `400`。Token 仍不能指定負責人（`assigneeId` 需要 `ticket:assign`）。
+- **多值 `teamid`（`[Unreleased]`，DECISIONS D28）**：API Token 開單的 `teamid` 可用逗號分隔多個，排除 `TEAMID_EXCLUDED` 後剩一個才派送；沒有剩下用預設團隊，超過一個回 400。
 - **TeamID（`[Unreleased]`，issue #5，DECISIONS D23）**：每個團隊有 TeamID：32 個小寫英文字母或數字、全系統唯一；建立團隊時可自行填入（大寫會轉小寫），留空由系統產生，**建立後唯讀**（`[Unreleased]` 修訂，帶 `teamid` 修改回 `400 teamid_immutable`）；升級時替既有團隊產生。`GET /teams` 回傳 `teamid` 與 `name`；工單詳情的 `team` 加上 `teamid`；工單上仍以團隊名稱呈現。原本的 `team`（名稱）與 `teamId`（系統編號）開單欄位移除，帶了回 `400`。
 - **冪等性**：`POST /tickets` 支援 `Idempotency-Key` 標頭或 `external_id`，重複請求回傳原工單（`200`）而非建立新單。
 - **速率限制**：依 API Token 設定（預設 60 req/min，可調）；超限回傳 `429` 並附 `Retry-After`。

@@ -512,6 +512,7 @@
 | API-ROUTE-001 | 依 TeamID 指定團隊 | `T-SOC`（`tickets:write`） | `GET /teams`（`teamid`、`name`）；`POST /tickets` 帶 `teamid`（大寫亦可）、`tags`（`tests/tickets.test.ts`） | 工單在該團隊、團隊成員收到通知；覆寫服務類別的預設團隊；新 tag 自動建立 | ✅ | P0 |
 | API-ROUTE-002 | 不可指定負責人與錯誤輸入 | 同上 | 帶 `assigneeId`；不存在或格式錯誤的 `teamid`；帶已移除的 `team` 或 `teamId` | `403`；`400`；`400`（`errors[].path` 指出欄位） | ✅ | P0 |
 | API-ROUTE-003 | 團隊清單與指定團隊的權限 | 唯讀 Token、一般使用者 | 唯讀 Token `GET /teams`；一般使用者 `GET /teams`、開單帶 `teamid` | 皆 `403`；有 `ticket:assign` 的人員可讀 | ✅ | P1 |
+| API-ROUTE-004 | 多值 `teamid` 與排除名單 | `T-SOC`，`TEAMID_EXCLUDED` 已設定 | 帶「排除值＋一個團隊」；只帶排除值；帶兩個未排除的團隊 | `201` 派給該團隊；`201` 用預設團隊；`400` 且不開單 |
 
 ---
 

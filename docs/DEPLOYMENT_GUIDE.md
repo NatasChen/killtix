@@ -59,6 +59,7 @@ scripts/init-env.sh
 | `BOOTSTRAP_ADMIN_PASSWORD` | | 留空：首次啟動隨機產生並印在 log 一次。填入：使用指定密碼（例如 `admin@password`，DECISIONS D1；初始密碼不檢查密碼政策）。兩種情況首次登入都必須改成符合政策的密碼。只在資料庫還沒有管理員時生效 |
 | `TZ` / `DEFAULT_LOCALE` | | 預設 `Asia/Taipei` / `zh-TW` |
 | `AGING_DIGEST_HOUR` | | 每天幾點（app 時區）之後發送「超過 3 天未結案」報告到 Teams，預設 9 |
+| `TEAMID_EXCLUDED` | | API 開單時從 `teamid` 排除的 TeamID，以逗號分隔（DECISIONS D28）。未設定時用 `docker-compose.yml` 內建的兩個值；設為空字串則不排除；格式錯誤時 app 不會啟動。修改後重啟 app 生效 |
 
 其他可調整項目（皆有預設值）：`BCRYPT_COST`（12）、`SESSION_TTL_HOURS`（12）、`LOGIN_MAX_FAILED_ATTEMPTS`（5）、
 `LOCKOUT_MINUTES`（15）、`RATE_LIMIT_PER_MIN`（每個 API Token 每分鐘 60 次）、`NOTIFY_MAX_ATTEMPTS`（5）。

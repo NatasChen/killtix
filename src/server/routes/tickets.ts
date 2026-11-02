@@ -43,7 +43,7 @@ export const ticketRoutes = new Hono<AppEnv>()
     const idempotencyKey = c.req.header('idempotency-key');
     if (idempotencyKey) input.externalId = parseWith(z.string().trim().min(1).max(255), idempotencyKey);
     const { ticket, created } = await createTicket(c.var.deps, auth, input, auth.via === 'token' ? 'api' : 'web');
-    if (created) await audit(c, 'ticket.created', { type: 'ticket', id: ticket.id }, { source: ticket.source });
+    if (created) await audit(c, 'ticket.created', { type: 'ticket', id: ticket.id }, { source: ticket.source, teamid: input.teamid?.join(',') });
     else c.header('Idempotent-Replayed', 'true');
     // Replays must not reveal more than the original creation response did.
     return c.json(ticketSummary(ticket, c.var.deps.clock()), created ? 201 : 200);

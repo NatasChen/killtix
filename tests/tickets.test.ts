@@ -1,6 +1,7 @@
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { notificationLogs, teamMembers, tickets, ticketThreads, users } from '../src/server/db/schema.js';
+import { loadConfig } from '../src/server/config.js';
+import { auditLogs, notificationLogs, teamMembers, tickets, ticketThreads, users } from '../src/server/db/schema.js';
 import { createTestContext, type TestContext } from './helpers.js';
 
 let ctx: TestContext;
@@ -358,5 +359,75 @@ describe('SOC integration via API token', () => {
     const created = (await admin.post('/api/v1/admin/api-tokens', { name: 'tmp', scopes: ['tickets:read'] })).body;
     await admin.del(`/api/v1/admin/api-tokens/${created.id}`);
     expect((await ctx.tokenClient(created.token).get('/api/v1/tickets')).status).toBe(401);
+  });
+});
+
+describe('several TeamIDs when opening a ticket (DECISIONS D28)', () => {
+  const EXCLUDED = ['2355c0267eea4f5c97c70e514848ec36', 'f9aef8b6c9f24378827a031b3732f0a7'];
+  const REAL = 'a'.repeat(32);
+  const OTHER = 'b'.repeat(32);
+  let c: TestContext;
+  let root: Awaited<ReturnType<TestContext['adminClient']>>;
+  let soc: ReturnType<TestContext['tokenClient']>;
+  let team: Record<string, number>;
+  const teamOf = async (id: number) => (await root.get(`/api/v1/tickets/${id}`)).body.team?.id ?? null;
+
+  beforeAll(async () => {
+    c = await createTestContext({ TEAMID_EXCLUDED: EXCLUDED.join(',') });
+    root = await c.adminClient();
+    const create = async (name: string, teamid: string) => (await root.post('/api/v1/admin/teams', { name, teamid })).body.id as number;
+    team = { excluded: await create('HQ', EXCLUDED[0]), real: await create('Real', REAL), other: await create('Other', OTHER) };
+    await root.post('/api/v1/admin/teams', { name: 'Parent', teamid: EXCLUDED[1] });
+    soc = c.tokenClient((await root.post('/api/v1/admin/api-tokens', { name: 'SOC', scopes: ['tickets:write', 'tickets:read'] })).body.token);
+  });
+  afterAll(async () => {
+    await c.close();
+  });
+
+  it('routes to the one team left after dropping the excluded TeamIDs, and audits what was sent', async () => {
+    const sent = `${EXCLUDED[0]},${REAL.toUpperCase()},${EXCLUDED[1]}`;
+    const res = await soc.post('/api/v1/tickets', { subject: 'routed', teamid: sent });
+    expect(res.status).toBe(201);
+    expect(await teamOf(res.body.id)).toBe(team.real);
+    const [log] = await c.db.select().from(auditLogs).where(and(eq(auditLogs.action, 'ticket.created'), eq(auditLogs.targetId, String(res.body.id))));
+    expect(JSON.stringify(log)).toContain(`${EXCLUDED[0]},${REAL},${EXCLUDED[1]}`);
+  });
+
+  it("falls back to the help topic's team when every TeamID is excluded", async () => {
+    const topic = (await root.post('/api/v1/admin/help-topics', { slug: 'routed', name: 'Routed', defaultTeamId: team.other })).body;
+    expect(topic.id).toBeTruthy();
+    const withTopic = await soc.post('/api/v1/tickets', { subject: 'default team', helpTopic: 'routed', teamid: EXCLUDED.join(',') });
+    expect(withTopic.status).toBe(201);
+    expect(await teamOf(withTopic.body.id)).toBe(team.other);
+    const single = await soc.post('/api/v1/tickets', { subject: 'no team', teamid: EXCLUDED[0] });
+    expect(single.status).toBe(201);
+    expect(await teamOf(single.body.id)).toBeNull();
+  });
+
+  it('opens nothing when more than one team is left or the list is malformed', async () => {
+    const before = (await c.db.select().from(tickets)).length;
+    const several = await soc.post('/api/v1/tickets', { subject: 'x', teamid: `${REAL},${EXCLUDED[0]},${OTHER}` });
+    expect(several.status).toBe(400);
+    expect(several.body.errors[0].path).toBe('teamid');
+    for (const teamid of [`${REAL},`, '', `${REAL},nope`, `${EXCLUDED[0]},${'0'.repeat(32)}`, Array(21).fill(0).map((_, i) => String(i).padStart(32, '0')).join(',')]) {
+      expect((await soc.post('/api/v1/tickets', { subject: 'x', teamid })).status).toBe(400);
+    }
+    expect((await c.db.select().from(tickets)).length).toBe(before);
+    // the same TeamID twice is one team
+    expect((await soc.post('/api/v1/tickets', { subject: 'dup', teamid: `${REAL},${REAL}` })).status).toBe(201);
+  });
+
+  it('does not apply to the web form: excluded teams stay selectable, one team only', async () => {
+    const res = await root.post('/api/v1/tickets', { subject: 'by hand', teamid: EXCLUDED[0] });
+    expect(res.status).toBe(201);
+    expect(await teamOf(res.body.id)).toBe(team.excluded);
+    expect((await root.post('/api/v1/tickets', { subject: 'x', teamid: `${EXCLUDED[0]},${REAL}` })).status).toBe(400);
+  });
+
+  it('refuses to start with a malformed exclusion list', () => {
+    const base = { DATABASE_URL: 'x', APP_SECRET: 'x'.repeat(32) };
+    expect(() => loadConfig({ ...base, TEAMID_EXCLUDED: 'nope' })).toThrow('TEAMID_EXCLUDED');
+    expect(loadConfig({ ...base, TEAMID_EXCLUDED: ` ${EXCLUDED[0].toUpperCase()}, ` }).teamidExcluded).toEqual([EXCLUDED[0]]);
+    expect(loadConfig(base).teamidExcluded).toEqual([]);
   });
 });

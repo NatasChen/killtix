@@ -54,6 +54,7 @@ services:
       BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-admin@ticket.local}
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
       AGING_DIGEST_HOUR: ${AGING_DIGEST_HOUR:-9}
+      TEAMID_EXCLUDED: ${TEAMID_EXCLUDED-2355c0267eea4f5c97c70e514848ec36,f9aef8b6c9f24378827a031b3732f0a7}
     # No published port: only nginx reaches the app (app:8080 on the internal network).
     networks: [internal]
 

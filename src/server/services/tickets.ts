@@ -189,6 +189,14 @@ export const teamidSchema = z
   .trim()
   .toLowerCase()
   .regex(/^[a-z0-9]{32}$/, '32 letters and digits');
+/** `teamid` when opening a ticket: one TeamID, or several separated by commas (API tokens, DECISIONS D28). */
+const MAX_TEAMIDS = 20;
+const teamidListSchema = z
+  .string()
+  .max(MAX_TEAMIDS * 33)
+  .transform((v) => v.split(','))
+  .pipe(z.array(teamidSchema).max(MAX_TEAMIDS))
+  .transform((list) => [...new Set(list)]);
 // replaced by teamid (v0.12.0): rejected rather than ignored, so an integration still sending them notices
 const replacedByTeamid = z.never({ error: 'replaced by teamid' }).optional();
 
@@ -206,7 +214,7 @@ export const createTicketSchema = z.object({
   assigneeId: z.number().int().positive().optional(), // web form; needs ticket:assign
   // Team by its TeamID; default: the help topic's team. Needs ticket:assign, except through an API token:
   // external systems may route a ticket to a team, but not to a person.
-  teamid: teamidSchema.optional(),
+  teamid: teamidListSchema.optional(),
   team: replacedByTeamid,
   teamId: replacedByTeamid,
 });
@@ -306,7 +314,11 @@ export async function createTicket(
   let teamId = topic?.defaultTeamId ?? null;
   if (input.teamid) {
     if (source !== 'api' && !can(actor.permissions, 'ticket:assign')) throw forbidden();
-    teamId = await resolveTeamId(db, { teamid: input.teamid });
+    // API tokens: drop the TeamIDs that never receive tickets. None left is the same as not naming a team;
+    // several left are rejected, because guessing one would route the ticket to the wrong team unnoticed.
+    const candidates = source === 'api' ? input.teamid.filter((id) => !config.teamidExcluded.includes(id)) : input.teamid;
+    if (candidates.length > 1) throw badRequest(undefined, { errors: [{ path: 'teamid', message: 'more than one team' }] });
+    if (candidates.length === 1) teamId = await resolveTeamId(db, { teamid: candidates[0] });
   }
 
   const now = clock();
