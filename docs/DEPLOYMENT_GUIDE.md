@@ -59,6 +59,7 @@ scripts/init-env.sh
 | `BOOTSTRAP_ADMIN_PASSWORD` | | 留空：首次啟動隨機產生並印在 log 一次。填入：使用指定密碼（例如 `admin@password`，DECISIONS D1；初始密碼不檢查密碼政策）。兩種情況首次登入都必須改成符合政策的密碼。只在資料庫還沒有管理員時生效 |
 | `TZ` / `DEFAULT_LOCALE` | | 預設 `Asia/Taipei` / `zh-TW` |
 | `AGING_DIGEST_HOUR` | | 每天幾點（app 時區）之後發送「超過 3 天未結案」報告到 Teams，預設 9 |
+| `TEAMID_EXCLUDED` | | API 開單時從 `teamid` 排除的 TeamID，以逗號分隔（DECISIONS D28）。未設定時用 `docker-compose.yml` 內建的兩個值；設為空字串則不排除；格式錯誤時 app 不會啟動。修改後重啟 app 生效 |
 
 其他可調整項目（皆有預設值）：`BCRYPT_COST`（12）、`SESSION_TTL_HOURS`（12）、`LOGIN_MAX_FAILED_ATTEMPTS`（5）、
 `LOCKOUT_MINUTES`（15）、`RATE_LIMIT_PER_MIN`（每個 API Token 每分鐘 60 次）、`NOTIFY_MAX_ATTEMPTS`（5）。
@@ -170,7 +171,7 @@ curl -X POST https://ticket.example.com/api/v1/tickets \
 | `description` | 內文，最多 100,000 字 |
 | `priority` | 1–5 或別名 `lowest`／`low`／`normal`／`high`／`critical`，預設 3 |
 | `helpTopic`／`helpTopicId` | 服務類別（slug 或 id），決定 SLA、預設團隊與自動標籤 |
-| `teamid` | 團隊的 TeamID（32 個英數字元，不分大小寫，見「團隊」頁或 `GET /teams`）；省略時用服務類別的預設團隊。團隊改名不影響 TeamID。v0.12.0 前的 `team`／`teamId` 已移除，帶了會回 400 |
+| `teamid` | 團隊的 TeamID（32 個英數字元，不分大小寫，見「團隊」頁或 `GET /teams`）；省略時用服務類別的預設團隊。團隊改名不影響 TeamID；TeamID 建立後不能修改。v0.12.0 前的 `team`／`teamId` 已移除，帶了會回 400 |
 | `tags` | 最多 20 個、每個最多 64 字；不存在的會自動建立，服務類別的自動標籤也會加上 |
 | `requester`／`requesterId` | 代誰開單；省略時是建立 Token 的人。`requester.email` 沒有對應帳號時會建立外部的一般使用者 |
 | `customFields` | 以欄位 key 為鍵（見 `GET /help-topics` 的 `fields`），依該表單的必填、型別、選項與格式檢查；表單上沒有的 key 回 400 |
@@ -180,7 +181,7 @@ curl -X POST https://ticket.example.com/api/v1/tickets \
 - 成功回 `201` 與工單摘要（`id`、`number`、`status`、`priority`、`sla` 期限等）。
 - 相同的 `Idempotency-Key` 重送會回傳同一張工單（HTTP 200，標頭 `Idempotent-Replayed: true`），不會重複開單；逾時可以放心重試。
 - 錯誤為 RFC 7807（`application/problem+json`），`errors[].path` 指出欄位：
-  `400` 欄位格式錯誤、服務類別或 TeamID 不存在、帶了已移除的 `team`／`teamId`、自訂欄位不符；`401` Token 錯誤、過期或已撤銷；
+  `400` 欄位格式錯誤、服務類別或 TeamID 不存在、團隊已停用（`team_inactive`）、帶了已移除的 `team`／`teamId`、自訂欄位不符；`401` Token 錯誤、過期或已撤銷；
   `403` Token 沒有所需範圍或帶了 `assigneeId`；`429` 超過速率限制。
 - 每個 Token 預設每分鐘 60 次，超過回 `429` 並附 `Retry-After`。
 - 完整規格：[docs/openapi.json](openapi.json)。
@@ -193,9 +194,9 @@ curl -X POST https://ticket.example.com/api/v1/tickets \
 
 | 管道 | 設定位置 | 收件者 |
 | --- | --- | --- |
-| Email | 「郵件設定」：SMTP（主機、連接埠、TLS、帳號、密碼、寄件者）或 Resend（API Key、寄件者），可寄送測試信 | 被指派者（指派、使用者回覆、SLA 逾時）、申請人（對外回覆） |
-| Telegram | 「通知設定」的 Bot Token；使用者在「個人設定」填入自己的 Chat ID | 被指派者 |
-| Microsoft Teams | 「通知設定」的 Webhook URL（Teams Workflows 的 https 網址，送出 Adaptive Card） | 頻道：新工單、SLA 逾時、每日 3 天積壓報告 |
+| Email | 「郵件設定」：SMTP（主機、連接埠、TLS、帳號、密碼、寄件者）或 Resend（API Key、寄件者），可寄送測試信 | 被指派者（指派、回覆、SLA 即將逾時與逾時、催辦；沒有負責人時改為團隊成員）、申請人（對外回覆）、資安情資派送團隊的成員 |
+| Telegram | 「通知設定」的 Bot Token；使用者在「個人設定」填入自己的 Chat ID | 與 Email 相同的個人通知（申請人回覆通知除外） |
+| Microsoft Teams | 「通知設定」的 Webhook URL（Teams Workflows 的 https 網址，送出 Adaptive Card） | 頻道：新工單、SLA 逾時、每日 3 天積壓報告、資安情資逾期未回報與團隊回報受影響 |
 
 密碼、API Key、Bot Token 與 Webhook URL 以 `APP_SECRET` 加密存在資料庫，只寫不讀；更換 `APP_SECRET` 後需要重新輸入。
 

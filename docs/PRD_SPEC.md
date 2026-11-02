@@ -308,7 +308,8 @@ new ──▶ open ──▶ pending_user ──▶ open
 | `POST` | `/api/v1/webhooks` | 註冊外部事件回呼（選用） |
 
 - **指定團隊（DECISIONS D21、D23）**：API Token 開單可帶 `teamid`（團隊的 TeamID），覆寫服務類別的預設團隊並通知團隊成員；不存在的 TeamID 回 `400`。Token 仍不能指定負責人（`assigneeId` 需要 `ticket:assign`）。
-- **TeamID（`[Unreleased]`，issue #5，DECISIONS D23）**：每個團隊有 TeamID：32 個小寫英文字母或數字、全系統唯一；建立團隊時可自行填入（大寫會轉小寫），留空由系統產生，可修改（寫入稽核）；升級時替既有團隊產生。`GET /teams` 回傳 `teamid` 與 `name`；工單詳情的 `team` 加上 `teamid`；工單上仍以團隊名稱呈現。原本的 `team`（名稱）與 `teamId`（系統編號）開單欄位移除，帶了回 `400`。
+- **多值 `teamid`（`[Unreleased]`，DECISIONS D28）**：API Token 開單的 `teamid` 可用逗號分隔多個，排除 `TEAMID_EXCLUDED` 後剩一個才派送；沒有剩下用預設團隊，超過一個回 400。
+- **TeamID（`[Unreleased]`，issue #5，DECISIONS D23）**：每個團隊有 TeamID：32 個小寫英文字母或數字、全系統唯一；建立團隊時可自行填入（大寫會轉小寫），留空由系統產生，**建立後唯讀**（`[Unreleased]` 修訂，帶 `teamid` 修改回 `400 teamid_immutable`）；升級時替既有團隊產生。`GET /teams` 回傳 `teamid` 與 `name`；工單詳情的 `team` 加上 `teamid`；工單上仍以團隊名稱呈現。原本的 `team`（名稱）與 `teamId`（系統編號）開單欄位移除，帶了回 `400`。
 - **冪等性**：`POST /tickets` 支援 `Idempotency-Key` 標頭或 `external_id`，重複請求回傳原工單（`200`）而非建立新單。
 - **速率限制**：依 API Token 設定（預設 60 req/min，可調）；超限回傳 `429` 並附 `Retry-After`。
 - **錯誤格式**：RFC 7807 `application/problem+json`（`type`、`title`、`status`、`detail`、`instance`）。
@@ -535,6 +536,31 @@ Email 的寄信方式由系統管理員在「系統設定 → 郵件設定」選
 3. 必須具備 `.gitignore`，排除機密與快取。
 4. 建議提供 `LICENSE`、`CONTRIBUTING.md`、`SECURITY.md`、Issue/PR 模板。
 5. README 中之預設帳密須附 **高風險警示**，並要求佈署後立即改密或停用。
+
+#### FR-4.5 工單處理者通知與催辦（P1，`[Unreleased]`，DECISIONS D25）
+- 情境：SOC 以 API 開單並指定團隊（或 HQ 之後手動指派），團隊在平台上回覆與記錄處理過程，HQ 在同一平台追蹤，必要時向團隊確認。
+- 工作人員的回覆：除了申請人（外部系統帳號不寄），也通知負責人；沒有負責人時通知團隊的內部成員（`ticket:read:team`），回覆者本人除外。申請人回覆在沒有負責人時同樣通知團隊成員。
+- SLA：轉為「即將逾時」時通知負責人（每張工單一次）；逾時時通知負責人並發到 Teams 頻道；兩者在沒有負責人時改為通知團隊成員。
+- 催辦：`POST /tickets/{id}/nudge`（`ticket:nudge`：IT 服務主管、系統管理員；可附 `message`），通知負責人或團隊成員回報進度，寫入工單歷程（系統事件 `nudge`）與稽核 `ticket.nudged`。已解決／結案回 `409 ticket_not_open`，沒有負責人也沒有團隊回 `409 nudge_no_recipients`。
+- 儀表板（FR-3）：團隊卡改為「各團隊處理狀況」表格（未結案、超過 3 天未結案、SLA 已逾時、待認領，各自可下鑽）；`ticket:read:all` 的人列出所有團隊，其他人列出自己的團隊與有可見工單的團隊；「尚未指派團隊」為獨立 KPI（只給 `ticket:read:all`），工單清單支援 `teamId=none`。
+
+#### FR-2.13 團隊 CSV 匯入（P1，`[Unreleased]`，DECISIONS D26）
+- 「團隊」頁「CSV 匯入」：下載範本（`GET /admin/teams/import/template.csv`，帶 BOM 的 UTF-8，標題依使用者語系）→ 上傳（base64 JSON）→ 預覽（`POST /admin/teams/import/preview`，不寫入，逐列回傳錯誤碼）→ 確認（`POST /admin/teams/import`，任何一列有誤回 `400 import_invalid`，否則同一交易建立）。
+- 欄位：團隊名稱（必填，≤128）、TeamID（選填，32 碼英數，大寫轉小寫）、說明（≤2000）、成員 Email（選填，分號／逗號／換行分隔）。標題接受中英文或欄位代碼，順序不拘。
+- 錯誤：名稱或 TeamID 已存在或檔案內重複、TeamID 格式錯誤、Email 格式錯誤或不是啟用中的非 API 帳號；檔案層級：無法讀取或超過 1 MB、沒有資料、沒有「團隊名稱」標題、超過 500 列。編碼接受 UTF-8（有無 BOM）與 Big5。
+- 權限 `catalog:manage`；稽核 `admin.teams_imported`（團隊數、成員數、團隊 id）。
+
+#### FR-2.14 團隊停用與刪除（P1，`[Unreleased]`，DECISIONS D27）
+- 只有系統管理員（`admin:teams`）。`GET /admin/teams/{id}/usage` 回傳使用狀況與阻擋原因；`POST /admin/teams/{id}/archive`、`/restore`、`DELETE /admin/teams/{id}`，不符合時 `409 team_in_use`（`blockers`、`usage`）。
+- 停用與刪除共同前提：沒有成員、沒有未結案工單、不是服務類別的預設團隊、沒有已發布情資中待完成的回報。刪除另需：沒有任何工單（含已結案）、沒有情資派送紀錄。
+- 停用後：既有工單與情資保留團隊並標示「已停用」；不能被指派或開單（API 回 `400 team_inactive`）、加入成員、設為服務類別預設或派送情資；不出現在選單、`GET /teams`、儀表板團隊表；可重新啟用。稽核 `admin.team_archived`／`team_restored`／`team_deleted`。
+
+### FR-8 資安情資（P1，`[Unreleased]`，DECISIONS D24）
+- **建立與派送（HQ，`advisory:manage`）**：情資含標題、嚴重度（低／中／高／緊急）、來源、風險／威脅說明、CVE（`CVE-YYYY-NNNN`，可多個）、受影響產品、IOC、建議處置、參考資料與回報期限（依嚴重度預設 1／3／7／14 天）。草稿 → 發布 → 結案（可重新開啟）；發布需至少一個團隊與回報期限。發布後可修改內容、期限與加入團隊（新團隊立即通知），已回報的團隊不能移除；只有草稿可刪除。
+- **團隊回報（`advisory:respond`：內部工程師；HQ 可代為回報）**：每則情資每個團隊一份回報：環境中是否存在（待回報／調查中／不受影響／受影響）、受影響範圍、處理方式（修補、緩解措施、風險接受、其他）、處理狀態（未開始、處理中、已完成）、預計完成日、說明與備註。受影響時處理方式與狀態必填，未完成前預計完成日必填。每次儲存都保留紀錄。「完成」= 不受影響，或受影響且已完成。
+- **可見範圍**（SQL 查詢層）：HQ 看得到全部情資與所有團隊的回報；團隊成員只看得到已發布或已結案、且派給自己任一團隊的情資，以及自己團隊的回報；其他人 `403`（列表）或 `404`（單筆）。外部廠商不參與；不提供 API Token。
+- **追蹤**：情資清單與詳情顯示已回報、受影響、已完成、逾期（未在期限內回報，或受影響且已過預計完成日）；HQ 可提醒未完成的團隊、匯出各團隊回報 CSV（UTF-8 BOM）。儀表板「資安情資回報」卡片：HQ 看全部、團隊看自己。
+- **通知**：發布、提醒、期限前一天、逾期（另發 Teams 頻道）、預計完成日已過；團隊回報受影響時發 Teams 頻道。對象為該團隊有 `advisory:respond` 的成員（Email、Telegram）。
 
 ---
 

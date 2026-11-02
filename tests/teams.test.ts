@@ -152,7 +152,7 @@ describe('team visibility (SQL scope, 404 when hidden)', () => {
 describe('TeamID (DECISIONS D23)', () => {
   const VALID = /^[a-z0-9]{32}$/;
 
-  it('is generated when not given, lower-cased when given, unique, and audited when changed', async () => {
+  it('is generated when not given, lower-cased when given, unique, and read-only once the team exists', async () => {
     const generated = (await admin.post('/api/v1/admin/teams', { name: 'TeamID auto' })).body;
     expect(generated.teamid).toMatch(VALID);
     expect(generated.teamid).not.toBe(teamid.get(team.desk));
@@ -166,14 +166,12 @@ describe('TeamID (DECISIONS D23)', () => {
       expect((await admin.post('/api/v1/admin/teams', { name: `TeamID ${bad}`, teamid: bad })).status, bad).toBe(400);
     }
 
-    const changed = await admin.patch(`/api/v1/admin/teams/${generated.id}`, { teamid: 'c'.repeat(32) });
-    expect(changed.body.teamid).toBe('c'.repeat(32));
-    expect((await admin.patch(`/api/v1/admin/teams/${generated.id}`, { teamid: code.toLowerCase() })).status).toBe(409);
-    const logged = await ctx.db
-      .select()
-      .from(auditLogs)
-      .where(and(eq(auditLogs.action, 'admin.team_teamid_changed'), eq(auditLogs.targetId, String(generated.id))));
-    expect(logged.map((r) => r.detail)).toEqual([{ from: generated.teamid, to: 'c'.repeat(32) }]);
+    // fixed once the team exists: external systems route tickets by it; name and description stay editable
+    const locked = await admin.patch(`/api/v1/admin/teams/${generated.id}`, { teamid: 'c'.repeat(32) });
+    expect(locked.status).toBe(400);
+    expect(locked.body.code).toBe('teamid_immutable');
+    const renamed = await admin.patch(`/api/v1/admin/teams/${generated.id}`, { name: 'TeamID auto (renamed)', description: 'edited' });
+    expect(renamed.body).toMatchObject({ name: 'TeamID auto (renamed)', description: 'edited', teamid: generated.teamid });
   });
 
   it('is generated for every existing team when upgrading', async () => {

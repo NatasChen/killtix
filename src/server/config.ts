@@ -19,6 +19,7 @@ export interface Config {
   timezone: string;
   agingDigestHour: number;
   notifyMaxAttempts: number;
+  teamidExcluded: string[];
   staticDir: string | undefined;
   migrationsDir: string;
 }
@@ -36,6 +37,14 @@ function bool(value: string | undefined, fallback: boolean): boolean {
 }
 
 const empty = (v: string | undefined) => (v === undefined || v === '' ? undefined : v);
+
+/** Comma separated TeamIDs; a mistyped one would silently stop being excluded, so it stops the app instead. */
+function teamids(value: string | undefined): string[] {
+  const list = (value ?? '').split(',').map((v) => v.trim().toLowerCase()).filter(Boolean);
+  const invalid = list.find((v) => !/^[a-z0-9]{32}$/.test(v));
+  if (invalid) throw new Error(`Invalid TeamID in TEAMID_EXCLUDED: ${invalid}`);
+  return list;
+}
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const databaseUrl = env.DATABASE_URL;
@@ -64,6 +73,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     timezone: env.TZ ?? 'Asia/Taipei',
     agingDigestHour: int(env.AGING_DIGEST_HOUR, 9),
     notifyMaxAttempts: int(env.NOTIFY_MAX_ATTEMPTS, 5),
+    teamidExcluded: teamids(env.TEAMID_EXCLUDED),
     staticDir: empty(env.STATIC_DIR),
     migrationsDir: env.MIGRATIONS_DIR ?? new URL('../../../drizzle', import.meta.url).pathname,
   };

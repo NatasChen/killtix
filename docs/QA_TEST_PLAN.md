@@ -512,6 +512,7 @@
 | API-ROUTE-001 | 依 TeamID 指定團隊 | `T-SOC`（`tickets:write`） | `GET /teams`（`teamid`、`name`）；`POST /tickets` 帶 `teamid`（大寫亦可）、`tags`（`tests/tickets.test.ts`） | 工單在該團隊、團隊成員收到通知；覆寫服務類別的預設團隊；新 tag 自動建立 | ✅ | P0 |
 | API-ROUTE-002 | 不可指定負責人與錯誤輸入 | 同上 | 帶 `assigneeId`；不存在或格式錯誤的 `teamid`；帶已移除的 `team` 或 `teamId` | `403`；`400`；`400`（`errors[].path` 指出欄位） | ✅ | P0 |
 | API-ROUTE-003 | 團隊清單與指定團隊的權限 | 唯讀 Token、一般使用者 | 唯讀 Token `GET /teams`；一般使用者 `GET /teams`、開單帶 `teamid` | 皆 `403`；有 `ticket:assign` 的人員可讀 | ✅ | P1 |
+| API-ROUTE-004 | 多值 `teamid` 與排除名單 | `T-SOC`，`TEAMID_EXCLUDED` 已設定 | 帶「排除值＋一個團隊」；只帶排除值；帶兩個未排除的團隊 | `201` 派給該團隊；`201` 用預設團隊；`400` 且不開單 |
 
 ---
 
@@ -573,8 +574,12 @@
 | REG-TICKET-016 | 新增工單時指派 | FR-2.10 | 系統管理員開單並指定工程師；一般使用者帶 `assigneeId`；指派給一般使用者 | 工單為 `open`、負責人正確並通知負責人；一般使用者 `403`；不可指派的對象 `400` | ✅ | P1 |
 | REG-TICKET-017 | 回覆的通知勾選 | AC-TICKET-04 | 回覆 `notify:false`，再以預設值回覆 | 第一則不產生任何通知；第二則通知申請人且只含該則內容 | ✅ | P0 |
 | REG-TICKET-018 | 建立時指定團隊、認領 | FR-2.11 | `POST /tickets` 帶 `teamid`；成員 `PATCH {assigneeId: 自己}`；e2e「我來處理」 | 只有團隊時維持「新建立」；一般使用者 403、不存在的團隊 400；認領後負責人為自己、狀態「處理中」 | ✅ | P1 |
-| REG-TICKET-022 | 團隊 TeamID | D23 | `tests/teams.test.ts`（TeamID）：不填、自訂大寫、重複、格式錯誤、修改；0006 結構放入團隊後升級 | 不填時產生 32 碼小寫英數；大寫轉小寫；重複 `409`；格式錯誤 `400`；修改寫入稽核 `admin.team_teamid_changed`；升級後既有團隊各有不同的 TeamID | ✅ | P0 |
+| REG-TICKET-022 | 團隊 TeamID | D23 | `tests/teams.test.ts`（TeamID）：不填、自訂大寫、重複、格式錯誤、建立後修改；0006 結構放入團隊後升級；e2e 編輯團隊 | 不填時產生 32 碼小寫英數；大寫轉小寫；重複 `409`；格式錯誤 `400`；建立後修改 TeamID 回 `400 teamid_immutable`，名稱與說明可改；編輯表單 TeamID 唯讀；升級後既有團隊各有不同的 TeamID | ✅ | P0 |
 | REG-TICKET-019 | 依團隊篩選 | FR-2.11 | `GET /tickets?teamId=mine`；e2e 清單「團隊」篩選 | 只回傳自己任一團隊的工單；沒有團隊時為空 | ✅ | P1 |
+| REG-TICKET-025 | 團隊 CSV 匯入（D26） | FR-2.13 | `tests/teamImport.test.ts`；`scripts/ui-e2e.sh`：上傳有誤的檔案、上傳正確的檔案並確認 | CSV 解析（引號、換行）、UTF-8／Big5；預覽不寫入；成員可留空；各種錯誤逐列標示且整批不匯入；檔案層級錯誤碼；範本只給 `catalog:manage`；稽核 `admin.teams_imported` | ✅ | P1 |
+| REG-TICKET-026 | 團隊停用與刪除（D27） | FR-2.14 | `tests/teamLifecycle.test.ts`；`scripts/ui-e2e.sh`：有成員的團隊被擋下、停用、重新啟用、刪除 | 只有系統管理員；成員、未結案工單、服務類別預設、待完成情資回報會擋下兩者，工單與情資紀錄另會擋下刪除（`409 team_in_use`）；停用後網頁與 API 開單、指派、成員、預設、情資派送都回 `team_inactive`，選單與 `GET /teams`、儀表板不列出；已結案工單與情資保留團隊 | ✅ | P0 |
+| REG-TICKET-023 | 處理者通知（D25） | FR-4.5 | `tests/notify.test.ts`（following up on team tickets）：HQ 回覆未認領／已認領的團隊工單；申請人回覆；SLA 即將逾時與逾時 | 未認領時通知團隊內部成員（不含廠商、回覆者）；認領後只通知負責人；即將逾時每張一次 | ✅ | P1 |
+| REG-TICKET-024 | 催辦（D25） | FR-4.5 | `POST /tickets/{id}/nudge`：IT 服務主管、工程師；已解決；沒有團隊 | `204` 並通知處理者、寫入歷程與稽核；工程師 `403`；`409 ticket_not_open`／`nudge_no_recipients` | ✅ | P1 |
 | REG-TICKET-020 | 團隊成員回填與移除 `users.team_id` | FR-2.11 | `tests/teams.test.ts` 的 upgrade 測試：0002 結構放入舊資料 → 套用其餘 migration | v0.4 資料寫入 `team_members`；v0.5／v0.6 已移出的成員不會加回；欄位與旗標已刪除 | ✅ | P1 |
 | REG-TICKET-021 | 團隊頁管理成員 | FR-2.12 | `tests/teams.test.ts`（team members on the teams page）；`scripts/ui-e2e.sh`：展開團隊、加入、移除 | 成員狀態正確、候選名單正確、可見範圍立即反映、權限 403、稽核紀錄；畫面成員數同步 | ✅ | P1 |
 
@@ -602,6 +607,19 @@
 | REG-REPORT-006 | 非同步匯出連結有效期 | FR-3.2 | 取得連結 → 25 小時後重試 | `410 Gone` | ⚠️ | P1 |
 | REG-REPORT-007 | Dashboard 9 項 Widget | FR-3.1 | 載入 Dashboard | 9 項皆顯示且資料非空 | ⚠️ | P1 |
 | REG-REPORT-008 | 排程報表 09:00 | FR-3.4 | 檢視 Cron 執行 | 寄送給 `it_manager`；筆數一致 | ⚠️ | P1 |
+| REG-REPORT-009 | 各團隊處理狀況表（D25） | FR-4.5 | `tests/dashboard.test.ts`（workload and byTeam） | 每個數字與對應篩選的清單筆數一致；HQ 列出所有團隊（含 0 件），工程師只看到自己的團隊；`teamId=none` 與「尚未指派團隊」一致 | ✅ | P1 |
+
+### 6.5.1 資安情資回歸（REG-ADV，D24）
+
+| 編號 | 項目 | 需求 | 步驟 | 預期 | 自動化 | 優先 |
+| --- | --- | --- | --- | --- | --- | --- |
+| REG-ADV-001 | 草稿與發布 | FR-8 | `tests/advisories.test.ts`（writing and publishing） | 草稿團隊看不到、不通知；缺團隊或期限 `400`；發布只通知團隊中有 `advisory:respond` 的成員（不含廠商） | ✅ | P1 |
+| REG-ADV-002 | 可見範圍 | FR-8 | 不同團隊、未派送團隊、廠商、一般使用者、API Token 存取 | 只看到自己團隊的回報；未派送 `404`；廠商／一般使用者 `403`；Token `403` | ✅ | P0 |
+| REG-ADV-003 | 回報驗證與紀錄 | FR-8 | 受影響但缺欄位；完整回報；更新為已完成；不受影響；`scripts/ui-e2e.sh`：HQ 在網頁建立並發布、團隊成員在網頁回報受影響、HQ 看到回報 | `400` 列出缺少的欄位；每次回報保留紀錄；不受影響清除處置欄位；受影響通知 Teams 頻道 | ✅ | P1 |
+| REG-ADV-004 | 進度、代為回報、待處理篩選 | FR-8 | HQ 檢視；HQ 代團隊回報；`?todo=1` | 已回報／受影響／完成數正確；紀錄作者為 HQ；待處理只含尚未完成的情資 | ✅ | P1 |
+| REG-ADV-005 | 修改派送與結案 | FR-8 | 加入團隊、移除已回報團隊、結案後回報、重新開啟 | 新團隊收到通知；`409 advisory_target_answered`；`409 advisory_closed` | ✅ | P1 |
+| REG-ADV-006 | 期限提醒與逾期 | FR-8 | 手動提醒、期限前一天、逾期、預計完成日已過（`scanAdvisories`） | 每種通知只發一次；逾期另發 Teams 頻道；詳情標示逾期 | ✅ | P1 |
+| REG-ADV-007 | CSV、儀表板、刪除 | FR-8 | 匯出 CSV；儀表板；刪除草稿與已發布情資 | CSV 有 BOM、團隊工程師 `403`；HQ 看全部、團隊看自己、廠商 `null`；只能刪草稿 | ✅ | P1 |
 | REG-REPORT-009 | 儀表板 30 天趨勢 | AC-REPORT-04 | `ctx.clock` 固定時間，在台北／洛杉磯時區的午夜前後建立、解決工單 | `trend30d` 固定 30 筆、日期連續、空白日為 0，各日數字依 `config.timezone` 切日；真實 PostgreSQL 亦通過 | ✅ | P0 |
 | REG-REPORT-010 | 未結案天數分組 | AC-REPORT-05 | 建立剛好 24h／72h／7d／14d 與多 1 秒的未結案工單 | 剛好 72h 屬 `1-3`；`3-7`+`7-14`+`14+` = `olderThan3Days` = `olderThanDays=3` 清單筆數 | ✅ | P0 |
 | REG-REPORT-011 | 儀表板可見範圍 | AC-REPORT-06 | 工程師（團隊成員）、廠商、一般使用者各自讀取儀表板 | 只統計自己看得到的工單；廠商與一般使用者的 `workload`／`byTeam` 為 `null` | ✅ | P0 |

@@ -13,6 +13,7 @@ import {
   ticketTags,
 } from '../db/schema.js';
 import { can, isStaff } from '../rbac.js';
+import { advisoryDashboard } from '../services/advisories.js';
 import { audit } from '../services/audit.js';
 import {
   agingCondition,
@@ -104,6 +105,7 @@ export const reportRoutes = new Hono<AppEnv>()
       topTags,
       topHelpTopics,
       failedNotifications,
+      advisories: await advisoryDashboard(c.var.deps, auth),
       ...(await dashboardCharts(c.var.deps, auth, range)),
     });
   })

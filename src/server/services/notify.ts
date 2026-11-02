@@ -17,9 +17,11 @@ export type TicketEvent =
   | { kind: 'created'; ticket: Ticket }
   | { kind: 'assigned'; ticket: Ticket }
   | { kind: 'team_assigned'; ticket: Ticket; actorId: number | null }
-  | { kind: 'agent_reply'; ticket: Ticket; threadId: number; body: string }
-  | { kind: 'customer_reply'; ticket: Ticket; threadId: number; body: string }
-  | { kind: 'sla_breached'; ticket: Ticket };
+  | { kind: 'agent_reply'; ticket: Ticket; threadId: number; body: string; actorId: number | null }
+  | { kind: 'customer_reply'; ticket: Ticket; threadId: number; body: string; actorId: number | null }
+  | { kind: 'sla_breached'; ticket: Ticket }
+  | { kind: 'sla_at_risk'; ticket: Ticket }
+  | { kind: 'nudge'; ticket: Ticket; threadId: number; actorId: number; actor: string; message: string };
 
 interface Message {
   eventId: string;
@@ -56,6 +58,24 @@ export async function enqueue(deps: Deps, messages: Message[]) {
 }
 
 /**
+ * Internal members of a team who see its tickets (vendors and end users only see tickets assigned to them),
+ * except `exceptId`.
+ */
+export function teamRecipients(deps: Pick<Deps, 'db'>, teamId: number, exceptId: number | null) {
+  return teamMembersWith(deps, teamId, exceptId, (perms) => can(perms, 'ticket:read:team') || can(perms, 'ticket:read:all'));
+}
+
+/** Active members of `teamId` whose role passes `allowed`, except `exceptId`. */
+export async function teamMembersWith(deps: Pick<Deps, 'db'>, teamId: number, exceptId: number | null, allowed: (perms: string[]) => boolean) {
+  const members = await deps.db
+    .select({ id: users.id, role: users.roleKey, active: users.isActive })
+    .from(teamMembers)
+    .innerJoin(users, eq(users.id, teamMembers.userId))
+    .where(eq(teamMembers.teamId, teamId));
+  return members.filter((m) => m.active && m.id !== exceptId && allowed(ROLE_DEFINITIONS[m.role]?.permissions ?? [])).map((m) => m.id);
+}
+
+/**
  * Builds the notifications for a ticket event. Only public information is included:
  * internal notes never trigger notifications, and replies to requesters contain only the reply.
  */
@@ -79,7 +99,9 @@ export async function notifyTicketEvent(deps: Deps, event: TicketEvent) {
     };
     const subject = glossary.t(u.locale, `notify.${key}.subject`, vars);
     const body = glossary.t(u.locale, `notify.${key}.body`, vars);
-    const eventId = `${key}:${t.id}:${'threadId' in event ? event.threadId : t.updatedAt.getTime()}`;
+    // at most one "at risk" warning per ticket and recipient (the outbox ignores duplicates)
+    const once = event.kind === 'sla_at_risk' ? 'once' : t.updatedAt.getTime();
+    const eventId = `${key}:${t.id}:${'threadId' in event ? event.threadId : once}`;
     if (channels.includes('email')) messages.push({ eventId, channel: 'email', recipient: u.email, subject, body });
     if (channels.includes('telegram') && u.telegramChatId) {
       messages.push({ eventId, channel: 'telegram', recipient: u.telegramChatId, subject, body: `${subject}\n${link}` });
@@ -98,6 +120,21 @@ export async function notifyTicketEvent(deps: Deps, event: TicketEvent) {
     });
   };
 
+  const teamName = async (teamId: number) =>
+    (await db.select({ name: teams.name }).from(teams).where(eq(teams.id, teamId)))[0]?.name ?? '';
+
+  /** The ticket's assignee, or — while nobody has claimed it — the internal members of its team; never `actorId`. */
+  const toHandlers = async (key: string, actorId: number | null, extra: Record<string, string> = {}, skip: (number | null)[] = []) => {
+    const excluded = new Set([actorId, ...skip]);
+    if (t.assigneeId) {
+      if (!excluded.has(t.assigneeId)) await toUser(t.assigneeId, key, extra);
+      return;
+    }
+    if (!t.teamId) return;
+    const team = await teamName(t.teamId);
+    for (const id of await teamRecipients(deps, t.teamId, actorId)) if (!excluded.has(id)) await toUser(id, key, { team, ...extra });
+  };
+
   switch (event.kind) {
     case 'created':
       toTeams('created', `created:${t.id}`);
@@ -106,33 +143,32 @@ export async function notifyTicketEvent(deps: Deps, event: TicketEvent) {
       await toUser(t.assigneeId, 'assigned');
       break;
     case 'team_assigned': {
-      // Internal members of the ticket's team (vendors and end users only see tickets assigned to them).
       if (!t.teamId || t.assigneeId) break;
-      const [team] = await db.select({ name: teams.name }).from(teams).where(eq(teams.id, t.teamId));
-      const members = await db
-        .select({ id: users.id, role: users.roleKey })
-        .from(teamMembers)
-        .innerJoin(users, eq(users.id, teamMembers.userId))
-        .where(eq(teamMembers.teamId, t.teamId));
-      for (const m of members) {
-        const perms = ROLE_DEFINITIONS[m.role]?.permissions ?? [];
-        if (m.id === event.actorId || !(can(perms, 'ticket:read:team') || can(perms, 'ticket:read:all'))) continue;
-        await toUser(m.id, 'team_assigned', { team: team?.name ?? '' });
-      }
+      const team = await teamName(t.teamId);
+      for (const id of await teamRecipients(deps, t.teamId, event.actorId)) await toUser(id, 'team_assigned', { team });
       break;
     }
     case 'agent_reply': {
       const requester = await loadUser(t.requesterId);
       // Requesters created by external systems have no inbox worth mailing unless they are real users.
       if (requester && requester.roleKey !== 'api_client') await toUser(t.requesterId, 'agent_reply', { reply: event.body }, ['email']);
+      // Whoever handles the ticket also hears about replies written by someone else (e.g. HQ asking for a status
+      // update on a ticket the SOC opened): the assignee, or the team while nobody has claimed it.
+      await toHandlers('staff_reply', event.actorId, { reply: event.body }, [t.requesterId]);
       break;
     }
     case 'customer_reply':
-      await toUser(t.assigneeId, 'customer_reply', { reply: event.body });
+      await toHandlers('customer_reply', event.actorId, { reply: event.body });
       break;
     case 'sla_breached':
-      await toUser(t.assigneeId, 'sla_breached');
+      await toHandlers('sla_breached', null);
       toTeams('sla_breached', `sla_breached:${t.id}`);
+      break;
+    case 'sla_at_risk':
+      await toHandlers('sla_at_risk', null);
+      break;
+    case 'nudge':
+      await toHandlers('nudge', event.actorId, { actor: event.actor, message: event.message });
       break;
   }
   await enqueue(deps, messages);

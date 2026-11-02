@@ -189,6 +189,14 @@ export const teamidSchema = z
   .trim()
   .toLowerCase()
   .regex(/^[a-z0-9]{32}$/, '32 letters and digits');
+/** `teamid` when opening a ticket: one TeamID, or several separated by commas (API tokens, DECISIONS D28). */
+const MAX_TEAMIDS = 20;
+const teamidListSchema = z
+  .string()
+  .max(MAX_TEAMIDS * 33)
+  .transform((v) => v.split(','))
+  .pipe(z.array(teamidSchema).max(MAX_TEAMIDS))
+  .transform((list) => [...new Set(list)]);
 // replaced by teamid (v0.12.0): rejected rather than ignored, so an integration still sending them notices
 const replacedByTeamid = z.never({ error: 'replaced by teamid' }).optional();
 
@@ -206,7 +214,7 @@ export const createTicketSchema = z.object({
   assigneeId: z.number().int().positive().optional(), // web form; needs ticket:assign
   // Team by its TeamID; default: the help topic's team. Needs ticket:assign, except through an API token:
   // external systems may route a ticket to a team, but not to a person.
-  teamid: teamidSchema.optional(),
+  teamid: teamidListSchema.optional(),
   team: replacedByTeamid,
   teamId: replacedByTeamid,
 });
@@ -218,10 +226,12 @@ const ASSIGNABLE_ROLES = ['super_admin', 'it_manager', 'agent', 'vendor'];
 async function resolveTeamId(db: DB, by: { id: number } | { teamid: string }): Promise<number> {
   const byId = 'id' in by;
   const [team] = await db
-    .select({ id: teams.id })
+    .select({ id: teams.id, archivedAt: teams.archivedAt })
     .from(teams)
     .where(byId ? eq(teams.id, by.id) : eq(teams.teamid, by.teamid));
   if (!team) throw badRequest(undefined, { errors: [{ path: byId ? 'teamId' : 'teamid', message: 'unknown team' }] });
+  // a deactivated team keeps its tickets but takes no new ones (DECISIONS D27)
+  if (team.archivedAt) throw new ApiError(400, 'team_inactive');
   return team.id;
 }
 
@@ -304,7 +314,11 @@ export async function createTicket(
   let teamId = topic?.defaultTeamId ?? null;
   if (input.teamid) {
     if (source !== 'api' && !can(actor.permissions, 'ticket:assign')) throw forbidden();
-    teamId = await resolveTeamId(db, { teamid: input.teamid });
+    // API tokens: drop the TeamIDs that never receive tickets. None left is the same as not naming a team;
+    // several left are rejected, because guessing one would route the ticket to the wrong team unnoticed.
+    const candidates = source === 'api' ? input.teamid.filter((id) => !config.teamidExcluded.includes(id)) : input.teamid;
+    if (candidates.length > 1) throw badRequest(undefined, { errors: [{ path: 'teamid', message: 'more than one team' }] });
+    if (candidates.length === 1) teamId = await resolveTeamId(db, { teamid: candidates[0] });
   }
 
   const now = clock();
@@ -417,7 +431,8 @@ export const ticketFilterSchema = z.object({
   tags: csv(z.string().max(64)),
   tagsMode: z.enum(['any', 'all']).default('any'),
   helpTopicId: z.coerce.number().int().positive().optional(),
-  teamId: z.union([z.literal('mine'), z.coerce.number().int().positive()]).optional(), // mine = any of my teams
+  // mine = any of my teams, none = no team yet (HQ's queue to route)
+  teamId: z.union([z.enum(['mine', 'none']), z.coerce.number().int().positive()]).optional(),
   requesterId: z.coerce.number().int().positive().optional(),
   assignee: z.union([z.enum(['me', 'none']), z.coerce.number().int().positive()]).optional(),
   slaStatus: z.enum(['on_track', 'at_risk', 'breached', 'met']).optional(),
@@ -468,7 +483,8 @@ export function buildTicketConditions(actor: Actor, filters: TicketFilters, now:
         sql`(select 1 from ${teamMembers} where ${and(eq(teamMembers.userId, actor.user.id), eq(teamMembers.teamId, tickets.teamId))})`,
       ),
     );
-  } else if (filters.teamId) conds.push(eq(tickets.teamId, filters.teamId));
+  } else if (filters.teamId === 'none') conds.push(isNull(tickets.teamId));
+  else if (filters.teamId) conds.push(eq(tickets.teamId, filters.teamId));
   if (filters.requesterId) conds.push(eq(tickets.requesterId, filters.requesterId));
   if (filters.assignee === 'me') conds.push(eq(tickets.assigneeId, actor.user.id));
   else if (filters.assignee === 'none') conds.push(isNull(tickets.assigneeId));
@@ -590,9 +606,10 @@ export async function dashboardCharts(deps: Deps, actor: Actor, range: Dashboard
   const counts = await Promise.all(bucketConds.map((c) => countWhere(where(c))));
   const agingBuckets = AGING_BUCKET_KEYS.map((key, i) => ({ key, n: counts[i] }));
 
-  // Open tickets per assignee (top 10 + unassigned) and per team (+ no team); staff only.
+  // Open tickets per assignee (top 10 + unassigned) and the team status table; staff only.
   let workload: { assigneeId: number | null; name: string | null; n: number }[] | null = null;
-  let byTeam: { teamId: number | null; name: string | null; n: number }[] | null = null;
+  let byTeam: TeamStatusRow[] | null = null;
+  let noTeam: number | null = null;
   if (isStaff(actor.permissions)) {
     const people = await db
       .select({ assigneeId: tickets.assigneeId, name: users.displayName, n: count() })
@@ -604,18 +621,66 @@ export async function dashboardCharts(deps: Deps, actor: Actor, range: Dashboard
       .limit(10);
     const unassigned = await countWhere(where(open, isNull(tickets.assigneeId)));
     workload = [...people, { assigneeId: null, name: null, n: unassigned }];
-
-    const groups = await db
-      .select({ teamId: tickets.teamId, name: teams.name, n: count() })
-      .from(tickets)
-      .innerJoin(teams, eq(teams.id, tickets.teamId))
-      .where(where(open))
-      .groupBy(tickets.teamId, teams.name)
-      .orderBy(desc(count()), asc(teams.name));
-    const noTeam = await countWhere(where(open, isNull(tickets.teamId)));
-    byTeam = [...groups, { teamId: null, name: null, n: noTeam }];
+    byTeam = await teamStatus(deps, actor, base, now);
+    // routing tickets to teams is HQ's job: only those who see every ticket get the "no team yet" queue
+    if (can(actor.permissions, 'ticket:read:all')) noTeam = await countWhere(where(open, isNull(tickets.teamId)));
   }
-  return { trend, agingBuckets, workload, byTeam };
+  return { trend, agingBuckets, workload, byTeam, noTeam };
+}
+
+export interface TeamStatusRow {
+  teamId: number;
+  name: string;
+  open: number;
+  olderThan3Days: number;
+  slaBreached: number;
+  unclaimed: number;
+}
+
+/**
+ * The dashboard's team table (HQ follows up per team): open, older than 3 days (agingCondition), SLA breached and
+ * unclaimed (no assignee) tickets per team, counting only visible tickets. Users who see every ticket get every
+ * team, including those with nothing open; others get their own teams and any team with a visible open ticket.
+ * Teams needing attention come first.
+ */
+async function teamStatus(deps: Deps, actor: Actor, base: SQL[], now: Date): Promise<TeamStatusRow[]> {
+  const { db } = deps;
+  const open = notInArray(tickets.status, CLOSED_STATUSES);
+  const n = (cond: SQL) => sql<number>`(count(*) filter (where ${cond}))::int`;
+  const counts = await db
+    .select({
+      teamId: tickets.teamId,
+      open: count(),
+      olderThan3Days: n(agingCondition(now, 3)),
+      slaBreached: n(eq(tickets.slaStatus, 'breached')),
+      unclaimed: n(isNull(tickets.assigneeId)),
+    })
+    .from(tickets)
+    .where(and(...base, open, isNotNull(tickets.teamId)))
+    .groupBy(tickets.teamId);
+  const byId = new Map(counts.map((r) => [r.teamId!, r]));
+  const all = can(actor.permissions, 'ticket:read:all');
+  const mine = all
+    ? new Set<number>()
+    : new Set((await db.select({ teamId: teamMembers.teamId }).from(teamMembers).where(eq(teamMembers.userId, actor.user.id))).map((r) => r.teamId));
+  const rows = (await db.select({ id: teams.id, name: teams.name, archivedAt: teams.archivedAt }).from(teams))
+    // deactivated teams have nothing open (D27): listed only in the unlikely case they still do
+    .filter((tm) => byId.has(tm.id) || (!tm.archivedAt && (all || mine.has(tm.id))))
+    .map((tm) => {
+      const c = byId.get(tm.id);
+      return {
+        teamId: tm.id,
+        name: tm.name,
+        open: c?.open ?? 0,
+        olderThan3Days: Number(c?.olderThan3Days ?? 0),
+        slaBreached: Number(c?.slaBreached ?? 0),
+        unclaimed: Number(c?.unclaimed ?? 0),
+      };
+    });
+  return rows.sort(
+    (a, b) =>
+      b.slaBreached - a.slaBreached || b.olderThan3Days - a.olderThan3Days || b.open - a.open || a.name.localeCompare(b.name),
+  );
 }
 
 const requesterUser = alias(users, 'requester');
@@ -991,9 +1056,45 @@ export async function addThread(deps: Deps, actor: Actor, ticket: Ticket, input:
 
   if (input.notify) {
     const kind = type === 'agent_reply' ? 'agent_reply' : 'customer_reply';
-    await notifyTicketEvent(deps, { kind, ticket: updated, threadId: thread.id, body: input.body });
+    await notifyTicketEvent(deps, { kind, ticket: updated, threadId: thread.id, body: input.body, actorId: actor.user.id });
   }
   return { thread, ticket: updated };
+}
+
+// ---------------------------------------------------------------------------
+// Nudge: HQ asks whoever handles an open ticket for a status update
+// ---------------------------------------------------------------------------
+export const nudgeSchema = z.object({ message: z.string().trim().max(2000).default('') }).strict();
+
+/**
+ * Notifies the assignee, or the team's members while nobody has claimed the ticket, and records the request in
+ * the ticket's history (a system event: staff only, like every other event).
+ */
+export async function nudgeTicket(deps: Deps, actor: Actor, ticket: Ticket, input: z.infer<typeof nudgeSchema>) {
+  const { db, clock } = deps;
+  if (CLOSED_STATUSES.includes(ticket.status)) throw new ApiError(409, 'ticket_not_open');
+  if (!ticket.assigneeId && !ticket.teamId) throw new ApiError(409, 'nudge_no_recipients');
+  const now = clock();
+  const [thread] = await db
+    .insert(ticketThreads)
+    .values({
+      ticketId: ticket.id,
+      authorId: actor.user.id,
+      type: 'system_event',
+      visibility: 'internal',
+      body: JSON.stringify({ event: 'nudge', message: input.message }),
+      createdAt: now,
+    })
+    .returning();
+  await notifyTicketEvent(deps, {
+    kind: 'nudge',
+    ticket,
+    threadId: thread.id,
+    actorId: actor.user.id,
+    actor: actor.user.displayName,
+    message: input.message,
+  });
+  return thread;
 }
 
 // ---------------------------------------------------------------------------

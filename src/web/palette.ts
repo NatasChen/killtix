@@ -162,6 +162,11 @@ export const PRIORITY_TONE: Record<number, Tone> = { 1: 'grey', 2: 'grey', 3: 'b
 /** SLA "paused" means waiting for the user, so it shares the pending_user hue. */
 export const SLA_TONE: Record<string, Tone> = { on_track: 'grey', at_risk: 'amber', breached: 'red', met: 'green', paused: 'pink' };
 export const ROTATION: Hue[] = ['sky', 'purple', 'pink', 'orange', 'teal'];
+/* Threat-intel advisories: severity follows the priority scale; a team's answer reads red (exposed) to green (done). */
+export const SEVERITY_TONE: Record<string, Tone> = { low: 'grey', medium: 'blue', high: 'amber', critical: 'red' };
+export const ADVISORY_STATUS_TONE: Record<string, Tone> = { draft: 'grey', published: 'sky', closed: 'green' };
+export const EXPOSURE_TONE: Record<string, Tone> = { pending: 'grey', investigating: 'purple', not_affected: 'green', affected: 'red' };
+export const ACTION_TONE: Record<string, Tone> = { not_started: 'orange', in_progress: 'amber', done: 'green' };
 
 export const FONT_FAMILY =
   "'Noto Sans Display Variable', 'Noto Sans TC Variable', system-ui, -apple-system, 'Segoe UI', 'PingFang TC', 'Microsoft JhengHei', sans-serif";

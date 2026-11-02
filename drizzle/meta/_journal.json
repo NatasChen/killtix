@@ -57,6 +57,20 @@
       "when": 1793280936782,
       "tag": "0007_teams_teamid",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793589584528,
+      "tag": "0008_advisories",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1793609794023,
+      "tag": "0009_teams_archived_at",
+      "breakpoints": true
     }
   ]
 }

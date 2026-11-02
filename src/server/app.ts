@@ -6,6 +6,7 @@ import type { AppEnv, Deps } from './context.js';
 import { ApiError } from './errors.js';
 import { SUPPORTED_LOCALES } from './i18n/index.js';
 import { adminRoutes } from './routes/admin.js';
+import { advisoryRoutes } from './routes/advisories.js';
 import { authRoutes } from './routes/auth.js';
 import { brandingRoutes } from './routes/branding.js';
 import { catalogRoutes } from './routes/catalog.js';
@@ -82,6 +83,7 @@ export function createApp(deps: Deps) {
   api.route('/branding', brandingRoutes);
   api.route('/tickets', ticketRoutes);
   api.route('/admin', adminRoutes);
+  api.route('/advisories', advisoryRoutes);
   api.route('/', catalogRoutes);
   api.route('/', reportRoutes);
   api.all('*', () => {

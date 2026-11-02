@@ -8,22 +8,27 @@ import { teamMembers, tickets, ticketWatchers, type User } from './db/schema.js'
  *  ticket:update  - change status
  *  ticket:triage  - change priority, tags, help topic
  *  ticket:assign  - set the assignee (also when creating), change team, manage watchers
+ *  ticket:nudge   - ask the assignee / team of a visible open ticket for a status update (HQ)
+ *  advisory:manage  - create, publish, close threat-intel advisories and see every team's response (HQ)
+ *  advisory:respond - answer the advisories sent to one's own teams
+ *  admin:teams      - deactivate, reactivate and delete teams (system administrators only, D27)
  */
 export const ROLE_DEFINITIONS: Record<string, { name: string; description: string; permissions: string[] }> = {
   super_admin: { name: '系統管理員', description: '全功能系統管理', permissions: ['*'] },
   it_manager: {
     name: 'IT 服務主管',
-    description: '全部工單、報表匯出、目錄管理',
+    description: '全部工單、催辦、報表匯出、目錄管理、資安情資管理',
     permissions: [
       'ticket:create', 'ticket:read:all', 'ticket:reply', 'ticket:note', 'ticket:update', 'ticket:triage',
-      'ticket:assign', 'report:export', 'catalog:manage',
+      'ticket:assign', 'ticket:nudge', 'report:export', 'catalog:manage', 'advisory:manage',
     ],
   },
   agent: {
     name: '內部工程師',
-    description: '所屬團隊佇列、被指派與關注的工單',
+    description: '所屬團隊佇列、被指派與關注的工單、回報資安情資',
     permissions: [
       'ticket:create', 'ticket:read:team', 'ticket:reply', 'ticket:note', 'ticket:update', 'ticket:triage', 'ticket:assign',
+      'advisory:respond',
     ],
   },
   vendor: {

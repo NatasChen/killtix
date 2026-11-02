@@ -3,6 +3,7 @@ import {
   bigserial,
   boolean,
   check,
+  date,
   index,
   integer,
   jsonb,
@@ -59,6 +60,8 @@ export const teams = pgTable(
       .unique()
       .default(sql`replace(gen_random_uuid()::text, '-', '')`),
     description: text('description'),
+    // deactivated (DECISIONS D27): kept for history, no longer offered for routing, assignment or advisories
+    archivedAt: tstz('archived_at'),
     createdAt: createdAt(),
   },
   (t) => [check('chk_teams_teamid', sql`${t.teamid} ~ '^[a-z0-9]{32}$'`)],
@@ -377,6 +380,107 @@ export const ticketTags = pgTable(
 );
 
 // ---------------------------------------------------------------------------
+// Threat-intel advisories (DECISIONS D24): HQ sends an advisory to several teams; each team reports whether
+// it is exposed in its environment and, if so, how and when it remediates. One response per advisory and team.
+// ---------------------------------------------------------------------------
+export const ADVISORY_STATUSES = ['draft', 'published', 'closed'] as const;
+export type AdvisoryStatus = (typeof ADVISORY_STATUSES)[number];
+export const ADVISORY_SEVERITIES = ['low', 'medium', 'high', 'critical'] as const;
+export type AdvisorySeverity = (typeof ADVISORY_SEVERITIES)[number];
+/** pending: not answered yet; investigating: answered, still checking */
+export const EXPOSURES = ['pending', 'investigating', 'not_affected', 'affected'] as const;
+export type Exposure = (typeof EXPOSURES)[number];
+export const ACTION_PLANS = ['patch', 'mitigate', 'accept_risk', 'other'] as const;
+export type ActionPlan = (typeof ACTION_PLANS)[number];
+export const ACTION_STATUSES = ['not_started', 'in_progress', 'done'] as const;
+export type ActionStatus = (typeof ACTION_STATUSES)[number];
+
+const inList = (col: AnyPgColumn, values: readonly string[]) => sql.raw(`"${col.name}" in (${values.map((v) => `'${v}'`).join(',')})`);
+
+export const advisoryNumberSeq = pgSequence('advisory_number_seq', { startWith: 1, increment: 1 });
+
+export const advisories = pgTable(
+  'advisories',
+  {
+    id: serial('id').primaryKey(),
+    number: varchar('number', { length: 32 }).notNull().unique(),
+    title: varchar('title', { length: 512 }).notNull(),
+    source: varchar('source', { length: 255 }), // where the intel came from (vendor bulletin, CERT, feed…)
+    severity: varchar('severity', { length: 16 }).$type<AdvisorySeverity>().notNull().default('medium'),
+    summary: text('summary').notNull().default(''), // the risk / threat description
+    cves: jsonb('cves').$type<string[]>().notNull().default([]),
+    affectedProducts: text('affected_products').notNull().default(''),
+    iocs: text('iocs').notNull().default(''),
+    references: text('references').notNull().default(''),
+    recommendation: text('recommendation').notNull().default(''),
+    status: varchar('status', { length: 16 }).$type<AdvisoryStatus>().notNull().default('draft'),
+    responseDueAt: tstz('response_due_at'), // teams answer by then; required to publish
+    createdBy: integer('created_by').references(() => users.id, { onDelete: 'set null' }),
+    publishedAt: tstz('published_at'),
+    closedAt: tstz('closed_at'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index('idx_advisories_status').on(t.status, t.createdAt),
+    check('chk_advisories_status', inList(t.status, ADVISORY_STATUSES)),
+    check('chk_advisories_severity', inList(t.severity, ADVISORY_SEVERITIES)),
+  ],
+);
+
+/** One per advisory and team: the team's current answer (history in advisory_updates). */
+export const advisoryTargets = pgTable(
+  'advisory_targets',
+  {
+    id: serial('id').primaryKey(),
+    advisoryId: integer('advisory_id')
+      .notNull()
+      .references(() => advisories.id, { onDelete: 'cascade' }),
+    teamId: integer('team_id')
+      .notNull()
+      .references(() => teams.id),
+    exposure: varchar('exposure', { length: 16 }).$type<Exposure>().notNull().default('pending'),
+    affectedScope: text('affected_scope').notNull().default(''), // which hosts / systems
+    actionPlan: varchar('action_plan', { length: 16 }).$type<ActionPlan>(),
+    actionDetail: text('action_detail').notNull().default(''),
+    actionStatus: varchar('action_status', { length: 16 }).$type<ActionStatus>(),
+    targetDate: date('target_date', { mode: 'string' }), // planned completion (local calendar day)
+    respondedBy: integer('responded_by').references(() => users.id, { onDelete: 'set null' }),
+    respondedAt: tstz('responded_at'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex('uq_advisory_targets').on(t.advisoryId, t.teamId),
+    index('idx_advisory_targets_team').on(t.teamId),
+    check('chk_advisory_targets_exposure', inList(t.exposure, EXPOSURES)),
+    check('chk_advisory_targets_plan', sql`${t.actionPlan} is null or ${inList(t.actionPlan, ACTION_PLANS)}`),
+    check('chk_advisory_targets_action', sql`${t.actionStatus} is null or ${inList(t.actionStatus, ACTION_STATUSES)}`),
+  ],
+);
+
+/** Every saved answer, so HQ can follow how a team's response evolved. */
+export const advisoryUpdates = pgTable(
+  'advisory_updates',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    targetId: integer('target_id')
+      .notNull()
+      .references(() => advisoryTargets.id, { onDelete: 'cascade' }),
+    authorId: integer('author_id').references(() => users.id, { onDelete: 'set null' }),
+    exposure: varchar('exposure', { length: 16 }).$type<Exposure>().notNull(),
+    affectedScope: text('affected_scope').notNull().default(''),
+    actionPlan: varchar('action_plan', { length: 16 }).$type<ActionPlan>(),
+    actionDetail: text('action_detail').notNull().default(''),
+    actionStatus: varchar('action_status', { length: 16 }).$type<ActionStatus>(),
+    targetDate: date('target_date', { mode: 'string' }),
+    note: text('note').notNull().default(''),
+    createdAt: createdAt(),
+  },
+  (t) => [index('idx_advisory_updates_target').on(t.targetId, t.createdAt)],
+);
+
+// ---------------------------------------------------------------------------
 // i18n, notifications, audit
 // ---------------------------------------------------------------------------
 // Admin overrides of the built-in dictionaries (src/server/i18n/locales/*.ts).
@@ -432,3 +536,5 @@ export const auditLogs = pgTable(
 export type User = typeof users.$inferSelect;
 export type Ticket = typeof tickets.$inferSelect;
 export type CustomField = typeof customFields.$inferSelect;
+export type Advisory = typeof advisories.$inferSelect;
+export type AdvisoryTarget = typeof advisoryTargets.$inferSelect;

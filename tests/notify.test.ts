@@ -1,6 +1,6 @@
 import { and, eq } from 'drizzle-orm';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { auditLogs, notificationLogs, systemSettings, tickets } from '../src/server/db/schema.js';
+import { auditLogs, notificationLogs, systemSettings, teamMembers, tickets } from '../src/server/db/schema.js';
 import { agingDigest, scanSla } from '../src/server/services/jobs.js';
 import { defaultSenders, dispatchPending, enqueue, type Senders } from '../src/server/services/notify.js';
 import { saveChannelSettings, saveMailSettings, setSetting } from '../src/server/services/settings.js';
@@ -210,5 +210,88 @@ describe('scheduled jobs', () => {
     expect(await agingDigest(ctx.deps)).toBe(false);
     const [digest] = await outbox(eq(notificationLogs.eventId, 'aging_digest:2026-03-10'));
     expect(digest.body).toMatch(/超過 3 天未結案工單：\d+ 張/);
+  });
+});
+
+describe('following up on team tickets (HQ oversight)', () => {
+  let teamId: number;
+  let teamid: string;
+  let memberId: number;
+  let otherMemberId: number;
+  let vendorId: number;
+
+  beforeAll(async () => {
+    admin = await ctx.adminClient(); // the jobs above moved the clock past the earlier session's lifetime
+    const team = (await admin.post('/api/v1/admin/teams', { name: 'Blue Team' })).body;
+    [teamId, teamid] = [team.id, team.teamid];
+    memberId = (await ctx.createUser('blue1@example.com', 'agent')).id;
+    otherMemberId = (await ctx.createUser('blue2@example.com', 'agent')).id;
+    vendorId = (await ctx.createUser('blue-vendor@example.com', 'vendor')).id;
+    for (const userId of [memberId, otherMemberId, vendorId]) await ctx.db.insert(teamMembers).values({ teamId, userId });
+  });
+
+  const recipients = async (prefix: string) =>
+    [...new Set((await outbox()).filter((m) => m.eventId.startsWith(prefix) && m.channel === 'email').map((m) => m.recipient))].sort();
+
+  it("tells the team about HQ's reply while nobody has claimed the ticket, then only the assignee", async () => {
+    const t = (await admin.post('/api/v1/tickets', { subject: 'SOC alert', teamid })).body;
+    await admin.post(`/api/v1/tickets/${t.id}/threads`, { body: 'Any progress?' });
+    // internal members only: the vendor in the team does not see team tickets
+    expect(await recipients(`staff_reply:${t.id}:`)).toEqual(['blue1@example.com', 'blue2@example.com']);
+
+    const member = await ctx.login('blue1@example.com');
+    await member.patch(`/api/v1/tickets/${t.id}`, { assigneeId: memberId });
+    await admin.post(`/api/v1/tickets/${t.id}/threads`, { body: 'Still waiting' });
+    const second = (await outbox()).filter((m) => m.eventId.startsWith(`staff_reply:${t.id}:`) && m.body.includes('Still waiting'));
+    expect(second.map((m) => m.recipient)).toEqual(['blue1@example.com']);
+
+    // the assignee answering does not notify themselves
+    const before = (await outbox()).length;
+    await member.post(`/api/v1/tickets/${t.id}/threads`, { body: 'Host isolated', notify: true });
+    expect((await outbox()).slice(before).some((m) => m.recipient === 'blue1@example.com')).toBe(false);
+  });
+
+  it('sends a requester reply to the team while the ticket is unclaimed', async () => {
+    const requester = await ctx.login('requester@example.com');
+    const t = (await requester.post('/api/v1/tickets', { subject: 'VPN down' })).body;
+    await admin.patch(`/api/v1/tickets/${t.id}`, { teamId });
+    await requester.post(`/api/v1/tickets/${t.id}/threads`, { body: 'still down' });
+    expect(await recipients(`customer_reply:${t.id}:`)).toEqual(['blue1@example.com', 'blue2@example.com']);
+  });
+
+  it('warns the team once when an unclaimed ticket is at risk, and again when it breaches', async () => {
+    const t = (await admin.post('/api/v1/tickets', { subject: 'unclaimed', helpTopic: 'security-incident', teamid })).body;
+    await admin.post(`/api/v1/tickets/${t.id}/threads`, { body: 'acknowledged', notify: false }); // first response met
+    ctx.clock.advance(7 * 3_600_000); // 8h resolution SLA: under 25% left
+    await scanSla(ctx.deps);
+    await scanSla(ctx.deps);
+    expect(await recipients(`sla_at_risk:${t.id}:`)).toEqual(['blue1@example.com', 'blue2@example.com']);
+    expect((await outbox()).filter((m) => m.eventId.startsWith(`sla_at_risk:${t.id}:`) && m.recipient === 'blue1@example.com')).toHaveLength(1);
+    ctx.clock.advance(2 * 3_600_000);
+    await scanSla(ctx.deps);
+    expect(await recipients(`sla_breached:${t.id}:`)).toEqual(['blue1@example.com', 'blue2@example.com']);
+  });
+
+  it('lets HQ follow up on an open ticket: notifies the handlers and records it in the history', async () => {
+    admin = await ctx.adminClient();
+    await ctx.createUser('hq@example.com', 'it_manager');
+    const hq = await ctx.login('hq@example.com');
+    const t = (await admin.post('/api/v1/tickets', { subject: 'needs follow-up', teamid })).body;
+
+    expect((await hq.post(`/api/v1/tickets/${t.id}/nudge`, { message: 'Please report by 17:00' })).status).toBe(204);
+    const nudges = (await outbox()).filter((m) => m.eventId.startsWith(`nudge:${t.id}:`) && m.channel === 'email');
+    expect(nudges.map((m) => m.recipient).sort()).toEqual(['blue1@example.com', 'blue2@example.com']);
+    expect(nudges[0].body).toContain('Please report by 17:00');
+    const detail = (await hq.get(`/api/v1/tickets/${t.id}`)).body;
+    expect(detail.threads.some((th: any) => th.type === 'system_event' && JSON.parse(th.body).event === 'nudge')).toBe(true);
+    const [log] = await ctx.db.select().from(auditLogs).where(and(eq(auditLogs.action, 'ticket.nudged'), eq(auditLogs.targetId, String(t.id)))!);
+    expect(log).toBeDefined();
+
+    // engineers cannot nudge; resolved tickets and tickets without assignee or team cannot be nudged
+    expect((await (await ctx.login('blue1@example.com')).post(`/api/v1/tickets/${t.id}/nudge`, {})).status).toBe(403);
+    await admin.patch(`/api/v1/tickets/${t.id}`, { status: 'resolved' });
+    expect((await hq.post(`/api/v1/tickets/${t.id}/nudge`, {})).body.code).toBe('ticket_not_open');
+    const lone = (await admin.post('/api/v1/tickets', { subject: 'nobody' })).body;
+    expect((await hq.post(`/api/v1/tickets/${lone.id}/nudge`, {})).body.code).toBe('nudge_no_recipients');
   });
 });

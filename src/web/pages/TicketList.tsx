@@ -167,6 +167,7 @@ export function TicketListPage() {
                     empty={all}
                     options={[
                       { value: 'mine', label: t('ui.tickets.my_teams') },
+                      { value: 'none', label: t('ui.tickets.no_team') },
                       ...catalog.data.teams.map((tm) => ({ value: String(tm.id), label: tm.name })),
                     ]}
                   />

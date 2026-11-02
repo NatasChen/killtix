@@ -9,6 +9,7 @@ import { connectPostgres } from './db/client.js';
 import { seed } from './db/seed.js';
 import { Glossary } from './i18n/index.js';
 import { agingDigest, scanSla } from './services/jobs.js';
+import { scanAdvisories } from './services/advisories.js';
 import { defaultSenders, dispatchPending } from './services/notify.js';
 import { memoryRateLimiter, redisRateLimiter } from './services/rateLimit.js';
 
@@ -76,6 +77,7 @@ async function main() {
     every(5_000, 'notification dispatch', async () => dispatchPending(deps, await defaultSenders(deps))),
     every(60_000, 'sla scan', () => scanSla(deps)),
     every(300_000, 'aging digest', () => agingDigest(deps)),
+    every(300_000, 'advisory scan', () => scanAdvisories(deps)),
   ];
 
   const shutdown = async () => {

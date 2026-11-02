@@ -113,7 +113,7 @@
     "/teams": {
       "get": {
         "summary": "List teams",
-        "description": "Requires scope `tickets:write`. Use `teamid` (the team's TeamID) when opening tickets. A token can route a ticket to a team but cannot choose an assignee.",
+        "description": "Requires scope `tickets:write`. Use `teamid` (the team's TeamID) when opening tickets. Deactivated teams are not listed. A token can route a ticket to a team but cannot choose an assignee.",
         "responses": {
           "200": {
             "description": "Teams, by name",
@@ -163,7 +163,7 @@
             "properties": { "email": { "type": "string", "format": "email" }, "name": { "type": "string" } },
             "description": "Person the ticket is about; created as an end user if unknown. Defaults to the token's own client user."
           },
-          "teamid": { "type": "string", "pattern": "^[a-zA-Z0-9]{32}$", "description": "TeamID of the team to route the ticket to (32 letters and digits, case-insensitive); overrides the help topic's default team. An unknown TeamID is 400. See GET /teams. The former `team` and `teamId` fields are rejected with 400" },
+          "teamid": { "type": "string", "pattern": "^[a-zA-Z0-9]{32}(,[a-zA-Z0-9]{32})*$", "description": "TeamID of the team to route the ticket to (32 letters and digits, case-insensitive), or up to 20 separated by commas; overrides the help topic's default team. TeamIDs excluded by the deployment (TEAMID_EXCLUDED) are dropped first: if none remain the help topic's default team applies, if more than one remains the request is 400. An unknown TeamID is 400; a deactivated team's TeamID is 400 with code `team_inactive`. See GET /teams. The former `team` and `teamId` fields are rejected with 400" },
           "tags": { "type": "array", "items": { "type": "string", "maxLength": 64 }, "maxItems": 20, "description": "Tag names; unknown tags are created. The help topic's automatic tags are added as well" },
           "customFields": { "type": "object", "additionalProperties": true, "description": "Keyed by custom field key of the help topic's form" },
           "externalId": { "type": "string", "maxLength": 255, "description": "Alternative to the Idempotency-Key header" }
