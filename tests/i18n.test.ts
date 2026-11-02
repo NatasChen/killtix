@@ -32,6 +32,11 @@ const DYNAMIC: Record<string, string[]> = {
   'ui.advisory.exposure.': ['pending', 'investigating', 'not_affected', 'affected'],
   'ui.advisory.plan.': ['patch', 'mitigate', 'accept_risk', 'other'],
   'ui.advisory.action_status.': ['not_started', 'in_progress', 'done'],
+  'ui.teams.import.col.': ['name', 'teamid', 'description', 'members'],
+  'ui.teams.import.error.': [
+    'name_required', 'name_too_long', 'name_exists', 'name_repeated', 'teamid_invalid', 'teamid_exists', 'teamid_repeated',
+    'description_too_long', 'member_invalid', 'member_unknown',
+  ],
   'notify.': [],
   'error.': [],
 };

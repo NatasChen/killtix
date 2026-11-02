@@ -230,6 +230,39 @@ await netTeamRow.getByText(/^[a-z0-9]{32}$/).waitFor();
   await page.getByRole('button', { name: '儲存', exact: true }).click();
   await page.getByRole('row').filter({ hasText: `E2E TeamID ${RUN}` }).getByText(TEAMID, { exact: true }).waitFor();
 }
+step('teams: TeamID is read-only once created; CSV import checks every row first, then imports all (D26)');
+{
+  // editing a team keeps its TeamID fixed, name and description editable
+  await netTeamRow.getByRole('button', { name: '編輯' }).click();
+  if (!(await page.getByLabel('TeamID', { exact: true }).isDisabled())) throw new Error('TeamID should be read-only when editing');
+  await page.getByLabel('說明').fill('E2E 編輯說明');
+  await page.getByRole('button', { name: '儲存', exact: true }).click();
+  await netTeamRow.getByText('E2E 編輯說明').waitFor();
+
+  const header = '團隊名稱 *,TeamID,說明,成員 Email';
+  const upload = async (lines) => {
+    await page.locator('.ant-modal input[type=file]').setInputFiles({
+      name: 'teams.csv',
+      mimeType: 'text/csv',
+      buffer: Buffer.from(`﻿${[header, ...lines].join('\r\n')}\r\n`),
+    });
+  };
+  await page.getByRole('button', { name: 'CSV 匯入' }).click();
+  const dialog = page.getByRole('dialog', { name: '以 CSV 匯入團隊' });
+  await dialog.getByRole('link', { name: '下載範本' }).waitFor();
+  // a name that already exists: the row is flagged and nothing can be imported
+  await upload([`${NET},,,`]);
+  await dialog.getByText(`團隊「${NET}」已存在`).waitFor();
+  if (!(await dialog.getByRole('button', { name: /確認匯入/ }).isDisabled())) throw new Error('import must be blocked while a row has errors');
+  // a valid file: members optional
+  await upload([`E2E 匯入 A ${RUN},,匯入說明,${ADMIN.email}`, `E2E 匯入 B ${RUN},,,`]);
+  await dialog.getByText('檢查通過：將新增 2 個團隊、加入 1 位成員。').waitFor();
+  await shot('05e-team-import-preview');
+  await dialog.getByRole('button', { name: '確認匯入 2 個團隊' }).click();
+  await dialog.waitFor({ state: 'detached' });
+  await page.getByRole('row').filter({ hasText: `E2E 匯入 A ${RUN}` }).getByText('匯入說明').waitFor();
+  await page.getByRole('row').filter({ hasText: `E2E 匯入 B ${RUN}` }).first().waitFor();
+}
 await netTeamRow.getByRole('button', { name: '展開列' }).click();
 const members = page.getByRole('region', { name: `${NET} 的成員` });
 // the vendor added on the users page is listed, with the note that team membership shows them nothing

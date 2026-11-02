@@ -14,7 +14,7 @@
 | --- | --- |
 | 目前版本 | **0.12.0**（2026-10-29，git tag `v0.12.0`），見 [CHANGELOG.md](CHANGELOG.md) |
 | 支援部署 | Docker Compose（nginx + app + PostgreSQL 16 + Redis 7；只有 nginx 對主機開放 HTTP 埠，DECISIONS D19）。Cloudflare 方案已決定不做（DECISIONS D3） |
-| 測試狀態 | 141 個 Vitest 測試、`scripts/validate.sh`、`scripts/smoke.sh`（24 項）、`scripts/ui-e2e.sh` 全部通過 |
+| 測試狀態 | 148 個 Vitest 測試、`scripts/validate.sh`、`scripts/smoke.sh`（24 項）、`scripts/ui-e2e.sh` 全部通過 |
 | 未實作 | AD/LDAP、SAML、OIDC、SCIM、FIDO2、附件、SLA 營業時間、多副本背景工作 |
 | 待客戶確認 | 見 [specs/DECISIONS.md](specs/DECISIONS.md) 中標示 ⏳ 的項目（SSO 時程）；已決定：預設管理員密碼（D1：各部署以 `.env` 設定）、Cloudflare 不做（D3）、移除 `users.team_id`（D14） |
 | 下一步建議 | v1.1：SSO（`users.identity_provider` 已預留）→ 附件 → SLA 營業時間 |
@@ -99,6 +99,7 @@ src/server/
                       enqueue、dispatchPending（重試/退避）、各管道發送
   services/advisories.ts 資安情資（D24）：advisoryScope()／targetScope()（查詢層授權）、建立／發布／回報、進度統計、儀表板摘要、
                       notifyTarget()（團隊成員）、scanAdvisories()（期限前一天、逾期、預計完成日已過；index.ts 每 5 分鐘執行）
+  services/teamImport.ts 團隊 CSV 匯入（D26）：decodeCsv()（UTF-8／Big5）、parseCsv()（RFC 4180）、checkImport()（逐列錯誤碼）、importTeams()（同一交易）、範本
   services/jobs.ts    scanSla（逾時/即將逾時，兩者都通知）、agingDigest（每日 3 天積壓報告）
   services/settings.ts system_settings 讀寫：2FA 全域開關、digest 執行日、系統名稱、通知總開關與所有通知管道（秘密以 secretBox 加密、只寫不讀，DECISIONS D13）
   services/branding.ts 企業標誌：PNG 檢查（檔頭、512 KB）、brand_logos 讀寫、帶版本的公開網址
@@ -122,11 +123,12 @@ src/web/
   pages/admin/        AdminRoutes.tsx 只放路由與 lazyPage()；每頁一個檔：UsersPage、CatalogPages（團隊／SLA／服務類別／回覆範本，
                       皆為 Crud.tsx 的 CrudPage 設定）、FormsPage、ApiTokensPage、SettingsPage（LogoSettings、NotifySettingsCard、MailSettingsCard）、
                       NotificationsPage、AuditPage；shared.tsx 放共用的 useOptions、OneTimeSecret、tableProps、sectionTitle；
-                      TeamMembers.tsx 是團隊頁展開列的成員管理（CrudPage 的 expand，DECISIONS D18）
+                      TeamMembers.tsx 是團隊頁展開列的成員管理（CrudPage 的 expand，DECISIONS D18）；TeamImport.tsx 是團隊頁的 CSV 匯入
+                      （CrudPage 的 actions，D26）。CrudPage 欄位的 `createOnly` 只在新增時可編輯（例如 TeamID，D23）
   public/theme-init.js 首次繪製前套用主題（CSP 不允許 inline script，所以是外部檔）
 drizzle/              自動產生的 migration，不要手改
 deploy/nginx/         compose 的 nginx 設定：HTTP 轉送到 app:8080、覆寫 X-Forwarded-For（validate.sh 以 `nginx -t` 檢查）
-tests/                Vitest：helpers.ts（測試環境工廠）、auth / tickets / teams / dashboard / notify / advisories / i18n 測試；e2e/ui.mjs（瀏覽器）
+tests/                Vitest：helpers.ts（測試環境工廠）、auth / tickets / teams / teamImport / dashboard / notify / advisories / i18n 測試；e2e/ui.mjs（瀏覽器）
 scripts/              init-env.sh（建立 .env、只填空白密鑰）、validate.sh、smoke.sh、ui-e2e.sh、check-links.mjs、
                       bundle-check.mjs（首頁 JS ≤ 300 KB gzip、首頁不含管理頁程式碼）、
                       seed-sample-tickets.py（經 API 建立 30 張範例工單，只用 Python 標準函式庫）
@@ -239,7 +241,7 @@ crewai_ticket_build.py CrewAI 迭代工具（PM → SAr → PG → UI 設計師 
 
 | 指令 | 內容 | 需要 |
 | --- | --- | --- |
-| `npm test` | 141 個單元/整合測試（PGlite） | Node |
+| `npm test` | 148 個單元/整合測試（PGlite） | Node |
 | `TEST_DATABASE_URL=postgres://… npm test` | 同上，改用真實 PostgreSQL + 正式驅動 | 一個 Postgres（見下） |
 | `npm run validate` | 型別、schema/migration 一致、測試、文件中的測試數、建置、首頁 JS 大小（bundle-check）、OpenAPI JSON、Markdown 連結、compose 與 nginx 設定 | Node（Docker 可選） |
 | `scripts/smoke.sh <url> <預設管理員密碼>` | 部署後 API 端到端 24 項（會改管理員密碼為 `Smoke-Test-Passw0rd!`） | 執行中的系統 |

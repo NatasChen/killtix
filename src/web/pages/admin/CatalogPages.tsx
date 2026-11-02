@@ -2,6 +2,7 @@ import { Typography } from 'antd';
 import { useI18n } from '../../i18n';
 import { CrudPage } from './Crud';
 import { useOptions } from './shared';
+import { TeamImport } from './TeamImport';
 import { TeamMembers } from './TeamMembers';
 
 /* Simple catalog resources (catalog:manage), each a CrudPage configuration. */
@@ -30,11 +31,13 @@ export function TeamsPage() {
       ]}
       fields={[
         { key: 'name', label: t('ui.admin.name'), type: 'text', required: true },
-        { key: 'teamid', label: t('ui.admin.teamid'), type: 'text', extra: t('ui.admin.teamid_hint') },
+        // set when creating (or generated), read-only afterwards: external systems route tickets by it
+        { key: 'teamid', label: t('ui.admin.teamid'), type: 'text', extra: t('ui.admin.teamid_hint'), createOnly: true },
         { key: 'description', label: t('ui.admin.description'), type: 'textarea' },
       ]}
       // expand a team to see its members and add or remove them
       expand={(r: any, reload) => <TeamMembers teamId={r.id} teamName={r.name} onChange={reload} />}
+      actions={(reload) => <TeamImport onImported={reload} />}
     />
   );
 }

@@ -46,6 +46,7 @@ export function CrudPage<T extends Row>({
   fields,
   defaults = {},
   expand,
+  actions,
 }: {
   title: string;
   path: string;
@@ -55,6 +56,8 @@ export function CrudPage<T extends Row>({
   defaults?: Record<string, unknown>;
   /** Detail shown when a row is expanded; `reload` refreshes the list (e.g. after the detail changed a count). */
   expand?: (row: T, reload: () => Promise<void>) => ReactNode;
+  /** More header actions beside "Add" (e.g. an import); `reload` refreshes the list. */
+  actions?: (reload: () => Promise<void>) => ReactNode;
 }) {
   const { t } = useI18n();
   const { data, error, loading, reload } = useLoad(() => get<T[]>(listPath), [listPath]);
@@ -89,9 +92,12 @@ export function CrudPage<T extends Row>({
       <PageHeader
         title={title}
         extra={
-          <Button type="primary" onClick={() => open('new')}>
-            {t('ui.common.add')}
-          </Button>
+          <>
+            {actions?.(reload)}
+            <Button type="primary" onClick={() => open('new')}>
+              {t('ui.common.add')}
+            </Button>
+          </>
         }
       />
       {editing && (
