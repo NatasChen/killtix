@@ -171,7 +171,7 @@ curl -X POST https://ticket.example.com/api/v1/tickets \
 | `description` | 內文，最多 100,000 字 |
 | `priority` | 1–5 或別名 `lowest`／`low`／`normal`／`high`／`critical`，預設 3 |
 | `helpTopic`／`helpTopicId` | 服務類別（slug 或 id），決定 SLA、預設團隊與自動標籤 |
-| `teamid` | 團隊的 TeamID（32 個英數字元，不分大小寫，見「團隊」頁或 `GET /teams`）；省略時用服務類別的預設團隊。團隊改名不影響 TeamID；TeamID 建立後不能修改。v0.12.0 前的 `team`／`teamId` 已移除，帶了會回 400 |
+| `teamid` | 團隊的 TeamID（32 個英數字元，不分大小寫，見「團隊」頁或 `GET /teams`）；省略時用服務類別的預設團隊。可用逗號分隔多個（最多 20 個）：排除 `TEAMID_EXCLUDED` 後剩一個就派給該團隊，沒有剩下視同省略，超過一個回 400。團隊改名不影響 TeamID；TeamID 建立後不能修改。v0.12.0 前的 `team`／`teamId` 已移除，帶了會回 400 |
 | `tags` | 最多 20 個、每個最多 64 字；不存在的會自動建立，服務類別的自動標籤也會加上 |
 | `requester`／`requesterId` | 代誰開單；省略時是建立 Token 的人。`requester.email` 沒有對應帳號時會建立外部的一般使用者 |
 | `customFields` | 以欄位 key 為鍵（見 `GET /help-topics` 的 `fields`），依該表單的必填、型別、選項與格式檢查；表單上沒有的 key 回 400 |

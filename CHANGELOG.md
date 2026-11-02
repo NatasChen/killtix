@@ -4,8 +4,10 @@
 
 ## [Unreleased]
 
-HQ 追蹤各團隊的處理狀況：工單通知補強與催辦、儀表板團隊狀態表，新增資安情資派送與團隊回報；團隊可用 CSV 匯入、可停用或刪除，TeamID 建立後唯讀。
-**有資料表變更**：migration 0008（資安情資三張表）與 0009（`teams.archived_at`）會在啟動時自動套用；沒有環境變數變更。外部 API：用已停用團隊的 TeamID 開單回 `400 team_inactive`，`GET /teams` 不列出已停用的團隊。
+## [0.13.0] - 2026-11-02
+
+HQ 追蹤各團隊的處理狀況：工單通知補強與催辦、儀表板團隊狀態表，新增資安情資派送與團隊回報；團隊可用 CSV 匯入、可停用或刪除，TeamID 建立後唯讀；API 開單的 `teamid` 可多值，排除固定名單後派送。
+**有資料表變更**：migration 0008（資安情資三張表）與 0009（`teams.archived_at`）會在啟動時自動套用；新增環境變數 `TEAMID_EXCLUDED`（`docker-compose.yml` 有內建預設值，不需要改 `.env`）。外部 API：用已停用團隊的 TeamID 開單回 `400 team_inactive`，`GET /teams` 不列出已停用的團隊。
 
 ### Added
 - API 開單的 `teamid` 可帶多個以逗號分隔的 TeamID：排除 `TEAMID_EXCLUDED` 中的值後，剩一個就派給該團隊，沒有剩下就用服務類別的預設團隊，超過一個回 400（DECISIONS D28）。新增環境變數 `TEAMID_EXCLUDED`；網頁開單不受影響。

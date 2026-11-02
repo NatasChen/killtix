@@ -7,9 +7,9 @@ SOC、SIEM 等外部系統可以透過 API 自動開單。
 
 | 項目 | 內容 |
 | --- | --- |
-| 目前版本 | **v0.12.0**，2026-10-29 |
+| 目前版本 | **v0.13.0**，2026-11-02 |
 | 狀態 | Docker 版可部署；159 個自動化測試、部署後 API 檢查與瀏覽器端到端測試皆通過 |
-| 本版重點 | 團隊新增 TeamID；API 開單改以 `teamid` 指定團隊（**不相容**：移除 `team`／`teamId`，外部系統需同步調整） |
+| 本版重點 | 資安情資派送與團隊回報、工單催辦與團隊狀態表、團隊 CSV 匯入與停用／刪除、API 開單的 `teamid` 可多值並排除固定名單 |
 | 尚未實作 | AD/LDAP、SAML、OIDC、SCIM、FIDO2、附件、SLA 營業時間（只支援 Docker 部署，Cloudflare 方案不做，見 DECISIONS D3） |
 | 完整變更 | [CHANGELOG.md](CHANGELOG.md) |
 | 與原始規格的差異 | [specs/DECISIONS.md](specs/DECISIONS.md)（含待客戶確認事項） |
@@ -210,7 +210,8 @@ npm run dev:web             # 前端 on :5173（代理 /api 到 :8080）
 | v0.9.0 | ✅ 可自訂系統名稱，標誌與名稱並列 |
 | v0.10.0 | ✅ nginx 前端代理、通知改在介面設定與總開關、可摺疊側邊欄與主題開關、API 指定團隊、AGPL 授權 |
 | v0.11.0 | ✅ 側邊欄收合為圖示列、主內容區獨立捲動、可自訂儀表板版面 |
-| v0.12.0 | ✅ 團隊 TeamID、API 開單改以 `teamid` 指定團隊（本版） |
+| v0.12.0 | ✅ 團隊 TeamID、API 開單改以 `teamid` 指定團隊 |
+| v0.13.0 | ✅ 資安情資、工單催辦與團隊狀態表、團隊 CSV 匯入與停用／刪除、多值 `teamid` 與排除名單（本版） |
 | v1.1 | AD/LDAP、SAML、OIDC、SCIM、FIDO2；附件；SLA 營業時間 |
 | 待定 | 背景工作獨立服務化、Slack 通知 |
 
